@@ -81,6 +81,16 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
       ─────────────── (Unit)      ───────────── (MkUnit)
       Γ ⊢ Unit : Type             Γ ⊢ () : Unit
 
+      ──────────────── (Empty)
+      Γ ⊢ Empty : Prop
+
+      Γ ⊢ A : Sort i    Γ ⊢ h : Empty
+      ───────────────────────────────── (Absurd)
+            Γ ⊢ absurd A h : A
+
+        ex falso at any sort: subsingleton elimination, sound because
+        Empty has no introduction forms
+
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Pi)
           Γ ⊢ (x : A) -> B : Sort (imax i j)

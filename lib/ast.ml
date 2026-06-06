@@ -13,6 +13,8 @@ and desc =
   | Ascribe of t * t (* (t : A) *)
   | Unit
   | MkUnit
+  | Empty
+  | Absurd of t * t (* absurd A h *)
 
 let mk loc desc = { loc; desc }
 
@@ -59,6 +61,8 @@ let to_term names s =
     | App (f, a) -> Type.App (go env f, go env a)
     | Unit -> Type.Unit
     | MkUnit -> Type.MkUnit
+    | Empty -> Type.Empty
+    | Absurd (a, h) -> Type.Absurd (go env a, go env h)
     (* ascription is the typed identity: applying (fun (x : A) => x) to [t]
        forces the checking judgment t ⇐ A, and the redex evaporates under
        evaluation. No core constructor needed. *)

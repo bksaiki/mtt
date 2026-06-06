@@ -29,3 +29,9 @@
  (deps unit.mtt %{bin:mtt})
  (action
   (run mtt unit.mtt)))
+
+(rule
+ (alias runtest)
+ (deps empty.mtt %{bin:mtt})
+ (action
+  (run mtt empty.mtt)))

@@ -112,3 +112,18 @@ let%expect_test "Unit and its element" =
   [%expect {| Unit |}];
   infer "Unit -> Unit";
   [%expect {| Type |}]
+
+let%expect_test "Empty and absurd" =
+  infer "Empty";
+  [%expect {| Prop |}];
+  (* negation of anything is a Prop, by imax — even negation of data *)
+  infer "Type -> Empty";
+  [%expect {| Prop |}];
+  (* ex falso eliminates into any sort *)
+  infer {|λ h : Empty ⇒ absurd Type h|};
+  [%expect {| Empty -> Type |}];
+  infer {|λ h : Empty ⇒ absurd (Type 3) h|};
+  [%expect {| Empty -> Type 3 |}];
+  (* the proof must actually be of type Empty *)
+  infer "absurd Unit ()";
+  [%expect {| type error: this term has type Unit but Empty was expected |}]

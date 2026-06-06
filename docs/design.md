@@ -73,8 +73,11 @@ Sort (i+1)` (predicative tower). Π formation lands in `Sort (imax i j)`
 where `imax i 0 = 0` — a product into a proposition is a proposition, no
 matter the domain — and `max i j` otherwise. The whole difference between
 `Prop` and `Type` is that one `imax` in `check.ml`'s Pi rule, plus proof
-irrelevance in `conv`. Not yet: large-elimination restrictions (moot until
-inductives — but mandatory once they exist, or irrelevance is unsound).
+irrelevance in `conv`. `Empty : Prop` eliminates into any sort via `absurd`
+— subsingleton elimination, sound because it has no introduction forms; the
+general large-elimination restriction becomes mandatory with sums/inductives
+(a `Prop` with two constructors must not eliminate into `Type`, or
+irrelevance is unsound).
 
 ## Errors and locations
 
