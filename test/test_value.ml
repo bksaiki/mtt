@@ -1,7 +1,8 @@
 open Mtt
 
 (* parse, normalize, pretty-print *)
-let norm s = print_endline (Type.to_string (Value.normalize (Parse.term_of_string s)))
+let norm s =
+  print_endline (Type.to_string (Value.normalize (Parse.term_of_string s)))
 
 let%expect_test "normal forms are unchanged" =
   norm "Type";
@@ -32,13 +33,14 @@ let%expect_test "church numerals: 2 + 2 = 4" =
   let two = "(fun (f : Type -> Type) => fun (x : Type) => f (f x))" in
   let add =
     Printf.sprintf
-      "(fun (m : %s) => fun (n : %s) => fun (f : Type -> Type) => fun (x : Type) => m f (n f x))"
+      "(fun (m : %s) => fun (n : %s) => fun (f : Type -> Type) => fun (x : \
+       Type) => m f (n f x))"
       n n
   in
   norm (Printf.sprintf "%s %s %s" add two two);
   [%expect {| fun (f : Type -> Type) => fun (x : Type) => f (f (f (f x))) |}]
 
 let%expect_test "applying a non-function fails" =
-  (try norm "Type Type"
-   with Value.Not_a_function -> print_endline "not a function");
+  (try norm "Type Type" with
+  | Value.Not_a_function -> print_endline "not a function");
   [%expect {| not a function |}]

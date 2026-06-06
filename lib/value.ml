@@ -10,10 +10,10 @@ and neutral =
   | Var of int (* de Bruijn level *)
   | App of neutral * t
 
-and closure = {
-  env : env;
-  body : Type.term;
-}
+and closure =
+  { env : env
+  ; body : Type.term
+  }
 
 and env = t list
 
@@ -28,8 +28,10 @@ let rec eval env (t : Type.term) : t =
   | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
 
-(* beta reduction is just evaluating the closure body in an extended
-   environment: no substitution, no index shifting *)
+(* β-reduction: (fun (x : A) => b) a ≡ b[a/x]. The substitution is just
+   evaluating the closure body in an extended environment: no term-level
+   substitution, no index shifting. Stuck applications (head is a variable)
+   accumulate as neutral spines instead. *)
 and apply f a =
   match f with
   | Lam (_, _, c) -> apply_closure c a
@@ -38,8 +40,8 @@ and apply f a =
 
 and apply_closure { env; body } a = eval (a :: env) body
 
-(** [quote l v] reads a value back into syntax; [l] is the number of binders
-    in scope. Levels convert to indices by [l - k - 1]. *)
+(** [quote l v] reads a value back into syntax; [l] is the number of binders in
+    scope. Levels convert to indices by [l - k - 1]. *)
 let rec quote l (v : t) : Type.term =
   match v with
   | Univ i -> Type.Univ i

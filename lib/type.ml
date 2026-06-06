@@ -1,5 +1,5 @@
-(** type of both terms and types; binder names are display hints only and
-    are ignored by all algorithms (variables are de Bruijn indices) *)
+(** type of both terms and types; binder names are display hints only and are
+    ignored by all algorithms (variables are de Bruijn indices) *)
 type term =
   | Var of int (* de Bruijn index *)
   | Univ of int (* Type 0, Type 1, ... *)
@@ -16,9 +16,10 @@ let rec occurs k = function
       occurs k a || occurs (k + 1) b
   | App (f, a) -> occurs k f || occurs k a
 
-(** [pp fmt t] pretty-prints [t] using binder name hints, priming names that
-    would shadow an enclosing binder. Unbound indices print as [!i]. *)
-let pp fmt t =
+(** [pp_in names fmt t] pretty-prints [t] using binder name hints, priming names
+    that would shadow an enclosing binder; [names] supplies the names of
+    enclosing binders for [t]'s free indices. Unbound indices print as [!i]. *)
+let pp_in names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
   let freshen names x =
     let rec prime x =
@@ -57,8 +58,8 @@ let pp fmt t =
                 (go 1 (x :: names))
                 b
             else
-              (* the binder is unused: print an arrow and push an empty name
-                 (no identifier can collide with it) to keep depths aligned *)
+              (* the binder is unused: print an arrow and push an empty name (no
+                 identifier can collide with it) to keep depths aligned *)
               Format.fprintf fmt "@[%a ->@ %a@]" (go 2 names) a
                 (go 1 ("" :: names))
                 b)
@@ -72,7 +73,13 @@ let pp fmt t =
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[%a@ %a@]" (go 10 names) f (go 11 names) a)
   in
-  go 0 [] fmt t
+  go 0 names fmt t
 
-(** [to_string t] is [t] rendered via {!pp} *)
-let to_string t = Format.asprintf "%a" pp t
+(** [pp fmt t] pretty-prints the closed term [t] *)
+let pp fmt t = pp_in [] fmt t
+
+(** [to_string_in names t] is [t] rendered via {!pp_in} *)
+let to_string_in names t = Format.asprintf "%a" (pp_in names) t
+
+(** [to_string t] is the closed term [t] rendered via {!pp} *)
+let to_string t = to_string_in [] t
