@@ -11,6 +11,7 @@ bug-reports: "https://github.com/bksaiki/mtt/issues"
 depends: [
   "dune" {>= "3.23"}
   "ocaml"
+  "menhir" {build}
   "ppx_expect" {with-test}
   "odoc" {with-doc}
 ]

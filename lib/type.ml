@@ -34,6 +34,7 @@ let pp fmt t =
         match List.nth_opt names i with
         | Some x -> Format.pp_print_string fmt x
         | None -> Format.fprintf fmt "!%d" i)
+    | Univ 0 -> Format.pp_print_string fmt "Type"
     | Univ i -> paren_if (prec > 10) (fun fmt -> Format.fprintf fmt "Type %d" i)
     | Pi (a, b) ->
         let x = fresh names in
