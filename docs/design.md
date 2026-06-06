@@ -79,8 +79,8 @@ inductives — but mandatory once they exist, or irrelevance is unsound).
 Syntax errors (`Parse.Error`), scope errors (`Ast.Unbound_variable`), and —
 in file mode — type errors are reported with `file:line:col` locations
 (`loc.ml`). Precision matches what each layer knows: lex/parse/scope errors
-carry the exact token span (`Ast.Var` and each `Stmt.t` record their
-spans); type errors are located at the failing *statement*, because the
+carry exact spans (every `Ast` node is `{ loc; desc }`, and each `Stmt.t`
+records its span); type errors are located at the failing *statement*, because the
 core language is deliberately location-free — the kernel doesn't care
 where a term came from. Finer-grained type-error positions arrive if/when
 an elaborator (with a located surface language) sits between `Ast` and the
