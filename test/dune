@@ -1,3 +1,6 @@
-(test
+(library
  (name test_mtt)
- (libraries mtt))
+ (libraries mtt)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect)))

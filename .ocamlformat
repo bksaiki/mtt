@@ -1,0 +1,17 @@
+# sparse style
+break-cases = all
+break-fun-decl = fit-or-vertical
+break-infix = fit-or-vertical
+break-separators = before
+doc-comments = before
+dock-collection-brackets = false
+field-space = loose
+if-then-else = k-r
+let-and = compact
+let-binding-spacing = compact
+let-module = compact
+margin = 80
+module-item-spacing = sparse
+single-case = sparse
+type-decl = sparse
+wrap-comments = true
