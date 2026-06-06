@@ -8,6 +8,14 @@
 - [ ] Sigma types (pairs), unit, empty
 - [ ] Inductive types / naturals with eliminator (replaces Church encodings)
 - [x] Universe cumulativity (subsumption-only; products covariant in codomain)
+- [ ] Identity type (`Eq` / `refl` / `J`) — internalizes `#check_equal`
+      (today only the Leibniz encoding is expressible; see `examples/leibniz.mtt`)
+- [ ] `Prop`: impredicative bottom sort à la CoC (`Sort` hierarchy, `imax`
+      Pi rule) — would let `examples/logic.mtt` stay at one level and prove
+      the sum swap by elimination
+- [ ] Proof irrelevance for `Prop` (makes `theorem` opacity principled)
+- [ ] Universe polymorphism (Leibniz `sym`/`trans` are unprovable without
+      it: predicates can't return `Type 1`)
 - [ ] Holes / implicit arguments (elaboration with metavariables)
 
 ## Surface syntax
@@ -27,12 +35,16 @@
 
 - [ ] Source positions in errors (menhir `$loc` + `Lexing` positions)
 - [ ] Recover gracefully from parse errors with a message, not just `parse error`
+- [ ] Statement boundaries in files: a stray bare term is silently absorbed
+      into the preceding declaration as an application (see `test/file.t`)
 - [ ] REPL niceties: command history (`ledit`/`rlwrap` note or linenoise dep),
       `:type` / `:quit` commands
 
 ## Engineering
 
 - [x] Decide cram-test fate: restored `test/repl.t` (REPL transcript test)
+- [ ] Glued evaluation: remember folded and unfolded forms of defs, so
+      output prints `ten` instead of ten applications of `succ`
 - [ ] QCheck property tests: `parse ∘ print = id`, normalization idempotent
 - [ ] Kernel boundary `.mli`: abstract type of checked terms once the API settles
 - [x] CI (GitHub Actions: build + test on push)
