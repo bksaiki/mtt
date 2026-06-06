@@ -1,15 +1,13 @@
-def Eq : Π (A : Type) ⇒ A → A → Type 1 :=
-  λ (A : Type) ⇒ λ (x : A) ⇒ λ (y : A) ⇒
-    Π (P : A → Type) ⇒ P x → P y
+def Eq (A : Type) (x y : A) : Type 1 :=
+  Π (P : A → Type) ⇒ P x → P y
 
-def refl : Π (A : Type) ⇒ Π (x : A) ⇒ Eq A x x :=
-  λ (A : Type) ⇒ λ (x : A) ⇒
-    λ (P : A → Type) ⇒ λ (h : P x) ⇒ h
+def refl (A : Type) (x : A) : Eq A x x :=
+  λ (P : A → Type) (h : P x) ⇒ h
 
 axiom Nat : Type
 axiom zero : Nat
 
-def id : Π (A : Type) ⇒ A → A := λ (A : Type) ⇒ λ (x : A) ⇒ x
+def id (A : Type) (x : A) : A := x
 
 theorem id_zero : Eq Nat (id Nat zero) zero := refl Nat zero
 theorem beta : Eq Nat ((λ (x : Nat) ⇒ x) zero) zero := refl Nat zero

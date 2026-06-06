@@ -1,31 +1,22 @@
-def Bool : Type 1 = (A : Type) -> A -> A -> A
+def Bool : Type 1 := Π (A : Type) ⇒ A → A → A
 
-def true : Bool = fun (A : Type) => fun (t : A) => fun (f : A) => t
-def false : Bool = fun (A : Type) => fun (t : A) => fun (f : A) => f
+def true (A : Type) (t f : A) : A := t
+def false (A : Type) (t f : A) : A := f
 
-def not : Bool -> Bool =
-  fun (p : Bool) => fun (A : Type) => fun (t : A) => fun (f : A) =>
-    p A (false A t f) (true A t f)
+def not (p : Bool) (A : Type) (t f : A) : A :=
+  p A (false A t f) (true A t f)
 
-def and : Bool -> Bool -> Bool =
-  fun (p : Bool) => fun (q : Bool) =>
-    fun (A : Type) => fun (t : A) => fun (f : A) =>
-      p A (q A t f) (p A t f)
+def and (p q : Bool) (A : Type) (t f : A) : A :=
+  p A (q A t f) (p A t f)
 
-def or : Bool -> Bool -> Bool =
-  fun (p : Bool) => fun (q : Bool) =>
-    fun (A : Type) => fun (t : A) => fun (f : A) =>
-      p A (p A t f) (q A t f)
+def or (p q : Bool) (A : Type) (t f : A) : A :=
+  p A (p A t f) (q A t f)
 
-def xor : Bool -> Bool -> Bool =
-  fun (p : Bool) => fun (q : Bool) =>
-    fun (A : Type) => fun (t : A) => fun (f : A) =>
-      p A ((not q) A t f) (q A t f)
+def xor (p q : Bool) (A : Type) (t f : A) : A :=
+  p A ((not q) A t f) (q A t f)
 
-def ife : Bool -> Bool -> Bool -> Bool =
-  fun (p : Bool) => fun (a : Bool) => fun (b : Bool) =>
-    fun (A : Type) => fun (t : A) => fun (f : A) =>
-      p A (a A t f) (b A t f)
+def ife (p a b : Bool) (A : Type) (t f : A) : A :=
+  p A (a A t f) (b A t f)
 
 axiom B : Type
 axiom T : B

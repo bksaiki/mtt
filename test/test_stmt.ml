@@ -126,3 +126,22 @@ let%expect_test "definitions accept := and unicode binders" =
     ; "#check id"
     ];
   [%expect {| fun (A : Type) => fun (x : A) => x : (A : Type) -> A -> A |}]
+
+let%expect_test "declaration telescopes" =
+  session
+    [ "axiom Nat : Type"
+    ; "axiom zero : Nat"
+    ; "def const (A B : Type) (x : A) (y : B) : A := x"
+    ; "#check const"
+    ; "#check_equal (const Nat Nat zero zero) zero"
+    ; "axiom plus (m n : Nat) : Nat"
+    ; "#check plus"
+    ; "theorem plus_self (n : Nat) : Nat := plus n n"
+    ; "def bad (A : Type) (x : A) : A := A"
+    ];
+  [%expect
+    {|
+    fun (A : Type) => fun (B : Type) => fun (x : A) => fun (y : B) => x : (A : Type) -> (B : Type) -> A -> B -> A
+    plus : Nat -> Nat -> Nat
+    type error: this term has type Type but A was expected
+    |}]
