@@ -1,6 +1,6 @@
 %token <string> ID
 %token <int> INT
-%token FUN PI TYPE PROP UNIT CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI TYPE PROP UNIT EMPTY ABSURD CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -76,6 +76,8 @@ pi_term:
 (* application is left-associative *)
 app_term:
   | f = app_term; a = atom { Ast.mk $loc (Ast.App (f, a)) }
+  (* the eliminator for Empty is primitive syntax: motive, then proof *)
+  | ABSURD; a = atom; h = atom { Ast.mk $loc (Ast.Absurd (a, h)) }
   | t = atom { t }
 
 atom:
@@ -85,6 +87,7 @@ atom:
   | TYPE { Ast.mk $loc (Ast.Sort 1) }
   | PROP { Ast.mk $loc (Ast.Sort 0) }
   | UNIT { Ast.mk $loc Ast.Unit }
+  | EMPTY { Ast.mk $loc Ast.Empty }
   (* () is the unit element, like OCaml; whitespace between the parens is
      fine since this is a grammar rule, not a lexeme *)
   | LPAREN; RPAREN { Ast.mk $loc Ast.MkUnit }

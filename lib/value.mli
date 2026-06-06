@@ -10,12 +10,14 @@ type t =
   | Lam of string * t * closure
   | Unit
   | MkUnit
+  | Empty
   | Neutral of neutral
 
-(** a stuck term: a variable applied to a spine of arguments *)
+(** a stuck term: a variable applied to a spine of eliminations *)
 and neutral =
   | Var of int  (** de Bruijn level *)
   | App of neutral * t
+  | Absurd of t * neutral  (** a stuck ex falso: motive and stuck proof *)
 
 (** a suspended binder body: syntax waiting for the bound variable's value *)
 and closure =

@@ -11,8 +11,9 @@
       large-elimination restriction becomes a real check)
 - [x] `Unit` with definitional η (`Unit : Type`, deliberately not `Prop`:
       a `Prop` unit would collapse `Bool := Unit + Unit` by irrelevance)
-- [ ] `Empty` (`absurd`, subsingleton elimination: `Empty : Prop` but
-      eliminates into any sort); then `Bool := Unit + Unit`
+- [x] `Empty` (`absurd`, subsingleton elimination: `Empty : Prop` but
+      eliminates into any sort)
+- [ ] `Bool := Unit + Unit` once sums land
 - [ ] Inductive types / naturals with eliminator (replaces Church encodings;
       sums + Σ + unit/empty are the warm-up)
 - [ ] Identity type (`Eq` / `refl` / `J`) — internalizes `#check_equal`

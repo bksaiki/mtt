@@ -6,13 +6,12 @@
 -- A => (B => A)
 theorem f1 (A B : Prop) (x : A) (y : B) : A := x
 
--- falsum: a proof of absurdity proves anything. Impredicativity is what
--- lets a quantification over all of Prop land back in Prop.
-def absurdity := Π (p : Prop) ⇒ p
-def negate (A : Prop) := A → absurdity
+-- falsum is native: Empty : Prop, with absurd as ex falso. (Before Empty
+-- existed this file Church-encoded it as Π (p : Prop) ⇒ p.)
+def negate (A : Prop) := A → Empty
 
--- not A => (A => B)
-theorem f2 (A B : Prop) (x : negate A) : A → B := λ y : A ⇒ x y B
+-- not A => (A => B): ex falso quodlibet
+theorem f2 (A B : Prop) (x : negate A) : A → B := λ y : A ⇒ absurd B (x y)
 
 -- A & B; product, Church-encoded
 def conj (A B : Prop) := Π (C : Prop) ⇒ (A → B → C) → C

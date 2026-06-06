@@ -6,6 +6,9 @@ type t =
   | App of t * t
   | Unit (* the unit type *)
   | MkUnit (* the element of Unit *)
+  | Empty (* the empty type: falsity *)
+  | Absurd of
+      t * t (* absurd A h: ex falso, eliminating h : Empty at motive A *)
 
 let rec occurs k = function
   | Var i -> i = k
@@ -15,8 +18,10 @@ let rec occurs k = function
       occurs k a || occurs (k + 1) b
   | App (f, a) -> occurs k f || occurs k a
   | Unit
-  | MkUnit ->
+  | MkUnit
+  | Empty ->
       false
+  | Absurd (a, h) -> occurs k a || occurs k h
 
 let pp_in names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
@@ -76,6 +81,11 @@ let pp_in names fmt t =
             Format.fprintf fmt "@[%a@ %a@]" (go 10 names) f (go 11 names) a)
     | Unit -> Format.pp_print_string fmt "Unit"
     | MkUnit -> Format.pp_print_string fmt "()"
+    | Empty -> Format.pp_print_string fmt "Empty"
+    | Absurd (a, h) ->
+        paren_if (prec > 10) (fun fmt ->
+            Format.fprintf fmt "@[absurd@ %a@ %a@]" (go 11 names) a
+              (go 11 names) h)
   in
   go 0 names fmt t
 

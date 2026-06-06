@@ -11,6 +11,11 @@ type t =
   | App of t * t
   | Unit  (** the unit type, with definitional η: every element is [MkUnit] *)
   | MkUnit  (** the element of [Unit] *)
+  | Empty  (** the empty type: falsity, in Prop *)
+  | Absurd of t * t
+      (** [Absurd (A, h)]: ex falso — eliminates [h : Empty] at motive [A] in
+          any sort (subsingleton elimination, sound because [Empty] has no
+          introduction forms) *)
 
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool

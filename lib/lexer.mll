@@ -26,6 +26,8 @@ rule token = parse
   | "Type" { TYPE }
   | "Prop" { PROP }
   | "Unit" { UNIT }
+  | "Empty" { EMPTY }
+  | "absurd" { ABSURD }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }
   | "#eval" { EVAL }

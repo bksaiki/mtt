@@ -17,6 +17,8 @@ and desc =
   | Ascribe of t * t  (** (t : A) *)
   | Unit
   | MkUnit
+  | Empty
+  | Absurd of t * t  (** [absurd A h] *)
 
 (** [mk loc desc] is the node [desc] located at [loc] *)
 val mk : Loc.t -> desc -> t
