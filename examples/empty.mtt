@@ -1,0 +1,36 @@
+-- The empty type: no elements, living in Prop — it is falsity. absurd is
+-- ex falso: from a proof of Empty anything follows, in any sort
+-- (subsingleton elimination). Unlike Unit there is no η law: Empty's
+-- content is logical rather than equational.
+
+def negate (A : Prop) := A → Empty
+
+-- negation of data is a proposition too, by the imax rule
+def neg_data_is_prop : Prop := Type → Empty
+
+axiom p : Prop
+axiom q : Prop
+
+-- ex falso quodlibet: not p => (p => q)
+theorem exfalso (np : negate p) (x : p) : q := absurd q (np x)
+
+-- double negation introduction
+theorem dni (x : p) : negate (negate p) := λ k : negate p ⇒ k x
+
+-- contraposition: (p => q) => (not q => not p)
+theorem contrapose (f : p → q) (nq : negate q) : negate p :=
+  λ x : p ⇒ nq (f x)
+
+-- triple negation collapses to single negation...
+theorem tne (nnnp : negate (negate (negate p))) : negate p :=
+  λ x : p ⇒ nnnp (λ np : negate p ⇒ np x)
+
+-- ...but double negation ELIMINATION (not not p => p) is not provable:
+-- that is exactly classical logic, and this theory is intuitionistic.
+
+-- proofs of Empty are irrelevant like any other proofs, so even stuck
+-- eliminations of different proofs are definitionally equal
+axiom h1 : Empty
+axiom h2 : Empty
+axiom A : Type
+#check_equal (absurd A h1) (absurd A h2)

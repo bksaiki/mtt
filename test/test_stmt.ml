@@ -205,4 +205,4 @@ let%expect_test "Empty: irrelevance and stuck absurd" =
     ; "axiom p : Prop"
     ; "theorem dni (x : p) : negate (negate p) := λ k : negate p ⇒ k x"
     ];
-  [%expect {| |}]
+  [%expect {| fun (A : Prop) => A -> Empty : Prop -> Prop |}]
