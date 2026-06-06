@@ -66,3 +66,9 @@ let%expect_test "binder groups and telescopes desugar to nested binders" =
   roundtrip "fun (f : Type -> Type) => (f Type : Type) -> Type";
   [%expect
     {| fun (f : Type -> Type) => (fun (x : Type) => x) (f Type) -> Type |}]
+
+let%expect_test "line comments are skipped" =
+  roundtrip "Type -- trailing comment";
+  [%expect {| Type |}];
+  roundtrip "Type ->-- arrows still lex next to comments\n Type";
+  [%expect {| Type -> Type |}]

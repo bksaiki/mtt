@@ -145,3 +145,17 @@ let%expect_test "declaration telescopes" =
     plus : Nat -> Nat -> Nat
     type error: this term has type Type but A was expected
     |}]
+
+let%expect_test "def return annotations are optional, with telescopes" =
+  session
+    [ "axiom Nat : Type"
+    ; "def twice (f : Nat -> Nat) (n : Nat) := f (f n)"
+    ; "#check twice"
+    ; "def Bool := Π (A : Type) ⇒ A → A → A"
+    ; "#check Bool"
+    ];
+  [%expect
+    {|
+    fun (f : Nat -> Nat) => fun (n : Nat) => f (f n) : (Nat -> Nat) -> Nat -> Nat
+    (A : Type) -> A -> A -> A : Type 1
+    |}]

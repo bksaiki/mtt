@@ -11,6 +11,7 @@ let ident = ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '0'-'9' '_' '\'']*
 (* unicode alternatives are matched as literal UTF-8 byte sequences *)
 rule token = parse
   | whitespace { token lexbuf }
+  | "--" [^ '\n']* { token lexbuf }
   | "fun" { FUN }
   | "λ" { FUN }
   | "Π" { PI }

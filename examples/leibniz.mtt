@@ -1,4 +1,8 @@
-def Eq (A : Type) (x y : A) : Type 1 :=
+-- Leibniz (Church-style) equality: x equals y when y satisfies every
+-- predicate x does. Checking [refl] at [Eq A t u] forces the type checker
+-- to decide t ≡ u, so a theorem proved by refl is the internal twin of the
+-- #check_equal command.
+def Eq (A : Type) (x y : A) :=
   Π (P : A → Type) ⇒ P x → P y
 
 def refl (A : Type) (x : A) : Eq A x x :=
@@ -9,8 +13,10 @@ axiom zero : Nat
 
 def id (A : Type) (x : A) : A := x
 
+-- δ- and β-conversion, proved inside the theory...
 theorem id_zero : Eq Nat (id Nat zero) zero := refl Nat zero
 theorem beta : Eq Nat ((λ (x : Nat) ⇒ x) zero) zero := refl Nat zero
 
+-- ...and the same facts asserted at the judgment level
 #check_equal (id Nat zero) zero
 #check_equal ((λ (x : Nat) ⇒ x) zero) zero

@@ -1,8 +1,11 @@
-def Bool : Type 1 := Π (A : Type) ⇒ A → A → A
+-- Church-encoded booleans: a boolean is its own eliminator, choosing
+-- between two alternatives of any type.
+def Bool := Π (A : Type) ⇒ A → A → A
 
 def true (A : Type) (t f : A) : A := t
 def false (A : Type) (t f : A) : A := f
 
+-- connectives: apply the boolean itself to pick a branch
 def not (p : Bool) (A : Type) (t f : A) : A :=
   p A (false A t f) (true A t f)
 
@@ -15,9 +18,12 @@ def or (p q : Bool) (A : Type) (t f : A) : A :=
 def xor (p q : Bool) (A : Type) (t f : A) : A :=
   p A ((not q) A t f) (q A t f)
 
+-- if-then-else, restricted to boolean branches
 def ife (p a b : Bool) (A : Type) (t f : A) : A :=
   p A (a A t f) (b A t f)
 
+-- truth tables, checked by normalization: applying a boolean to two
+-- distinct stuck constants T and F reveals which branch it takes
 axiom B : Type
 axiom T : B
 axiom F : B

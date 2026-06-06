@@ -15,6 +15,8 @@
 - [x] Parameter telescopes: `def f (A : Type) (x y : A) : A := ...`
       (also on `axiom`/`theorem`)
 - [x] Unicode alternatives: `Π`/`∏ (x : A) ⇒ B`, `→`, `⇒`, `λ`, `:=`
+- [x] Line comments: `-- ...`
+- [ ] Block comments: `/- ... -/` (nesting)
 - [ ] Unicode identifiers (needs sedlex; ocamllex handles only fixed
       keyword literals)
 - [x] Multi-binder groups in `fun`/Π/arrows: `λ (t f : A) ⇒ ...`,
