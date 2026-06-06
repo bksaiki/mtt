@@ -21,4 +21,4 @@
 - [x] Decide cram-test fate: restored `test/repl.t` (REPL transcript test)
 - [ ] QCheck property tests: `parse ∘ print = id`, normalization idempotent
 - [ ] Kernel boundary `.mli`: abstract type of checked terms once the API settles
-- [ ] CI (GitHub Actions: build + test on push)
+- [x] CI (GitHub Actions: build + test on push)
