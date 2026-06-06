@@ -16,7 +16,7 @@ and desc =
   | App of t * t
   | Ascribe of t * t  (** (t : A) *)
   | Unit
-  | Tt
+  | MkUnit
 
 (** [mk loc desc] is the node [desc] located at [loc] *)
 val mk : Loc.t -> desc -> t

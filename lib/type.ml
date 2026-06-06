@@ -5,7 +5,7 @@ type t =
   | Lam of string * t * t (* λ (x : A). b *)
   | App of t * t
   | Unit (* the unit type *)
-  | Tt (* the element of Unit *)
+  | MkUnit (* the element of Unit *)
 
 let rec occurs k = function
   | Var i -> i = k
@@ -15,7 +15,7 @@ let rec occurs k = function
       occurs k a || occurs (k + 1) b
   | App (f, a) -> occurs k f || occurs k a
   | Unit
-  | Tt ->
+  | MkUnit ->
       false
 
 let pp_in names fmt t =
@@ -75,7 +75,7 @@ let pp_in names fmt t =
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[%a@ %a@]" (go 10 names) f (go 11 names) a)
     | Unit -> Format.pp_print_string fmt "Unit"
-    | Tt -> Format.pp_print_string fmt "tt"
+    | MkUnit -> Format.pp_print_string fmt "tt"
   in
   go 0 names fmt t
 

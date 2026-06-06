@@ -78,7 +78,7 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
       ──────────────────────── (Sort)
       Γ ⊢ Sort i : Sort (i+1)
 
-      ─────────────── (Unit)      ───────────── (Tt)
+      ─────────────── (Unit)      ───────────── (MkUnit)
       Γ ⊢ Unit : Type             Γ ⊢ tt : Unit
 
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j

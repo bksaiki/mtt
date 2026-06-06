@@ -85,7 +85,7 @@ atom:
   | TYPE { Ast.mk $loc (Ast.Sort 1) }
   | PROP { Ast.mk $loc (Ast.Sort 0) }
   | UNIT { Ast.mk $loc Ast.Unit }
-  | TT { Ast.mk $loc Ast.Tt }
+  | TT { Ast.mk $loc Ast.MkUnit }
   | LPAREN; t = term; RPAREN { t }
   | LPAREN; t = term; COLON; a = term; RPAREN
     { Ast.mk $loc (Ast.Ascribe (t, a)) }

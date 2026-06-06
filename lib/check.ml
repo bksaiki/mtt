@@ -68,7 +68,7 @@ let rec sort_of ctx (ty : Value.t) : int =
       | Value.Sort i -> i
       | _ -> assert false)
   | Value.Lam _
-  | Value.Tt ->
+  | Value.MkUnit ->
       assert false (* not types *)
 
 (* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
@@ -145,7 +145,7 @@ let rec infer ctx t =
   | Type.Var i -> List.nth ctx.types i (* (Var) *)
   | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
   | Type.Unit -> Value.Sort 1 (* (Unit): Unit : Type *)
-  | Type.Tt -> Value.Unit (* (Tt) *)
+  | Type.MkUnit -> Value.Unit (* (MkUnit) *)
   (* (Pi) *)
   | Type.Pi (x, a, b) ->
       let i = infer_univ ctx a in

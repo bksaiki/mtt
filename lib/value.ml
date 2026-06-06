@@ -3,7 +3,7 @@ type t =
   | Pi of string * t * closure
   | Lam of string * t * closure
   | Unit
-  | Tt
+  | MkUnit
   | Neutral of neutral
 
 and neutral =
@@ -24,7 +24,7 @@ let rec eval env t =
   | Type.Var i -> List.nth env i
   | Type.Sort i -> Sort i
   | Type.Unit -> Unit
-  | Type.Tt -> Tt
+  | Type.MkUnit -> MkUnit
   | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
   | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
@@ -45,7 +45,7 @@ let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
   | Unit -> Type.Unit
-  | Tt -> Type.Tt
+  | MkUnit -> Type.MkUnit
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
   | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
   | Neutral n -> quote_neutral l n

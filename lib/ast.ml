@@ -12,7 +12,7 @@ and desc =
   | App of t * t
   | Ascribe of t * t (* (t : A) *)
   | Unit
-  | Tt
+  | MkUnit
 
 let mk loc desc = { loc; desc }
 
@@ -58,7 +58,7 @@ let to_term names s =
     | Lam (x, a, b) -> Type.Lam (x, go env a, go (x :: env) b)
     | App (f, a) -> Type.App (go env f, go env a)
     | Unit -> Type.Unit
-    | Tt -> Type.Tt
+    | MkUnit -> Type.MkUnit
     (* ascription is the typed identity: applying (fun (x : A) => x) to [t]
        forces the checking judgment t ⇐ A, and the redex evaporates under
        evaluation. No core constructor needed. *)
