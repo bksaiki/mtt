@@ -2,7 +2,7 @@
     ({!to_term}) converts it to the de Bruijn core. *)
 
 type t =
-  | Var of string
+  | Var of string * Loc.t  (** with its source location *)
   | Sort of int  (** Prop = Sort 0, Type i = Sort (i+1), as in the core *)
   | Pi of string * t * t  (** (x : A) -> B *)
   | Arrow of t * t  (** A -> B *)
@@ -22,7 +22,7 @@ val pis : (string list * t) list -> t -> t
     as a multi-name pi binder when it appears left of an arrow *)
 val var_spine : t -> string list option
 
-exception Unbound_variable of string
+exception Unbound_variable of Loc.t * string
 
 (** [to_term names s] scope-checks [s], converting named binders to de Bruijn
     indices; [names] binds free variables (innermost first), e.g. top-level

@@ -5,22 +5,22 @@ let interactive = Unix.isatty Unix.stdin
 
 (* processes one line, returning the (possibly extended) context *)
 let process ctx line =
-  match Stmt.run ctx (Parse.stmt_of_string line) with
-  | ctx, message ->
-      Option.iter print_endline message;
+  match Parse.stmt_of_string line with
+  | exception Parse.Error (loc, msg) ->
+      Printf.printf "%s: syntax error: %s\n" (Loc.to_string loc) msg;
       ctx
-  | exception Lexer.Error msg ->
-      Printf.printf "lex error: %s\n" msg;
-      ctx
-  | exception Parser.Error ->
-      print_endline "parse error";
-      ctx
-  | exception Ast.Unbound_variable x ->
-      Printf.printf "unbound variable: %s\n" x;
-      ctx
-  | exception Check.Type_error msg ->
-      Printf.printf "type error: %s\n" msg;
-      ctx
+  | stmt -> (
+      match Stmt.run ctx stmt with
+      | ctx, message ->
+          Option.iter print_endline message;
+          ctx
+      | exception Ast.Unbound_variable (loc, x) ->
+          Printf.printf "%s: unbound variable: %s\n" (Loc.to_string loc) x;
+          ctx
+      | exception Check.Type_error msg ->
+          (* the statement is the whole REPL line: a position adds nothing *)
+          Printf.printf "type error: %s\n" msg;
+          ctx)
 
 let rec repl ctx =
   if interactive then (
@@ -42,17 +42,20 @@ let run_file path =
       fmt
   in
   let contents = In_channel.with_open_text path In_channel.input_all in
-  match Parse.file_of_string contents with
-  | exception Lexer.Error msg -> die "lex error: %s" msg
-  | exception Parser.Error -> die "parse error"
+  match Parse.file_of_string ~fname:path contents with
+  | exception Parse.Error (loc, msg) ->
+      die "%s: syntax error: %s" (Loc.to_string loc) msg
   | stmts ->
-      let step ctx stmt =
+      let step ctx (stmt : Stmt.t) =
         match Stmt.run ctx stmt with
         | ctx, message ->
             Option.iter print_endline message;
             ctx
-        | exception Ast.Unbound_variable x -> die "unbound variable: %s" x
-        | exception Check.Type_error msg -> die "type error: %s" msg
+        | exception Ast.Unbound_variable (loc, x) ->
+            die "%s: unbound variable: %s" (Loc.to_string loc) x
+        | exception Check.Type_error msg ->
+            (* type errors are located at the failing statement *)
+            die "%s: type error: %s" (Loc.to_string stmt.loc) msg
       in
       ignore (List.fold_left step Check.empty stmts)
 

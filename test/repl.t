@@ -38,9 +38,9 @@ Errors are reported without ending the session:
   > (fun (A : Type) => A) Type
   > #check Type
   > EOF
-  unbound variable: y
-  parse error
-  lex error: unexpected character '?'
+  1:19: unbound variable: y
+  1:10: syntax error: unexpected token
+  1:1: syntax error: unexpected character '?'
   type error: expected a function, but Type has type Type 1
   type error: this term has type Type 1 but Type was expected
   Type : Type 1

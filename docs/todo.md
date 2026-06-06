@@ -19,7 +19,6 @@
 
 ## Errors & UX
 
-- [ ] Source positions in errors (menhir `$loc` + `Lexing` positions)
 - [ ] Recover gracefully from parse errors with a message, not just `parse error`
 - [ ] Statement boundaries in files: a stray bare term is silently absorbed
       into the preceding declaration as an application (see `test/file.t`)

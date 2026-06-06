@@ -29,8 +29,14 @@ let%expect_test "shadowing resolves to the nearest binder" =
 
 let%expect_test "unbound variables are rejected" =
   (try roundtrip "fun (x : Type) => y" with
-  | Ast.Unbound_variable x -> Printf.printf "unbound: %s\n" x);
-  [%expect {| unbound: y |}]
+  | Ast.Unbound_variable (loc, x) ->
+      Printf.printf "%s: unbound: %s\n" (Loc.to_string loc) x);
+  [%expect {| 1:19: unbound: y |}];
+  (* positions track newlines *)
+  (try roundtrip "fun (A : Type) =>\n  B" with
+  | Ast.Unbound_variable (loc, x) ->
+      Printf.printf "%s: unbound: %s\n" (Loc.to_string loc) x);
+  [%expect {| 2:3: unbound: B |}]
 
 let%expect_test "ascription elaborates to the typed identity" =
   roundtrip "(Type : Type 1)";

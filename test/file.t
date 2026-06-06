@@ -28,7 +28,7 @@ A type error stops checking with a nonzero exit:
   > #check bogus
   > EOF
   $ mtt bad.mtt
-  type error: this term has type Type but Nat was expected
+  bad.mtt:2:1: type error: this term has type Type but Nat was expected
   [1]
 
 Bare terms are not allowed in files. Beware: since juxtaposition is
@@ -41,5 +41,5 @@ up as a downstream error rather than a parse error:
   > Nat
   > EOF
   $ mtt bare.mtt
-  unbound variable: Nat
+  bare.mtt:2:1: unbound variable: Nat
   [1]

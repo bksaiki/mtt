@@ -9,12 +9,14 @@ open Parser
 exception Error of string
 }
 
-let whitespace = [' ' '\t' '\r' '\n']+
+let whitespace = [' ' '\t' '\r']+
 let digits = ['0'-'9']+
 let ident = ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '0'-'9' '_' '\'']*
 
 (* unicode alternatives are matched as literal UTF-8 byte sequences *)
 rule token = parse
+  (* newlines must be reported so positions stay accurate *)
+  | '\n' { Lexing.new_line lexbuf; token lexbuf }
   | whitespace { token lexbuf }
   | "--" [^ '\n']* { token lexbuf }
   | "fun" { FUN }

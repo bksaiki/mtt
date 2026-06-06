@@ -70,8 +70,21 @@ CoC-style `Sort` hierarchy: `Prop = Sort 0` (impredicative), `Type i =
 Sort (i+1)` (predicative tower). Π formation lands in `Sort (imax i j)`
 where `imax i 0 = 0` — a product into a proposition is a proposition, no
 matter the domain — and `max i j` otherwise. The whole difference between
-`Prop` and `Type` is that one `imax` in `check.ml`'s Pi rule. Not yet:
-proof irrelevance, large-elimination restrictions (moot until inductives).
+`Prop` and `Type` is that one `imax` in `check.ml`'s Pi rule, plus proof
+irrelevance in `conv`. Not yet: large-elimination restrictions (moot until
+inductives — but mandatory once they exist, or irrelevance is unsound).
+
+## Errors and locations
+
+Syntax errors (`Parse.Error`), scope errors (`Ast.Unbound_variable`), and —
+in file mode — type errors are reported with `file:line:col` locations
+(`loc.ml`). Precision matches what each layer knows: lex/parse/scope errors
+carry the exact token span (`Ast.Var` and each `Stmt.t` record their
+spans); type errors are located at the failing *statement*, because the
+core language is deliberately location-free — the kernel doesn't care
+where a term came from. Finer-grained type-error positions arrive if/when
+an elaborator (with a located surface language) sits between `Ast` and the
+checker.
 
 ## Top-level declarations
 

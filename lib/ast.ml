@@ -1,5 +1,5 @@
 type t =
-  | Var of string
+  | Var of string * Loc.t
   | Sort of int
   | Pi of string * t * t (* (x : A) -> B *)
   | Arrow of t * t (* A -> B *)
@@ -22,20 +22,20 @@ let pis groups body =
 
 let var_spine t =
   let rec go acc = function
-    | Var x -> Some (x :: acc)
-    | App (f, Var x) -> go (x :: acc) f
+    | Var (x, _) -> Some (x :: acc)
+    | App (f, Var (x, _)) -> go (x :: acc) f
     | _ -> None
   in
   go [] t
 
-exception Unbound_variable of string
+exception Unbound_variable of Loc.t * string
 
 let to_term names s =
   let rec go env = function
-    | Var x -> (
+    | Var (x, loc) -> (
         match List.find_index (String.equal x) env with
         | Some i -> Type.Var i
-        | None -> raise (Unbound_variable x))
+        | None -> raise (Unbound_variable (loc, x)))
     | Sort i -> Type.Sort i
     | Pi (x, a, b) -> Type.Pi (x, go env a, go (x :: env) b)
     (* non-dependent: extend the env with a dummy no identifier can equal, so

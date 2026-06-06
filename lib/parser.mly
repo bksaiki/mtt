@@ -14,7 +14,7 @@ main:
 (* a single REPL line: a declaration, or a bare term *)
 stmt:
   | s = decl; EOF { s }
-  | t = term; EOF { Stmt.Expr t }
+  | t = term; EOF { { Stmt.loc = $loc; desc = Stmt.Expr t } }
 
 (* a file is a sequence of declarations; bare terms are REPL-only, since
    without a statement terminator adjacent terms would parse as one
@@ -26,6 +26,9 @@ file:
    means [def f : (A : Type) -> (x : A) -> (y : A) -> A] with a body wrapped
    in the matching lambdas *)
 decl:
+  | d = decl_desc { { Stmt.loc = $loc; desc = d } }
+
+decl_desc:
   | CHECK; t = term { Stmt.Check t }
   | EVAL; t = term { Stmt.Eval t }
   | AXIOM; x = ID; bs = list(binder_group); COLON; a = term
@@ -72,7 +75,7 @@ app_term:
   | t = atom { t }
 
 atom:
-  | x = ID { Ast.Var x }
+  | x = ID { Ast.Var (x, $loc) }
   (* surface universes name sorts: Prop = Sort 0, Type i = Sort (i+1) *)
   | TYPE; i = INT { Ast.Sort (i + 1) }
   | TYPE { Ast.Sort 1 }
