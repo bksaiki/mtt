@@ -64,8 +64,8 @@ val show_term : ctx -> Type.t -> string
     [v2] at the type [ty], which both must inhabit. Type-directed: at a Prop,
     true by proof irrelevance; at a Pi, both sides are applied to a fresh
     variable (η, so lambda annotations are never compared); at [Unit], true (η:
-    every element is [tt]); at a sort, the values are types and are compared
-    structurally. *)
+    every element is [()]); at a Σ, by comparing projections (surjective
+    pairing); at a sort, the values are types and are compared structurally. *)
 val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
 
 (** [infer ctx t] synthesizes the type of [t] as a value, by the rules:
@@ -90,6 +90,20 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
 
         ex falso at any sort: subsingleton elimination, sound because
         Empty has no introduction forms
+
+      Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
+      ──────────────────────────────────────── (Sigma)
+         Γ ⊢ Σ (x : A) ⇒ B : Sort (max i j)
+
+        plain max: a Σ is a proposition only when both components are
+
+      Γ ⊢ a ⇐ A    Γ ⊢ b ⇐ B[a/x]
+      ────────────────────────────── (Pair, checking only)
+        Γ ⊢ (a, b) ⇐ Σ (x : A) ⇒ B
+
+      Γ ⊢ p : Σ (x : A) ⇒ B          Γ ⊢ p : Σ (x : A) ⇒ B
+      ────────────────────── (Fst)   ─────────────────────── (Snd)
+          Γ ⊢ p.1 : A                  Γ ⊢ p.2 : B[p.1/x]
 
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Pi)

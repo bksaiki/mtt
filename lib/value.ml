@@ -5,12 +5,16 @@ type t =
   | Unit
   | MkUnit
   | Empty
+  | Sigma of string * t * closure
+  | Pair of t * t
   | Neutral of neutral
 
 and neutral =
   | Var of int (* de Bruijn level *)
   | App of neutral * t
   | Absurd of t * neutral (* a stuck ex falso: motive and stuck proof *)
+  | Fst of neutral (* a stuck first projection *)
+  | Snd of neutral (* a stuck second projection *)
 
 and closure =
   { env : env
@@ -37,6 +41,10 @@ let rec eval env t =
   | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
   | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
+  | Type.Sigma (x, a, b) -> Sigma (x, eval env a, { env; body = b })
+  | Type.Pair (a, b) -> Pair (eval env a, eval env b)
+  | Type.Fst t -> vfst (eval env t)
+  | Type.Snd t -> vsnd (eval env t)
 
 (* β-reduction: (fun (x : A) => b) a ≡ b[a/x]. The substitution is just
    evaluating the closure body in an extended environment: no term-level
@@ -50,6 +58,18 @@ and apply f a =
 
 and apply_closure { env; body } a = eval (a :: env) body
 
+(* projections: reduce on a pair, get stuck on a neutral. Anything else is
+   ill-typed (unreachable for checked terms). *)
+and vfst = function
+  | Pair (a, _) -> a
+  | Neutral n -> Neutral (Fst n)
+  | _ -> assert false
+
+and vsnd = function
+  | Pair (_, b) -> b
+  | Neutral n -> Neutral (Snd n)
+  | _ -> assert false
+
 let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
@@ -58,6 +78,8 @@ let rec quote l v =
   | Empty -> Type.Empty
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
   | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
+  | Sigma (x, a, c) -> Type.Sigma (x, quote l a, quote_closure l c)
+  | Pair (a, b) -> Type.Pair (quote l a, quote l b)
   | Neutral n -> quote_neutral l n
 
 (* to go under a binder, apply the closure to a fresh stuck variable *)
@@ -69,5 +91,7 @@ and quote_neutral l = function
   | Var k -> Type.Var (l - k - 1)
   | App (n, a) -> Type.App (quote_neutral l n, quote l a)
   | Absurd (a, n) -> Type.Absurd (quote l a, quote_neutral l n)
+  | Fst n -> Type.Fst (quote_neutral l n)
+  | Snd n -> Type.Snd (quote_neutral l n)
 
 let normalize t = quote 0 (eval [] t)

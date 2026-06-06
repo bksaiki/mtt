@@ -9,6 +9,10 @@ type t =
   | Empty (* the empty type: falsity *)
   | Absurd of
       t * t (* absurd A h: ex falso, eliminating h : Empty at motive A *)
+  | Sigma of string * t * t (* Σ (x : A) ⇒ B, B binds index 0 *)
+  | Pair of t * t (* (a, b) *)
+  | Fst of t (* p.1 *)
+  | Snd of t (* p.2 *)
 
 let rec occurs k = function
   | Var i -> i = k
@@ -22,6 +26,11 @@ let rec occurs k = function
   | Empty ->
       false
   | Absurd (a, h) -> occurs k a || occurs k h
+  | Sigma (_, a, b) -> occurs k a || occurs (k + 1) b
+  | Pair (a, b) -> occurs k a || occurs k b
+  | Fst t
+  | Snd t ->
+      occurs k t
 
 let pp_in names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
@@ -45,7 +54,8 @@ let pp_in names fmt t =
     else
       body fmt
   in
-  (* precedence: 0 = fun, 1 = arrow, 10 = application, 11 = atom *)
+  (* precedence: 0 = binders, 1 = arrow, 3 = product, 10 = application, 11 =
+     atom *)
   let rec go prec names fmt t =
     match t with
     | Var i -> (
@@ -82,6 +92,24 @@ let pp_in names fmt t =
     | Unit -> Format.pp_print_string fmt "Unit"
     | MkUnit -> Format.pp_print_string fmt "()"
     | Empty -> Format.pp_print_string fmt "Empty"
+    | Sigma (x, a, b) ->
+        if occurs 0 b then
+          let x = freshen names x in
+          paren_if (prec > 0) (fun fmt ->
+              Format.fprintf fmt "@[Σ (%s : %a) ⇒@ %a@]" x (go 0 names) a
+                (go 0 (x :: names))
+                b)
+        else
+          (* non-dependent: print a product; × is right-associative and sits
+             between arrows and application *)
+            paren_if (prec > 3) (fun fmt ->
+              Format.fprintf fmt "@[%a ×@ %a@]" (go 4 names) a
+                (go 3 ("" :: names))
+                b)
+    | Pair (a, b) ->
+        Format.fprintf fmt "@[(%a,@ %a)@]" (go 0 names) a (go 0 names) b
+    | Fst t -> Format.fprintf fmt "%a.1" (go 11 names) t
+    | Snd t -> Format.fprintf fmt "%a.2" (go 11 names) t
     | Absurd (a, h) ->
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[absurd@ %a@ %a@]" (go 11 names) a

@@ -16,6 +16,12 @@ type t =
       (** [Absurd (A, h)]: ex falso — eliminates [h : Empty] at motive [A] in
           any sort (subsingleton elimination, sound because [Empty] has no
           introduction forms) *)
+  | Sigma of string * t * t
+      (** Σ (x : A) ⇒ B, where B binds index 0; prints as [A × B] when
+          non-dependent *)
+  | Pair of t * t  (** (a, b) *)
+  | Fst of t  (** p.1 *)
+  | Snd of t  (** p.2 *)
 
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool
