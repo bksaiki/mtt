@@ -27,20 +27,20 @@ exception Not_a_function
 
 let rec eval env t =
   match t with
-  | Type.Var i -> List.nth env i
-  | Type.Sort i -> Sort i
   | Type.Unit -> Unit
   | Type.MkUnit -> MkUnit
   | Type.Empty -> Empty
+  | Type.Var i -> List.nth env i
+  | Type.Sort i -> Sort i
+  | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
+  | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
+  | Type.App (f, a) -> apply (eval env f) (eval env a)
   (* Empty has no introduction forms, so a well-typed scrutinee can only be
      stuck: absurd is always a neutral *)
   | Type.Absurd (a, h) -> (
       match eval env h with
       | Neutral n -> Neutral (Absurd (eval env a, n))
       | _ -> assert false)
-  | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
-  | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
-  | Type.App (f, a) -> apply (eval env f) (eval env a)
   | Type.Sigma (x, a, b) -> Sigma (x, eval env a, { env; body = b })
   | Type.Pair (a, b) -> Pair (eval env a, eval env b)
   | Type.Fst t -> vfst (eval env t)

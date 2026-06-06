@@ -190,11 +190,39 @@ let sub ctx t1 t2 = conv_ty ~cumul:true ctx t1 t2
    check.mli *)
 let rec infer ctx t =
   match t with
-  | Type.Var i -> List.nth ctx.types i (* (Var) *)
-  | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
   | Type.Unit -> Value.Sort 1 (* (Unit): Unit : Type *)
   | Type.MkUnit -> Value.Unit (* (MkUnit) *)
   | Type.Empty -> Value.Sort 0 (* (Empty): Empty : Prop *)
+  | Type.Var i -> List.nth ctx.types i (* (Var) *)
+  | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
+  (* (Pi) *)
+  | Type.Pi (x, a, b) ->
+      let i = infer_univ ctx a in
+      let j = infer_univ (bind x (Value.eval ctx.env a) ctx) b in
+      Value.Sort (imax i j)
+  (* (Lam) *)
+  | Type.Lam (x, a, b) ->
+      let _ = infer_univ ctx a in
+      let va = Value.eval ctx.env a in
+      let vb = infer (bind x va ctx) b in
+      (* [vb] is a value one binder deep; quote it back to syntax to form the
+         codomain closure *)
+      Value.Pi (x, va, { env = ctx.env; body = Value.quote (ctx.lvl + 1) vb })
+  (* (App) *)
+  | Type.App (f, a) -> (
+      match infer ctx f with
+      | Value.Pi (_, dom, c) ->
+          check ctx a dom;
+          Value.apply_closure c (Value.eval ctx.env a)
+      | ty ->
+          type_error "expected a function, but %s has type %s" (show_term ctx f)
+            (show ctx ty))
+  (* (Absurd): subsingleton elimination — the motive may live in any sort, even
+     though Empty is a Prop, because Empty has no introduction forms *)
+  | Type.Absurd (a, h) ->
+      let _ = infer_univ ctx a in
+      check ctx h Value.Empty;
+      Value.eval ctx.env a
   (* (Sigma): plain max — no imax, see sort_of *)
   | Type.Sigma (x, a, b) ->
       let i = infer_univ ctx a in
@@ -219,34 +247,6 @@ let rec infer ctx t =
           Value.apply_closure c (Value.vfst (Value.eval ctx.env p))
       | ty ->
           type_error "expected a pair, but %s has type %s" (show_term ctx p)
-            (show ctx ty))
-  (* (Absurd): subsingleton elimination — the motive may live in any sort, even
-     though Empty is a Prop, because Empty has no introduction forms *)
-  | Type.Absurd (a, h) ->
-      let _ = infer_univ ctx a in
-      check ctx h Value.Empty;
-      Value.eval ctx.env a
-  (* (Pi) *)
-  | Type.Pi (x, a, b) ->
-      let i = infer_univ ctx a in
-      let j = infer_univ (bind x (Value.eval ctx.env a) ctx) b in
-      Value.Sort (imax i j)
-  (* (Lam) *)
-  | Type.Lam (x, a, b) ->
-      let _ = infer_univ ctx a in
-      let va = Value.eval ctx.env a in
-      let vb = infer (bind x va ctx) b in
-      (* [vb] is a value one binder deep; quote it back to syntax to form the
-         codomain closure *)
-      Value.Pi (x, va, { env = ctx.env; body = Value.quote (ctx.lvl + 1) vb })
-  (* (App) *)
-  | Type.App (f, a) -> (
-      match infer ctx f with
-      | Value.Pi (_, dom, c) ->
-          check ctx a dom;
-          Value.apply_closure c (Value.eval ctx.env a)
-      | ty ->
-          type_error "expected a function, but %s has type %s" (show_term ctx f)
             (show ctx ty))
 
 (* infers and requires a sort: used where the rules demand "a type" *)
