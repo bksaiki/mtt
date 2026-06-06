@@ -1,6 +1,6 @@
 %token <string> ID
 %token <int> INT
-%token FUN PI TYPE PROP UNIT EMPTY ABSURD CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -50,11 +50,15 @@ term:
     { Ast.lams $loc bs b }
   | PI; bs = nonempty_list(binder_group); DARROW; b = term
     { Ast.pis $loc bs b }
+  | SIGMA; bs = nonempty_list(binder_group); DARROW; b = term
+    { Ast.sigmas $loc bs b }
   (* a single binder may drop its parens: λ x : A ⇒ b *)
   | FUN; x = ID; COLON; a = term; DARROW; b = term
     { Ast.mk $loc (Ast.Lam (x, a, b)) }
   | PI; x = ID; COLON; a = term; DARROW; b = term
     { Ast.mk $loc (Ast.Pi (x, a, b)) }
+  | SIGMA; x = ID; COLON; a = term; DARROW; b = term
+    { Ast.mk $loc (Ast.Sigma (x, a, b)) }
   | t = pi_term { t }
 
 (* arrows are right-associative; the domain is one level tighter. There is
@@ -63,7 +67,7 @@ term:
    dependent pi binder. (Consequently extra parens cannot force the
    ascription reading there.) *)
 pi_term:
-  | a = app_term; ARROW; b = pi_term
+  | a = prod_term; ARROW; b = pi_term
     { match a.Ast.desc with
       | Ast.Ascribe (e, ty) -> (
           (* an ascribed variable spine [(x y : A)] is a pi binder group *)
@@ -71,6 +75,12 @@ pi_term:
           | Some xs -> Ast.pis $loc [ (xs, ty) ] b
           | None -> Ast.mk $loc (Ast.Arrow (a, b)))
       | _ -> Ast.mk $loc (Ast.Arrow (a, b)) }
+  | t = prod_term { t }
+
+(* products bind tighter than arrows, looser than application;
+   right-associative *)
+prod_term:
+  | a = app_term; TIMES; b = prod_term { Ast.mk $loc (Ast.Prod (a, b)) }
   | t = app_term { t }
 
 (* application is left-associative *)
@@ -92,5 +102,16 @@ atom:
      fine since this is a grammar rule, not a lexeme *)
   | LPAREN; RPAREN { Ast.mk $loc Ast.MkUnit }
   | LPAREN; t = term; RPAREN { t }
+  (* tuples are right-nested pairs *)
+  | LPAREN; t = term; COMMA; ts = separated_nonempty_list(COMMA, term); RPAREN
+    { let rec build = function
+        | [ x ] -> x
+        | x :: rest -> Ast.mk $loc (Ast.Pair (x, build rest))
+        | [] -> assert false
+      in
+      build (t :: ts) }
+  (* postfix projections bind tightest: f p.1 is f (p.1) *)
+  | p = atom; FST { Ast.mk $loc (Ast.Fst p) }
+  | p = atom; SND { Ast.mk $loc (Ast.Snd p) }
   | LPAREN; t = term; COLON; a = term; RPAREN
     { Ast.mk $loc (Ast.Ascribe (t, a)) }

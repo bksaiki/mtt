@@ -23,6 +23,7 @@ rule token = parse
   | "λ" { FUN }
   | "Π" { PI }
   | "∏" { PI }
+  | "Σ" { SIGMA }
   | "Type" { TYPE }
   | "Prop" { PROP }
   | "Unit" { UNIT }
@@ -41,6 +42,11 @@ rule token = parse
   | "⇒" { DARROW }
   | "=" { EQUALS }
   | ":=" { EQUALS }
+  | "×" { TIMES }
+  | "*" { TIMES }
+  | "," { COMMA }
+  | ".1" { FST }
+  | ".2" { SND }
   | "(" { LPAREN }
   | ")" { RPAREN }
   | ":" { COLON }
