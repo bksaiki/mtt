@@ -1,25 +1,38 @@
-(** type of both terms and types *)
+(** type of both terms and types; binder names are display hints only and
+    are ignored by all algorithms (variables are de Bruijn indices) *)
 type term =
   | Var of int (* de Bruijn index *)
   | Univ of int (* Type 0, Type 1, ... *)
-  | Pi of term * term (* Π (_ : A). B, B binds index 0 *)
-  | Lam of term * term (* λ (_ : A). b *)
+  | Pi of string * term * term (* Π (x : A). B, B binds index 0 *)
+  | Lam of string * term * term (* λ (x : A). b *)
   | App of term * term
 
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 let rec occurs k = function
   | Var i -> i = k
   | Univ _ -> false
-  | Pi (a, b)
-  | Lam (a, b) ->
+  | Pi (_, a, b)
+  | Lam (_, a, b) ->
       occurs k a || occurs (k + 1) b
   | App (f, a) -> occurs k f || occurs k a
 
-(** [pp fmt t] pretty-prints [t], inventing names [x0], [x1], ... for binders.
-    Unbound indices print as [!i]. *)
+(** [pp fmt t] pretty-prints [t] using binder name hints, priming names that
+    would shadow an enclosing binder. Unbound indices print as [!i]. *)
 let pp fmt t =
-  (* generates a fresh identifier *)
-  let fresh names = "x" ^ string_of_int (List.length names) in
+  (* makes the hint [x] distinct from every name in scope *)
+  let freshen names x =
+    let rec prime x =
+      if List.mem x names then
+        prime (x ^ "'")
+      else
+        x
+    in
+    prime
+      (if x = "" then
+         "x"
+       else
+         x)
+  in
   (* adds parentheses if [cond] is true *)
   let paren_if cond body =
     if cond then
@@ -36,19 +49,21 @@ let pp fmt t =
         | None -> Format.fprintf fmt "!%d" i)
     | Univ 0 -> Format.pp_print_string fmt "Type"
     | Univ i -> paren_if (prec > 10) (fun fmt -> Format.fprintf fmt "Type %d" i)
-    | Pi (a, b) ->
-        let x = fresh names in
+    | Pi (x, a, b) ->
         paren_if (prec > 1) (fun fmt ->
             if occurs 0 b then
+              let x = freshen names x in
               Format.fprintf fmt "@[(%s : %a) ->@ %a@]" x (go 0 names) a
                 (go 1 (x :: names))
                 b
             else
+              (* the binder is unused: print an arrow and push an empty name
+                 (no identifier can collide with it) to keep depths aligned *)
               Format.fprintf fmt "@[%a ->@ %a@]" (go 2 names) a
-                (go 1 (x :: names))
+                (go 1 ("" :: names))
                 b)
-    | Lam (a, b) ->
-        let x = fresh names in
+    | Lam (x, a, b) ->
+        let x = freshen names x in
         paren_if (prec > 0) (fun fmt ->
             Format.fprintf fmt "@[fun (%s : %a) =>@ %a@]" x (go 0 names) a
               (go 0 (x :: names))

@@ -11,21 +11,21 @@ let%expect_test "universes" =
 
 let%expect_test "identity function and its type" =
   roundtrip "fun (A : Type) => fun (x : A) => x";
-  [%expect {| fun (x0 : Type) => fun (x1 : x0) => x1 |}];
+  [%expect {| fun (A : Type) => fun (x : A) => x |}];
   roundtrip "(A : Type) -> A -> A";
-  [%expect {| (x0 : Type) -> x0 -> x0 |}]
+  [%expect {| (A : Type) -> A -> A |}]
 
 let%expect_test "application, associativity, parens" =
   roundtrip "fun (f : Type -> Type) => fun (x : Type) => f (f x)";
-  [%expect {| fun (x0 : Type -> Type) => fun (x1 : Type) => x0 (x0 x1) |}];
+  [%expect {| fun (f : Type -> Type) => fun (x : Type) => f (f x) |}];
   roundtrip "(Type -> Type) -> Type";
   [%expect {| (Type -> Type) -> Type |}];
   roundtrip "(fun (A : Type 1) => A) Type";
-  [%expect {| (fun (x0 : Type 1) => x0) Type |}]
+  [%expect {| (fun (A : Type 1) => A) Type |}]
 
 let%expect_test "shadowing resolves to the nearest binder" =
   roundtrip "fun (x : Type) => fun (x : x) => x";
-  [%expect {| fun (x0 : Type) => fun (x1 : x0) => x1 |}]
+  [%expect {| fun (x : Type) => fun (x' : x) => x' |}]
 
 let%expect_test "unbound variables are rejected" =
   (try roundtrip "fun (x : Type) => y" with

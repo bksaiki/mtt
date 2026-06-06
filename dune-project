@@ -2,6 +2,8 @@
 
 (using menhir 3.0)
 
+(cram enable)
+
 (name mtt)
 
 (generate_opam_files true)
