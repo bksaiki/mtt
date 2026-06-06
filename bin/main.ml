@@ -4,12 +4,14 @@ open Mtt
 let interactive = Unix.isatty Unix.stdin
 
 let process line =
-  match Parse.term_of_string line with
+  match Value.normalize (Parse.term_of_string line) with
   | t -> Format.printf "%a@." Type.pp t
   | exception Lexer.Error msg -> Printf.printf "lex error: %s\n" msg
   | exception Parser.Error -> print_endline "parse error"
   | exception Ast.Unbound_variable x ->
       Printf.printf "unbound variable: %s\n" x
+  | exception Value.Not_a_function ->
+      print_endline "eval error: applied a non-function"
 
 let rec repl () =
   if interactive then (
