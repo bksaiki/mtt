@@ -28,3 +28,9 @@ def outof (X : Type) (x : X) : Unit → X := λ u : Unit ⇒ x
 #check_equal (outof A (into A g)) g
 
 -- once Σ lands, A × Unit ≅ A joins this file
+
+-- and now that Σ exists: A × Unit ≅ A, the last identity law. The round
+-- trip λ p ⇒ (p.1, ()) ≡ p needs pair-η and then unit-η for the second
+-- component.
+axiom pu : A × Unit
+#check_equal pu (pu.1, ())

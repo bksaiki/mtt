@@ -58,13 +58,19 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
   lookup). Upgrade path if unfolded output hurts: glued evaluation.
 - **η for `Unit`** — at type `Unit`, any two values are equal (every
   element is `()`); the same one-line pattern as proof irrelevance.
+- **η for pairs** (surjective pairing) — at a Σ type, values are compared
+  by their projections, the second at the family instantiated by the
+  first; `p ≡ (p.1, p.2)` holds for neutral `p`.
 - **proof irrelevance** — at a type in `Prop`, any two values are equal
   (a one-line guard in `conv`, made possible by type direction); applies
   inside neutral spines, so `P h1 ≡ P h2` for any proofs `h1`, `h2`.
 - **cumulativity** (subsumption rule only, via `sub`): `Sort i ≤ Sort j`
   when `i ≤ j` (Rocq-flavored: `Prop ≤ Type`); products invariant in
   domains, covariant in codomains. `infer` still returns principal types
-  (`Sort i : Sort (i+1)` exactly, Russell-style)
+  (`Sort i : Sort (i+1)` exactly, Russell-style). Σ types are negative
+  (projections, η, no eliminator) and form at plain `max` — a Σ is a
+  proposition only when both components are; pairs are check-only since
+  the family is not recoverable from the components
 
 ## Universes
 
