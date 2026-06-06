@@ -13,7 +13,9 @@
 ## Surface syntax
 
 - [ ] Parameter telescopes: `def f (A : Type) (x y : A) : A = ...`
-- [ ] Unicode alternatives: `∏`/`Π`, `→`, `⇒`, `λ`, `:=`
+- [x] Unicode alternatives: `Π`/`∏ (x : A) ⇒ B`, `→`, `⇒`, `λ`, `:=`
+- [ ] Unicode identifiers (needs sedlex; ocamllex handles only fixed
+      keyword literals)
 - [ ] Multi-binder groups in `fun`/Pi: `fun (t f : A) => ...`
 - [x] Type ascription `(t : A)` as a term (desugars to the typed identity)
 

@@ -116,3 +116,13 @@ let%expect_test "#check with ascription, and #check_equal" =
     fun (A : Type) => fun (x : A) => x : (B : Type) -> B -> B
     type error: this term has type Nat but Type was expected
     |}]
+
+let%expect_test "definitions accept := and unicode binders" =
+  session
+    [ "axiom Nat : Type"
+    ; "axiom zero : Nat"
+    ; "def id : Π (A : Type) ⇒ A → A := λ (A : Type) ⇒ λ (x : A) ⇒ x"
+    ; "#check_equal (id Nat zero) zero"
+    ; "#check id"
+    ];
+  [%expect {| fun (A : Type) => fun (x : A) => x : (A : Type) -> A -> A |}]

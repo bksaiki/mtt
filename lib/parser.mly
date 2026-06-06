@@ -1,6 +1,6 @@
 %token <string> ID
 %token <int> INT
-%token FUN TYPE CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI TYPE CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -35,6 +35,8 @@ decl:
 term:
   | FUN; LPAREN; x = ID; COLON; a = term; RPAREN; DARROW; b = term
     { Ast.Lam (x, a, b) }
+  | PI; LPAREN; x = ID; COLON; a = term; RPAREN; DARROW; b = term
+    { Ast.Pi (x, a, b) }
   | t = pi_term { t }
 
 (* arrows are right-associative; the domain is one level tighter. There is
