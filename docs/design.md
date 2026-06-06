@@ -69,8 +69,10 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
   domains, covariant in codomains. `infer` still returns principal types
   (`Sort i : Sort (i+1)` exactly, Russell-style). Σ types are negative
   (projections, η, no eliminator) and form at plain `max` — a Σ is a
-  proposition only when both components are; pairs are check-only since
-  the family is not recoverable from the components
+  proposition only when both components are. A bare pair infers at the
+  constant family (Lean-style: `(a, b) : A × B`); only checking against an
+  expected Σ produces a dependent pair, since the family is not recoverable
+  from the components
 
 ## Universes
 

@@ -139,10 +139,17 @@ let%expect_test "sigma formation sorts" =
   infer "Unit × Empty";
   [%expect {| Type |}]
 
-let%expect_test "pairs are check-only; projections infer" =
+let%expect_test "pair inference defaults to the constant family (Lean-style)" =
   infer "((), ())";
-  [%expect
-    {| type error: cannot infer the type of a pair: ascribe it, e.g. ((a, b) : A × B) |}];
+  [%expect {| Unit × Unit |}];
+  (* the components' types may mention bound variables *)
+  infer {|λ (A : Type) (x : A) ⇒ (x, x)|};
+  [%expect {| (A : Type) -> A -> A × A |}];
+  (* the constant family is the default; a dependent type needs checking *)
+  infer "(Unit, ())";
+  [%expect {| Type × Unit |}];
+  infer {|((Unit, ()) : Σ (A : Type) ⇒ A)|};
+  [%expect {| Σ (A : Type) ⇒ A |}];
   infer {|(((), ()) : Unit × Unit)|};
   [%expect {| Unit × Unit |}];
   (* dependent: the second projection's type mentions the first *)

@@ -98,8 +98,15 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
         plain max: a Σ is a proposition only when both components are
 
       Γ ⊢ a ⇐ A    Γ ⊢ b ⇐ B[a/x]
-      ────────────────────────────── (Pair, checking only)
+      ────────────────────────────── (Pair-check)
         Γ ⊢ (a, b) ⇐ Σ (x : A) ⇒ B
+
+      Γ ⊢ a : A    Γ ⊢ b : B
+      ──────────────────────── (Pair-infer)
+        Γ ⊢ (a, b) : A × B
+
+        inference defaults to the constant family, as in Lean; a pair
+        only gets a dependent Σ type by checking against one
 
       Γ ⊢ p : Σ (x : A) ⇒ B          Γ ⊢ p : Σ (x : A) ⇒ B
       ────────────────────── (Fst)   ─────────────────────── (Snd)

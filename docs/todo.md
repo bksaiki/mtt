@@ -4,7 +4,8 @@
 
 - [ ] Local `let` expressions
 - [x] Σ types (negative: pairs + projections `.1`/`.2`, surjective
-      pairing in `conv`; `A × B` as the non-dependent case, `*` ascii)
+      pairing in `conv`; `A × B` as the non-dependent case, `*` ascii;
+      bare pairs infer at the constant family, Lean-style)
 - [ ] Binary sums `A + B` (first positive type: stuck `case` frames in
       neutrals, motives for dependent elimination, and the Prop
       large-elimination restriction becomes a real check)

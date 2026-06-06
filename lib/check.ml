@@ -228,11 +228,15 @@ let rec infer ctx t =
       let i = infer_univ ctx a in
       let j = infer_univ (bind x (Value.eval ctx.env a) ctx) b in
       Value.Sort (max i j)
-  (* a pair does not determine its Σ type (the family is not recoverable from
-     the components alone): pairs are checked, not inferred *)
-  | Type.Pair _ ->
-      type_error
-        "cannot infer the type of a pair: ascribe it, e.g. ((a, b) : A × B)"
+  (* (Pair-infer): a bare pair infers at the constant family — the components
+     cannot determine a dependent one, so like Lean we default to (type of a) ×
+     (type of b); dependent pairs arrive via checking. Quoting [tb] one level up
+     weakens it across the closure's binder. *)
+  | Type.Pair (a, b) ->
+      let ta = infer ctx a in
+      let tb = infer ctx b in
+      Value.Sigma
+        ("", ta, { env = ctx.env; body = Value.quote (ctx.lvl + 1) tb })
   (* (Fst) *)
   | Type.Fst p -> (
       match infer ctx p with
