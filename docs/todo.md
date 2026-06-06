@@ -19,8 +19,13 @@
 
 ## Errors & UX
 
-- [ ] Source positions in errors (menhir `$loc` + `Lexing` positions)
-- [ ] Recover gracefully from parse errors with a message, not just `parse error`
+- [ ] Better parse-error messages: say *what* was expected, not just
+      `syntax error: unexpected token` (menhir `.messages` files); in file
+      mode, optionally recover and report multiple errors per run
+- [ ] Finer type-error locations within a statement: `Ast` nodes all carry
+      spans now, so error sites can pass them piecemeal (e.g. the
+      annotation's span when `infer_univ` rejects it in `Stmt.run`); the
+      complete fix is an elaborator that keeps locations through checking
 - [ ] Statement boundaries in files: a stray bare term is silently absorbed
       into the preceding declaration as an application (see `test/file.t`)
 - [ ] REPL niceties: command history (`ledit`/`rlwrap` note or linenoise dep),

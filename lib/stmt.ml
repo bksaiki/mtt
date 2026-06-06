@@ -1,4 +1,4 @@
-type t =
+type desc =
   | Expr of Ast.t (* a bare term: type-checked, no output *)
   | Check of Ast.t (* #check t: reports the normal form and type *)
   | Eval of Ast.t (* #eval t: reports the normal form *)
@@ -7,6 +7,11 @@ type t =
   | Theorem of string * Ast.t * Ast.t (* theorem x : A = t, opaque *)
   | CheckEqual of Ast.t * Ast.t (* #check_equal t u *)
 
+type t =
+  { loc : Loc.t
+  ; desc : desc
+  }
+
 let run (ctx : Check.ctx) stmt =
   (* scope-check and evaluate an annotation, requiring it to be a type *)
   let eval_ann sa =
@@ -14,7 +19,7 @@ let run (ctx : Check.ctx) stmt =
     let _ = Check.infer_univ ctx a in
     Value.eval ctx.env a
   in
-  match stmt with
+  match stmt.desc with
   | Expr s ->
       let t = Ast.to_term ctx.names s in
       let _ = Check.infer ctx t in

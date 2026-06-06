@@ -15,7 +15,7 @@
     Only [#check] and [#eval] produce output; a bare term is checked silently,
     and [#check_equal] succeeds silently or fails with a type error. *)
 
-type t =
+type desc =
   | Expr of Ast.t  (** a bare term: type-checked, no output *)
   | Check of Ast.t  (** [#check t]: reports the normal form and type *)
   | Eval of Ast.t  (** [#eval t]: reports the normal form *)
@@ -23,6 +23,14 @@ type t =
   | Def of string * Ast.t option * Ast.t  (** [def x [: A] = t], transparent *)
   | Theorem of string * Ast.t * Ast.t  (** [theorem x : A = t], opaque *)
   | CheckEqual of Ast.t * Ast.t  (** [#check_equal t u] *)
+
+(** a statement with the source location of the whole declaration, for
+    statement-level error reporting (type errors carry no finer position: the
+    core language is location-free) *)
+type t =
+  { loc : Loc.t
+  ; desc : desc
+  }
 
 (** [run ctx stmt] processes one statement, returning the extended context and
     an output message, if the statement produces one. Raises

@@ -7,8 +7,8 @@ let session lines =
     | ctx, message ->
         Option.iter print_endline message;
         ctx
-    | exception Ast.Unbound_variable x ->
-        Printf.printf "unbound variable: %s\n" x;
+    | exception Ast.Unbound_variable (loc, x) ->
+        Printf.printf "%s: unbound variable: %s\n" (Loc.to_string loc) x;
         ctx
     | exception Check.Type_error msg ->
         Printf.printf "type error: %s\n" msg;
@@ -50,7 +50,7 @@ let%expect_test "def with inferred type, used at two types" =
     ];
   [%expect
     {|
-    unbound variable: Nat
+    1:13: unbound variable: Nat
     zero : Nat
     fun (x : Nat) => x : Nat -> Nat
     |}]
