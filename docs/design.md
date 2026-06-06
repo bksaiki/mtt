@@ -55,8 +55,10 @@ Definitional equality (`conv`, on values):
 - **δ** — `def`s unfold eagerly: a defined name is bound in the env to its
   value, so evaluation replaces it (no `Const` constructor, no kernel
   lookup). Upgrade path if unfolded output hurts: glued evaluation.
-- no universe cumulativity: `Type i : Type (i+1)` exactly (Russell-style);
-  Π lands in `Type (max i j)` (predicative)
+- **cumulativity** (subsumption rule only, via `sub`): `Type i ≤ Type j`
+  when `i ≤ j`; products invariant in domains, covariant in codomains.
+  `infer` still returns principal types (`Type i : Type (i+1)` exactly,
+  Russell-style); Π lands in `Type (max i j)` (predicative)
 
 ## Top-level declarations
 
@@ -71,8 +73,7 @@ the statement type and its processor, per the module-per-concept convention):
 
 ## Conventions
 
-- One module per concept, type named `t` (exception: `Type.t`, since
-  `Type.t` reads as "types only").
+- One module per concept, type named `t`.
 - No `.mli` files while the design moves; planned kernel boundary later.
 - Tests: `ppx_expect` snapshot tests per module (`dune promote` workflow);
   expected strings are always promoted, never hand-typed.

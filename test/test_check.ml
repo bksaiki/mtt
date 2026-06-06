@@ -48,7 +48,31 @@ let%expect_test "argument type mismatch is rejected" =
   [%expect
     {| type error: this term has type Type 1 but Type -> Type was expected |}]
 
-let%expect_test "no cumulativity: Type is not a Type 1... but is a Type 2" =
+let%expect_test "cumulativity: universes include upward" =
+  infer "(fun (A : Type 2) => A) Type";
+  [%expect {| Type 2 |}];
+  infer "(fun (A : Type 3) => A) (Type -> Type 1)";
+  [%expect {| Type 3 |}]
+
+let%expect_test "cumulativity: products are covariant in the codomain" =
+  (* the argument has type Type -> Type, used at Type -> Type 2 *)
+  infer "(fun (f : Type -> Type 2) => f) (fun (A : Type) => A)";
+  [%expect {| Type -> Type 2 |}];
+  (* the bare lambda above goes through the lam-vs-pi rule; ascribed, it goes
+     through pi-subtyping in subsumption *)
+  infer "(fun (f : Type -> Type 2) => f) ((fun (A : Type) => A) : Type -> Type)";
+  [%expect {| Type -> Type 2 |}]
+
+let%expect_test "cumulativity: domains are invariant" =
+  infer "(fun (f : Type 1 -> Type) => f) (fun (A : Type) => A)";
+  [%expect
+    {| type error: the annotation Type does not match the expected domain Type 1 |}];
+  infer "(fun (f : Type 1 -> Type) => f) ((fun (A : Type) => A) : Type -> Type)";
+  [%expect
+    {| type error: this term has type Type -> Type but Type 1 -> Type was expected |}]
+
+let%expect_test "no down-casting: a large universe never inhabits a smaller one"
+    =
   (* Type : Type 1, so it cannot instantiate (A : Type) *)
   infer "(fun (A : Type) => A) Type";
   [%expect {| type error: this term has type Type 1 but Type was expected |}];

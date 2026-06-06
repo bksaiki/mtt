@@ -7,7 +7,7 @@
 - [ ] Local `let` expressions
 - [ ] Sigma types (pairs), unit, empty
 - [ ] Inductive types / naturals with eliminator (replaces Church encodings)
-- [ ] Universe cumulativity (or document the decision not to)
+- [x] Universe cumulativity (subsumption-only; products covariant in codomain)
 - [ ] Holes / implicit arguments (elaboration with metavariables)
 
 ## Surface syntax
