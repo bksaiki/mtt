@@ -2,8 +2,9 @@
 
 ## Core theory
 
-- [ ] `let` definitions (top-level and local) — introduces δ-reduction;
-      REPL gains `def x = ...`-style state
+- [x] Top-level declarations (`axiom` / `def` / `theorem`) with δ for defs
+- [ ] Check whole files (`mtt file.mtt`; parser needs a `list(item)` entry)
+- [ ] Local `let` expressions
 - [ ] Sigma types (pairs), unit, empty
 - [ ] Inductive types / naturals with eliminator (replaces Church encodings)
 - [ ] Universe cumulativity (or document the decision not to)

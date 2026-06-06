@@ -52,8 +52,22 @@ Definitional equality (`conv`, on values):
 - **β** — already performed by evaluation
 - **η** — for functions, lambda-vs-neutral case applies both to a fresh var
 - **α** — free (de Bruijn)
-- no δ yet (no definitions), no universe cumulativity: `Type i : Type (i+1)`
-  exactly (Russell-style); Π lands in `Type (max i j)` (predicative)
+- **δ** — `def`s unfold eagerly: a defined name is bound in the env to its
+  value, so evaluation replaces it (no `Const` constructor, no kernel
+  lookup). Upgrade path if unfolded output hurts: glued evaluation.
+- no universe cumulativity: `Type i : Type (i+1)` exactly (Russell-style);
+  Π lands in `Type (max i j)` (predicative)
+
+## Top-level declarations
+
+A program is a telescope of declarations, each scoping over the rest, so a
+declaration just extends the checking context (`stmt.ml`, which holds both
+the statement type and its processor, per the module-per-concept convention):
+
+- `axiom x : A` — `bind`: a fresh neutral, stuck forever
+- `def x [: A] = t` — `define`: bound to `t`'s value, unfolds (δ)
+- `theorem x : A = t` — proof checked, then `bind`: opaque (Qed-style);
+  a theorem behaves exactly like an axiom whose obligation was discharged
 
 ## Conventions
 

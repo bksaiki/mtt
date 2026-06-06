@@ -10,8 +10,12 @@
       lambda meets a neutral: both sides are applied to a fresh variable and
       compared.
 
-    Not included (yet): δ-reduction (unfolding of definitions: there are no
-    definitions), and universe cumulativity (Type i is NOT a subtype of Type
+    - δ: a [def]ined name unfolds to its body. Performed eagerly: [define] binds
+      the name directly to its evaluated value, so occurrences are replaced
+      during evaluation. Axioms and theorems are [bind]ed to fresh neutrals
+      instead — theorems are opaque: the proof is checked, then forgotten.
+
+    Not included (yet): universe cumulativity (Type i is NOT a subtype of Type
     (i+1); universes are Russell-style and compared for exact equality). Pi is
     predicative: (x : A) -> B lands in Type (max i j). *)
 
@@ -33,6 +37,16 @@ let empty = { env = []; types = []; names = []; lvl = 0 }
    disappearing *)
 let bind x ty ctx =
   { env = Value.Neutral (Value.Var ctx.lvl) :: ctx.env
+  ; types = ty :: ctx.types
+  ; names = x :: ctx.names
+  ; lvl = ctx.lvl + 1
+  }
+
+(* extends the context with a *defined* variable [x] of type [ty]: bound to its
+   value [v] rather than a neutral, so occurrences unfold during evaluation
+   (δ-reduction) *)
+let define x v ty ctx =
+  { env = v :: ctx.env
   ; types = ty :: ctx.types
   ; names = x :: ctx.names
   ; lvl = ctx.lvl + 1

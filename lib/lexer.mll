@@ -12,8 +12,15 @@ rule token = parse
   | whitespace { token lexbuf }
   | "fun" { FUN }
   | "Type" { TYPE }
+  | "#check" { CHECK }
+  | "#eval" { EVAL }
+  | "axiom" { AXIOM }
+  | "def" { DEF }
+  | "theorem" { THEOREM }
+  | "lemma" { THEOREM }
   | "->" { ARROW }
   | "=>" { DARROW }
+  | "=" { EQUALS }
   | "(" { LPAREN }
   | ")" { RPAREN }
   | ":" { COLON }

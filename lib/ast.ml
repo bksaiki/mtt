@@ -9,9 +9,10 @@ type t =
 
 exception Unbound_variable of string
 
-(** [to_term s] scope-checks [s], converting named binders to de Bruijn indices.
-    Raises {!Unbound_variable} if a variable is not in scope. *)
-let to_term s =
+(** [to_term names s] scope-checks [s], converting named binders to de Bruijn
+    indices; [names] binds free variables (innermost first), e.g. top-level
+    declarations. Raises {!Unbound_variable} if a variable is not in scope. *)
+let to_term names s =
   let rec go env = function
     | Var x -> (
         match List.find_index (String.equal x) env with
@@ -25,4 +26,4 @@ let to_term s =
     | Lam (x, a, b) -> Type.Lam (x, go env a, go (x :: env) b)
     | App (f, a) -> Type.App (go env f, go env a)
   in
-  go [] s
+  go names s

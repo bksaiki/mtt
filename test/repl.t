@@ -1,15 +1,32 @@
-Each line is parsed, type-checked, normalized, and printed with its type:
+Only #check and #eval produce output: #check prints the normal form and
+type, #eval just the normal form. Bare terms and declarations are checked
+silently.
 
   $ mtt <<EOF
   > Type
-  > fun (A : Type) => fun (x : A) => x
-  > (A : Type) -> A -> A
-  > (fun (A : Type 1) => fun (x : A) => x) Type
+  > #check Type
+  > #check fun (A : Type) => fun (x : A) => x
+  > #check (fun (A : Type 1) => fun (x : A) => x) Type
+  > #eval (fun (A : Type 1) => fun (x : A) => x) Type
   > EOF
   Type : Type 1
   fun (A : Type) => fun (x : A) => x : (A : Type) -> A -> A
-  (A : Type) -> A -> A : Type 1
   fun (x : Type) => x : Type -> Type
+  fun (x : Type) => x
+
+Declarations extend the context; defs unfold, theorems and axioms are stuck:
+
+  $ mtt <<EOF
+  > axiom Nat : Type
+  > axiom zero : Nat
+  > def id = fun (A : Type) => fun (x : A) => x
+  > def d : Nat = id Nat zero
+  > theorem t : Nat = zero
+  > #check d
+  > #check t
+  > EOF
+  zero : Nat
+  t : Nat
 
 Errors are reported without ending the session:
 
@@ -19,7 +36,7 @@ Errors are reported without ending the session:
   > ?!
   > Type Type
   > (fun (A : Type) => A) Type
-  > Type
+  > #check Type
   > EOF
   unbound variable: y
   parse error
