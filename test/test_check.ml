@@ -82,3 +82,25 @@ let%expect_test "no down-casting: a large universe never inhabits a smaller one"
 let%expect_test "a variable of non-function type cannot be applied" =
   infer "fun (A : Type) => fun (x : A) => x x";
   [%expect {| type error: expected a function, but x has type A |}]
+
+let%expect_test "Prop is the bottom sort" =
+  infer "Prop";
+  [%expect {| Type |}];
+  (* a predicate type is data, not a proposition *)
+  infer "Type -> Prop";
+  [%expect {| Type 1 |}]
+
+let%expect_test "Prop is impredicative" =
+  (* quantifying over all propositions yields a proposition... *)
+  infer "(p : Prop) -> p";
+  [%expect {| Prop |}];
+  (* ...as does quantifying over a huge universe, if the codomain is a Prop *)
+  infer "(A : Type 3) -> A -> ((p : Prop) -> p)";
+  [%expect {| Prop |}];
+  (* Prop is closed under arrows between propositions *)
+  infer "(p : Prop) -> (q : Prop) -> p -> q";
+  [%expect {| Prop |}]
+
+let%expect_test "cumulativity: Prop flows into Type" =
+  infer "(fun (A : Type) => A) ((p : Prop) -> p)";
+  [%expect {| Type |}]

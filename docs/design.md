@@ -55,10 +55,19 @@ Definitional equality (`conv`, on values):
 - **δ** — `def`s unfold eagerly: a defined name is bound in the env to its
   value, so evaluation replaces it (no `Const` constructor, no kernel
   lookup). Upgrade path if unfolded output hurts: glued evaluation.
-- **cumulativity** (subsumption rule only, via `sub`): `Type i ≤ Type j`
-  when `i ≤ j`; products invariant in domains, covariant in codomains.
-  `infer` still returns principal types (`Type i : Type (i+1)` exactly,
-  Russell-style); Π lands in `Type (max i j)` (predicative)
+- **cumulativity** (subsumption rule only, via `sub`): `Sort i ≤ Sort j`
+  when `i ≤ j` (Rocq-flavored: `Prop ≤ Type`); products invariant in
+  domains, covariant in codomains. `infer` still returns principal types
+  (`Sort i : Sort (i+1)` exactly, Russell-style)
+
+## Universes
+
+CoC-style `Sort` hierarchy: `Prop = Sort 0` (impredicative), `Type i =
+Sort (i+1)` (predicative tower). Π formation lands in `Sort (imax i j)`
+where `imax i 0 = 0` — a product into a proposition is a proposition, no
+matter the domain — and `max i j` otherwise. The whole difference between
+`Prop` and `Type` is that one `imax` in `check.ml`'s Pi rule. Not yet:
+proof irrelevance, large-elimination restrictions (moot until inductives).
 
 ## Top-level declarations
 

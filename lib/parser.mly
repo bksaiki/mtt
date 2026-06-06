@@ -1,6 +1,6 @@
 %token <string> ID
 %token <int> INT
-%token FUN PI TYPE CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI TYPE PROP CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -73,7 +73,9 @@ app_term:
 
 atom:
   | x = ID { Ast.Var x }
-  | TYPE; i = INT { Ast.Univ i }
-  | TYPE { Ast.Univ 0 }
+  (* surface universes name sorts: Prop = Sort 0, Type i = Sort (i+1) *)
+  | TYPE; i = INT { Ast.Sort (i + 1) }
+  | TYPE { Ast.Sort 1 }
+  | PROP { Ast.Sort 0 }
   | LPAREN; t = term; RPAREN { t }
   | LPAREN; t = term; COLON; a = term; RPAREN { Ast.Ascribe (t, a) }

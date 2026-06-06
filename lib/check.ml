@@ -15,11 +15,15 @@
       during evaluation. Axioms and theorems are [bind]ed to fresh neutrals
       instead — theorems are opaque: the proof is checked, then forgotten.
 
-    Universes are Russell-style, predicative ((x : A) -> B lands in Type (max i
-    j)) and cumulative: in the subsumption rule the inferred type is compared
-    with [sub] rather than [conv], where Type i ≤ Type j when i ≤ j and products
-    are invariant in their domains and covariant in their codomains. [infer]
-    still returns principal types: Type i : Type (i+1) exactly. *)
+    Universes form a CoC-style Sort hierarchy: Prop = Sort 0 is impredicative,
+    Type i = Sort (i+1) is the predicative tower above it. Pi formation lands in
+    Sort (imax i j), where imax i 0 = 0: a product whose codomain is a
+    proposition is itself a proposition, no matter how large the domain. Sorts
+    are Russell-style and cumulative (Rocq-flavored, so Prop ≤ Type): in the
+    subsumption rule the inferred type is compared with [sub] rather than
+    [conv], where Sort i ≤ Sort j when i ≤ j and products are invariant in their
+    domains and covariant in their codomains. [infer] still returns principal
+    types: Sort i : Sort (i+1) exactly. *)
 
 exception Type_error of string
 
@@ -66,7 +70,7 @@ let show_term ctx t = Type.to_string_in ctx.names t
 let rec conv_at ~cumul l (v1 : Value.t) (v2 : Value.t) =
   match (v1, v2) with
   (* universes: equal, or upward-included under cumulativity *)
-  | Value.Univ i, Value.Univ j ->
+  | Value.Sort i, Value.Sort j ->
       if cumul then
         i <= j
       else
@@ -107,15 +111,21 @@ let rec infer ctx (t : Type.t) : Value.t =
   match t with
   (* (x : A) ∈ Γ ──────────── (Var) Γ ⊢ x : A *)
   | Type.Var i -> List.nth ctx.types i
-  (* ─────────────────────── (Univ) Γ ⊢ Type i : Type (i+1) *)
-  | Type.Univ i -> Value.Univ (i + 1)
-  (* Γ ⊢ A : Type i Γ, x : A ⊢ B : Type j
-     ──────────────────────────────────────── (Pi, predicative) Γ ⊢ (x : A) -> B
-     : Type (max i j) *)
+  (* ─────────────────────── (Sort) Γ ⊢ Sort i : Sort (i+1) *)
+  | Type.Sort i -> Value.Sort (i + 1)
+  (* Γ ⊢ A : Sort i Γ, x : A ⊢ B : Sort j ──────────────────────────────────────
+     (Pi) Γ ⊢ (x : A) -> B : Sort (imax i j) — where imax i 0 = 0, making Prop
+     impredicative, and otherwise max i j, keeping the Type tower predicative *)
   | Type.Pi (x, a, b) ->
+      let imax i j =
+        if j = 0 then
+          0
+        else
+          max i j
+      in
       let i = infer_univ ctx a in
       let j = infer_univ (bind x (Value.eval ctx.env a) ctx) b in
-      Value.Univ (max i j)
+      Value.Sort (imax i j)
   (* Γ ⊢ A : Type i Γ, x : A ⊢ b : B ─────────────────────────────────── (Lam) Γ
      ⊢ fun (x : A) => b : (x : A) -> B *)
   | Type.Lam (x, a, b) ->
@@ -139,7 +149,7 @@ let rec infer ctx (t : Type.t) : Value.t =
 (* infers and requires a universe: used where the rules demand "a type" *)
 and infer_univ ctx t =
   match infer ctx t with
-  | Value.Univ i -> i
+  | Value.Sort i -> i
   | ty ->
       type_error "expected a type, but %s has type %s" (show_term ctx t)
         (show ctx ty)
