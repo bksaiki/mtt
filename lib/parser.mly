@@ -1,6 +1,6 @@
 %token <string> ID
 %token <int> INT
-%token FUN TYPE CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI TYPE CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -22,19 +22,32 @@ stmt:
 file:
   | ss = list(decl); EOF { ss }
 
+(* declarations take parameter telescopes: [def f (A : Type) (x y : A) : A]
+   means [def f : (A : Type) -> (x : A) -> (y : A) -> A] with a body wrapped
+   in the matching lambdas *)
 decl:
   | CHECK; t = term { Stmt.Check t }
   | EVAL; t = term { Stmt.Eval t }
-  | AXIOM; x = ID; COLON; a = term { Stmt.Axiom (x, a) }
-  | DEF; x = ID; COLON; a = term; EQUALS; t = term { Stmt.Def (x, Some a, t) }
-  | DEF; x = ID; EQUALS; t = term { Stmt.Def (x, None, t) }
-  | THEOREM; x = ID; COLON; a = term; EQUALS; t = term
-    { Stmt.Theorem (x, a, t) }
+  | AXIOM; x = ID; bs = list(binder_group); COLON; a = term
+    { Stmt.Axiom (x, Ast.pis bs a) }
+  | DEF; x = ID; bs = list(binder_group); COLON; a = term; EQUALS; t = term
+    { Stmt.Def (x, Some (Ast.pis bs a), Ast.lams bs t) }
+  | DEF; x = ID; bs = list(binder_group); EQUALS; t = term
+    { Stmt.Def (x, None, Ast.lams bs t) }
+  | THEOREM; x = ID; bs = list(binder_group); COLON; a = term; EQUALS; t = term
+    { Stmt.Theorem (x, Ast.pis bs a, Ast.lams bs t) }
   | CHECK_EQUAL; t = atom; u = atom { Stmt.CheckEqual (t, u) }
 
+(* a binder group: one annotation shared by one or more names *)
+binder_group:
+  | LPAREN; xs = nonempty_list(ID); COLON; a = term; RPAREN { (xs, a) }
+
 term:
-  | FUN; LPAREN; x = ID; COLON; a = term; RPAREN; DARROW; b = term
-    { Ast.Lam (x, a, b) }
+  | FUN; bs = nonempty_list(binder_group); DARROW; b = term { Ast.lams bs b }
+  | PI; bs = nonempty_list(binder_group); DARROW; b = term { Ast.pis bs b }
+  (* a single binder may drop its parens: λ x : A ⇒ b *)
+  | FUN; x = ID; COLON; a = term; DARROW; b = term { Ast.Lam (x, a, b) }
+  | PI; x = ID; COLON; a = term; DARROW; b = term { Ast.Pi (x, a, b) }
   | t = pi_term { t }
 
 (* arrows are right-associative; the domain is one level tighter. There is
@@ -45,7 +58,11 @@ term:
 pi_term:
   | a = app_term; ARROW; b = pi_term
     { match a with
-      | Ast.Ascribe (Ast.Var x, ty) -> Ast.Pi (x, ty, b)
+      | Ast.Ascribe (e, ty) -> (
+          (* an ascribed variable spine [(x y : A)] is a pi binder group *)
+          match Ast.var_spine e with
+          | Some xs -> Ast.pis [ (xs, ty) ] b
+          | None -> Ast.Arrow (a, b))
       | a -> Ast.Arrow (a, b) }
   | t = app_term { t }
 

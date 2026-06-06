@@ -1,0 +1,81 @@
+-- Propositional logic via Curry-Howard: propositions are types, proofs
+-- are terms. Connectives are Church-encoded, so everything here is
+-- definable with just Π.
+
+-- A => (B => A)
+theorem f1 (A B : Type) (x : A) (y : B) : A := x
+
+-- falsum: a proof of absurdity proves anything. Predicativity puts it in
+-- Type 1, so the connectives below take Type 1 parameters; cumulativity
+-- still lets ordinary (Type 0) propositions in.
+def absurdity := Π (A : Type) ⇒ A
+def negate (A : Type 1) := A → absurdity
+
+-- not A => (A => B)
+theorem f2 (A B : Type) (x : negate A) : A → B := λ y : A ⇒ x y B
+
+-- A x B; product type
+def conj (A B : Type 1) := Π (C : Type) ⇒ (A → B → C) → C
+
+-- A => B => A & B
+def conj_intro (A B : Type 1) (x : A) (y : B) : conj A B :=
+  λ (C : Type) (k : A → B → C) ⇒ k x y
+
+-- A & B => A
+def conj_elim1 (A B : Type) (x : conj A B) : A :=
+  x A (λ (l : A) (m : B) ⇒ l)
+
+-- A & B => B
+def conj_elim2 (A B : Type) (x : conj A B) : B :=
+  x B (λ (l : A) (m : B) ⇒ m)
+
+-- A & B => B & A
+theorem f3 (A B : Type) (x : conj A B) : conj B A :=
+  conj_intro B A (conj_elim2 A B x) (conj_elim1 A B x)
+
+-- A + B; sum type
+def disj (A B : Type 1) := Π (C : Type) ⇒ (A → C) → (B → C) → C
+
+-- A => A + B
+def disj_intro1 (A B : Type 1) (v : A) : disj A B :=
+  λ (C : Type) (x : A → C) (y : B → C) ⇒ x v
+
+-- B => A + B
+def disj_intro2 (A B : Type 1) (v : B) : disj A B :=
+  λ (C : Type) (x : A → C) (y : B → C) ⇒ y v
+
+-- A + B => B + A. A Church sum can only be eliminated into a *small*
+-- conclusion, and [disj B A] lives one universe up, so instead of
+-- eliminating we build the swapped sum directly by flipping the handlers.
+theorem f4 (A B : Type) (x : disj A B) : disj B A :=
+  λ (C : Type) (g : B → C) (h : A → C) ⇒ x C h g
+
+def not_a_or_b (A B : Type) := negate (disj A B)
+def not_a_and_not_b (A B : Type) := conj (negate A) (negate B)
+
+-- not (A + B) => (not A) & (not B)
+theorem f5 (A B : Type) (x : not_a_or_b A B) : not_a_and_not_b A B :=
+  conj_intro
+    (negate A)
+    (negate B)
+    (λ y : A ⇒ x (disj_intro1 A B y))
+    (λ y : B ⇒ x (disj_intro2 A B y))
+
+-- universal quantification is just the dependent function type; the
+-- predicate may land in Type 1 so that negated predicates fit
+def my_forall (A : Type) (P : A → Type 1) := Π (x : A) ⇒ P x
+
+-- existential quantification, Church-encoded sigma
+def my_exists (A : Type) (P : A → Type) :=
+  Π (C : Type) ⇒ (Π (x : A) (y : P x) ⇒ C) → C
+
+-- x => P(x) => exists x, P(x)
+def exists_intro (A : Type) (P : A → Type) (x : A) (y : P x) : my_exists A P :=
+  λ (C : Type) (f : Π (x : A) (y : P x) ⇒ C) ⇒ f x y
+
+def not_exists (A : Type) (P : A → Type) := negate (my_exists A P)
+def forall_not (A : Type) (P : A → Type) := my_forall A (λ y : A ⇒ negate (P y))
+
+-- not (exists x, P(x)) => forall y, not P(y)
+theorem f6 (A : Type) (P : A → Type) (x : not_exists A P) : forall_not A P :=
+  λ (y : A) (z : P y) ⇒ x (exists_intro A P y z)

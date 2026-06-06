@@ -46,3 +46,35 @@ let%expect_test "ascribed variable left of an arrow is a pi binder" =
   [%expect {| (fun (x : Type 1) => x) Type -> Type |}];
   roundtrip "fun (g : ((A : Type) -> A) -> Type) => g";
   [%expect {| fun (g : ((A : Type) -> A) -> Type) => g |}]
+
+let%expect_test "unicode alternatives lex to the same tokens" =
+  roundtrip {|λ (A : Type) ⇒ λ (x : A) ⇒ x|};
+  [%expect {| fun (A : Type) => fun (x : A) => x |}];
+  roundtrip {|Π (A : Type) ⇒ A → A|};
+  [%expect {| (A : Type) -> A -> A |}];
+  roundtrip {|∏ (P : Type → Type) ⇒ P (Type : Type 1)|};
+  [%expect {| (P : Type -> Type) -> P ((fun (x : Type 1) => x) Type) |}]
+
+let%expect_test "binder groups and telescopes desugar to nested binders" =
+  roundtrip {|λ (A B : Type) (x : A) ⇒ x|};
+  [%expect {| fun (A : Type) => fun (B : Type) => fun (x : A) => x |}];
+  roundtrip {|Π (A B : Type) ⇒ A → B|};
+  [%expect {| (A : Type) -> (B : Type) -> A -> B |}];
+  roundtrip "(A B : Type) -> A -> B";
+  [%expect {| (A : Type) -> (B : Type) -> A -> B |}];
+  (* an ascribed non-variable spine is still just an ascription *)
+  roundtrip "fun (f : Type -> Type) => (f Type : Type) -> Type";
+  [%expect
+    {| fun (f : Type -> Type) => (fun (x : Type) => x) (f Type) -> Type |}]
+
+let%expect_test "line comments are skipped" =
+  roundtrip "Type -- trailing comment";
+  [%expect {| Type |}];
+  roundtrip "Type ->-- arrows still lex next to comments\n Type";
+  [%expect {| Type -> Type |}]
+
+let%expect_test "single binders may drop their parens" =
+  roundtrip {|λ y : Type ⇒ y|};
+  [%expect {| fun (y : Type) => y |}];
+  roundtrip {|Π C : Type ⇒ C → C|};
+  [%expect {| (C : Type) -> C -> C |}]

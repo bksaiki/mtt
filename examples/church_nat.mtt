@@ -1,0 +1,39 @@
+-- Church numerals: a natural number is its own iterator, applying a
+-- function n times to a starting point.
+def nat := Π (A : Type) ⇒ (A → A) → A → A
+
+def zero (A : Type) (f : A → A) (x : A) : A := x
+def succ (n : nat) (A : Type) (f : A → A) (x : A) : A := f (n A f x)
+
+-- addition runs m's iteration on top of n's; multiplication iterates an
+-- iteration
+def add (m n : nat) (A : Type) (f : A → A) (x : A) : A :=
+  m A f (n A f x)
+
+def mul (m n : nat) (A : Type) (f : A → A) (x : A) : A :=
+  m A (n A f) x
+
+-- numerals; the [: nat] annotations double as type assertions, since the
+-- declared type must match the inferred one up to conversion
+def one : nat := succ zero
+def two : nat := succ one
+def three : nat := succ two
+def four : nat := succ three
+def five : nat := succ four
+def ten : nat := add five five
+def hundred : nat := mul ten ten
+def thousand : nat := mul hundred ten
+
+-- arithmetic facts, decided by normalization
+#check_equal (add zero zero) zero
+#check_equal (add zero one) one
+#check_equal (add one zero) one
+#check_equal (add one three) four
+
+#check_equal (mul zero zero) zero
+#check_equal (mul zero one) zero
+#check_equal (mul one two) two
+#check_equal (mul two two) four
+
+-- the big ones normalize too: 10 * 10 * 10 iterations of f
+#check_equal (mul ten (mul ten ten)) thousand

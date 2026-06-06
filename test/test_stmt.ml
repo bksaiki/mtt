@@ -116,3 +116,46 @@ let%expect_test "#check with ascription, and #check_equal" =
     fun (A : Type) => fun (x : A) => x : (B : Type) -> B -> B
     type error: this term has type Nat but Type was expected
     |}]
+
+let%expect_test "definitions accept := and unicode binders" =
+  session
+    [ "axiom Nat : Type"
+    ; "axiom zero : Nat"
+    ; "def id : Π (A : Type) ⇒ A → A := λ (A : Type) ⇒ λ (x : A) ⇒ x"
+    ; "#check_equal (id Nat zero) zero"
+    ; "#check id"
+    ];
+  [%expect {| fun (A : Type) => fun (x : A) => x : (A : Type) -> A -> A |}]
+
+let%expect_test "declaration telescopes" =
+  session
+    [ "axiom Nat : Type"
+    ; "axiom zero : Nat"
+    ; "def const (A B : Type) (x : A) (y : B) : A := x"
+    ; "#check const"
+    ; "#check_equal (const Nat Nat zero zero) zero"
+    ; "axiom plus (m n : Nat) : Nat"
+    ; "#check plus"
+    ; "theorem plus_self (n : Nat) : Nat := plus n n"
+    ; "def bad (A : Type) (x : A) : A := A"
+    ];
+  [%expect
+    {|
+    fun (A : Type) => fun (B : Type) => fun (x : A) => fun (y : B) => x : (A : Type) -> (B : Type) -> A -> B -> A
+    plus : Nat -> Nat -> Nat
+    type error: this term has type Type but A was expected
+    |}]
+
+let%expect_test "def return annotations are optional, with telescopes" =
+  session
+    [ "axiom Nat : Type"
+    ; "def twice (f : Nat -> Nat) (n : Nat) := f (f n)"
+    ; "#check twice"
+    ; "def Bool := Π (A : Type) ⇒ A → A → A"
+    ; "#check Bool"
+    ];
+  [%expect
+    {|
+    fun (f : Nat -> Nat) => fun (n : Nat) => f (f n) : (Nat -> Nat) -> Nat -> Nat
+    (A : Type) -> A -> A -> A : Type 1
+    |}]
