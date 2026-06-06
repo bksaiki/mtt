@@ -34,7 +34,13 @@ let rec repl ctx =
 
 (* checks a whole file, stopping at the first error with a nonzero exit *)
 let run_file path =
-  let die fmt = Format.kasprintf (fun s -> prerr_endline s; exit 1) fmt in
+  let die fmt =
+    Format.kasprintf
+      (fun s ->
+        prerr_endline s;
+        exit 1)
+      fmt
+  in
   let contents = In_channel.with_open_text path In_channel.input_all in
   match Parse.file_of_string contents with
   | exception Lexer.Error msg -> die "lex error: %s" msg

@@ -1,6 +1,6 @@
 %token <string> ID
 %token <int> INT
-%token FUN TYPE CHECK EVAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN TYPE CHECK EVAL AXIOM DEF THEOREM ASSERT_TY ASSERT_EQ LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -30,6 +30,8 @@ decl:
   | DEF; x = ID; EQUALS; t = term { Stmt.Def (x, None, t) }
   | THEOREM; x = ID; COLON; a = term; EQUALS; t = term
     { Stmt.Theorem (x, a, t) }
+  | ASSERT_TY; t = term; EQUALS; a = term { Stmt.AssertTy (t, a) }
+  | ASSERT_EQ; t = term; EQUALS; u = term { Stmt.AssertEq (t, u) }
 
 term:
   | FUN; LPAREN; x = ID; COLON; a = term; RPAREN; DARROW; b = term

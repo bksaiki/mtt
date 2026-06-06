@@ -18,6 +18,8 @@ rule token = parse
   | "def" { DEF }
   | "theorem" { THEOREM }
   | "lemma" { THEOREM }
+  | "assert_ty" { ASSERT_TY }
+  | "assert_eq" { ASSERT_EQ }
   | "->" { ARROW }
   | "=>" { DARROW }
   | "=" { EQUALS }

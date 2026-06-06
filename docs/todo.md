@@ -3,12 +3,20 @@
 ## Core theory
 
 - [x] Top-level declarations (`axiom` / `def` / `theorem`) with δ for defs
-- [ ] Check whole files (`mtt file.mtt`; parser needs a `list(item)` entry)
+- [x] Check whole files (`mtt file.mtt`)
 - [ ] Local `let` expressions
 - [ ] Sigma types (pairs), unit, empty
 - [ ] Inductive types / naturals with eliminator (replaces Church encodings)
 - [ ] Universe cumulativity (or document the decision not to)
 - [ ] Holes / implicit arguments (elaboration with metavariables)
+
+## Surface syntax
+
+- [ ] Parameter telescopes: `def f (A : Type) (x y : A) : A = ...`
+- [ ] Unicode alternatives: `∏`/`Π`, `→`, `⇒`, `λ`, `:=`
+- [ ] Multi-binder groups in `fun`/Pi: `fun (t f : A) => ...`
+- [ ] Type ascription `(t : A)` as a term (makes `assert_ty t = A` literally
+      `#check (t : A)`; useful for annotating redexes generally)
 
 ## Errors & UX
 

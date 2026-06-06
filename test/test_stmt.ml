@@ -90,3 +90,19 @@ let%expect_test "#eval reports just the normal form" =
     fun (f : Nat -> Nat) => fun (x : Nat) => f (f (f (f x)))
     type error: expected a function, but Type has type Type 1
     |}]
+
+let%expect_test "assertions succeed silently and fail loudly" =
+  session
+    [ "axiom Nat : Type"
+    ; "axiom zero : Nat"
+    ; "assert_ty zero = Nat"
+    ; "assert_eq zero = zero"
+    ; "assert_eq (fun (x : Nat) => x) zero = zero"
+    ; "assert_ty Nat = Nat"
+    ; "assert_eq zero = Nat"
+    ];
+  [%expect
+    {|
+    type error: assertion failed: this term has type Type but Nat was expected
+    type error: this term has type Type but Nat was expected
+    |}]
