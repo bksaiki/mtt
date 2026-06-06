@@ -1,0 +1,30 @@
+-- The unit type: one element, written (), with definitional η — every
+-- element of Unit IS () as far as conversion is concerned. That makes
+-- Unit the terminal type, and the type-algebra identity laws hold up to
+-- definitional equality, so #check_equal can verify them outright.
+
+axiom A : Type
+axiom a : A
+axiom f : A → Unit
+axiom g : Unit → A
+axiom u : Unit
+
+-- η: every element of Unit is ()
+#check_equal u ()
+
+-- terminality: every map into Unit is THE map into Unit
+-- (η for functions reduces it to η for Unit at the body)
+def bang (X : Type) (x : X) : Unit := ()
+#check_equal f (bang A)
+
+-- Unit → A ≅ A: the witnesses...
+def into (X : Type) (h : Unit → X) : X := h ()
+def outof (X : Type) (x : X) : Unit → X := λ u : Unit ⇒ x
+
+-- ...and both round trips are the identity, definitionally. The first is
+-- β; the second needs Pi-η and then Unit-η: comparing (λ u ⇒ g ()) with g
+-- applies both to a fresh x, and g () ≡ g x because () ≡ x at Unit.
+#check_equal (into A (outof A a)) a
+#check_equal (outof A (into A g)) g
+
+-- once Σ lands, A × Unit ≅ A joins this file

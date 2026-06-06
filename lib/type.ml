@@ -75,7 +75,7 @@ let pp_in names fmt t =
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[%a@ %a@]" (go 10 names) f (go 11 names) a)
     | Unit -> Format.pp_print_string fmt "Unit"
-    | MkUnit -> Format.pp_print_string fmt "tt"
+    | MkUnit -> Format.pp_print_string fmt "()"
   in
   go 0 names fmt t
 

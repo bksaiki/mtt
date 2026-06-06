@@ -23,3 +23,9 @@
  (deps logic.mtt %{bin:mtt})
  (action
   (run mtt logic.mtt)))
+
+(rule
+ (alias runtest)
+ (deps unit.mtt %{bin:mtt})
+ (action
+  (run mtt unit.mtt)))

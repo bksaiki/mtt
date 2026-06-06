@@ -1,6 +1,6 @@
 %token <string> ID
 %token <int> INT
-%token FUN PI TYPE PROP UNIT TT CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI TYPE PROP UNIT CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -85,7 +85,9 @@ atom:
   | TYPE { Ast.mk $loc (Ast.Sort 1) }
   | PROP { Ast.mk $loc (Ast.Sort 0) }
   | UNIT { Ast.mk $loc Ast.Unit }
-  | TT { Ast.mk $loc Ast.MkUnit }
+  (* () is the unit element, like OCaml; whitespace between the parens is
+     fine since this is a grammar rule, not a lexeme *)
+  | LPAREN; RPAREN { Ast.mk $loc Ast.MkUnit }
   | LPAREN; t = term; RPAREN { t }
   | LPAREN; t = term; COLON; a = term; RPAREN
     { Ast.mk $loc (Ast.Ascribe (t, a)) }

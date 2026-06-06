@@ -105,10 +105,10 @@ let%expect_test "cumulativity: Prop flows into Type" =
   infer "(fun (A : Type) => A) ((p : Prop) -> p)";
   [%expect {| Type |}]
 
-let%expect_test "Unit and tt" =
+let%expect_test "Unit and its element" =
   infer "Unit";
   [%expect {| Type |}];
-  infer "tt";
+  infer "()";
   [%expect {| Unit |}];
   infer "Unit -> Unit";
   [%expect {| Type |}]
