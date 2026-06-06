@@ -1,20 +1,3 @@
-(** Top-level statements: declarations, or a bare term to evaluate. A program is
-    a telescope of declarations, each scoping over the rest, so processing a
-    statement just extends the checking context:
-
-    - [axiom x : A] — binds [x] to a fresh neutral (a stuck constant)
-    - [def x [: A] = t] — binds [x] to the value of [t]; occurrences unfold
-      (δ-reduction). The annotation may be omitted and inferred.
-    - [theorem x : A = t] — checks the proof [t], then binds [x] like an axiom:
-      theorems are opaque and never unfold.
-    - [#check t] — type checks and normalizes [t], reporting [nf : type]; with
-      an ascription, [#check (t : A)] asserts that [t] checks against [A]
-    - [#eval t] — type checks and normalizes [t], reporting just [nf]
-    - [#check_equal t u] — asserts that [t] and [u] are definitionally equal
-
-    Only [#check] and [#eval] produce output; a bare term is checked silently,
-    and [#check_equal] succeeds silently or fails with a type error. *)
-
 type t =
   | Expr of Ast.t (* a bare term: type-checked, no output *)
   | Check of Ast.t (* #check t: reports the normal form and type *)
@@ -24,10 +7,7 @@ type t =
   | Theorem of string * Ast.t * Ast.t (* theorem x : A = t, opaque *)
   | CheckEqual of Ast.t * Ast.t (* #check_equal t u *)
 
-(** [run ctx stmt] processes one statement, returning the extended context and
-    an output message, if the statement produces one. Raises
-    {!Ast.Unbound_variable} or {!Check.Type_error}. *)
-let run (ctx : Check.ctx) (stmt : t) : Check.ctx * string option =
+let run (ctx : Check.ctx) stmt =
   (* scope-check and evaluate an annotation, requiring it to be a type *)
   let eval_ann sa =
     let a = Ast.to_term ctx.names sa in

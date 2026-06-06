@@ -47,5 +47,7 @@
 - [ ] Glued evaluation: remember folded and unfolded forms of defs, so
       output prints `ten` instead of ten applications of `succ`
 - [ ] QCheck property tests: `parse ∘ print = id`, normalization idempotent
-- [ ] Kernel boundary `.mli`: abstract type of checked terms once the API settles
+- [x] `.mli` interfaces for all library modules; doc comments live there
+- [ ] Kernel boundary: abstract type of *checked* terms, constructible only
+      via the checker
 - [x] CI (GitHub Actions: build + test on push)

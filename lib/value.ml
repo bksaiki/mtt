@@ -1,5 +1,3 @@
-(** semantic values: the result of evaluation; binder bodies are closures
-    holding unevaluated syntax, and stuck variables are de Bruijn levels *)
 type t =
   | Sort of int
   | Pi of string * t * closure
@@ -19,8 +17,7 @@ and env = t list
 
 exception Not_a_function
 
-(** [eval env t] evaluates [t] in [env], which must bind every free index *)
-let rec eval env (t : Type.t) : t =
+let rec eval env t =
   match t with
   | Type.Var i -> List.nth env i
   | Type.Sort i -> Sort i
@@ -40,9 +37,7 @@ and apply f a =
 
 and apply_closure { env; body } a = eval (a :: env) body
 
-(** [quote l v] reads a value back into syntax; [l] is the number of binders in
-    scope. Levels convert to indices by [l - k - 1]. *)
-let rec quote l (v : t) : Type.t =
+let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
@@ -53,8 +48,9 @@ let rec quote l (v : t) : Type.t =
 and quote_closure l c = quote (l + 1) (apply_closure c (Neutral (Var l)))
 
 and quote_neutral l = function
+  (* level → index: the variable bound under k other binders, seen from under l
+     binders, is index l - k - 1 *)
   | Var k -> Type.Var (l - k - 1)
   | App (n, a) -> Type.App (quote_neutral l n, quote l a)
 
-(** [normalize t] is the beta-normal form of closed term [t] *)
 let normalize t = quote 0 (eval [] t)

@@ -1,34 +1,3 @@
-(** Bidirectional type checking: [infer] synthesizes a type, [check] verifies a
-    term against one.
-
-    Definitional equality (decided by [conv], on values) is βη-conversion:
-
-    - β: (fun (x : A) => b) a ≡ b[a/x] Performed implicitly: terms are evaluated
-      with {!Value.eval} before comparison, and β-redexes never survive
-      evaluation (application of a closure extends its environment).
-    - η: f ≡ fun (x : A) => f x (for f of Pi type) Performed in [conv] when a
-      lambda meets a neutral: both sides are applied to a fresh variable and
-      compared.
-
-    - δ: a [def]ined name unfolds to its body. Performed eagerly: [define] binds
-      the name directly to its evaluated value, so occurrences are replaced
-      during evaluation. Axioms and theorems are [bind]ed to fresh neutrals
-      instead — theorems are opaque: the proof is checked, then forgotten.
-    - proof irrelevance: any two proofs of the same proposition (a type in Prop)
-      are definitionally equal. This is why conversion is type-directed: [conv]
-      compares values at a type and short-circuits when that type is a Prop,
-      including for arguments inside neutral spines.
-
-    Universes form a CoC-style Sort hierarchy: Prop = Sort 0 is impredicative,
-    Type i = Sort (i+1) is the predicative tower above it. Pi formation lands in
-    Sort (imax i j), where imax i 0 = 0: a product whose codomain is a
-    proposition is itself a proposition, no matter how large the domain. Sorts
-    are Russell-style and cumulative (Rocq-flavored, so Prop ≤ Type): in the
-    subsumption rule the inferred type is compared with [sub] rather than
-    [conv], where Sort i ≤ Sort j when i ≤ j and products are invariant in their
-    domains and covariant in their codomains. [infer] still returns principal
-    types: Sort i : Sort (i+1) exactly. *)
-
 exception Type_error of string
 
 let type_error fmt = Format.kasprintf (fun s -> raise (Type_error s)) fmt
@@ -99,16 +68,11 @@ let rec sort_of ctx (ty : Value.t) : int =
       | _ -> assert false)
   | Value.Lam _ -> assert false (* a lambda is never a type *)
 
-(** Type-directed conversion. [conv ctx ty v1 v2] decides definitional equality
-    of the values [v1] and [v2] at the type [ty]; [conv_ty ~cumul] compares
-    types themselves, up to cumulativity when [cumul] is set. β/δ have already
-    happened during evaluation, so this is structural comparison of weak-head
-    forms, going under binders with fresh variables, plus:
-
-    - proof irrelevance: at a type in Prop, any two values are equal
-    - η: at a Pi type, values are equal iff their applications to a fresh
-      variable are (lambda annotations are never compared) *)
-let rec conv ctx (ty : Value.t) v1 v2 =
+(* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
+   types themselves (with optional cumulativity). β/δ have already happened
+   during evaluation, so this is structural comparison of weak-head forms, going
+   under binders with fresh variables. *)
+let rec conv ctx ty v1 v2 =
   (* proof irrelevance *)
   sort_of ctx ty = 0
   ||
@@ -165,37 +129,12 @@ and conv_neutral ctx n1 n2 : Value.t option =
       | _ -> None)
   | _ -> None
 
-(** [sub ctx t1 t2] is the cumulativity relation [t1] ≤ [t2] on types *)
+(* the cumulativity relation t1 ≤ t2 on types, used by subsumption *)
 let sub ctx t1 t2 = conv_ty ~cumul:true ctx t1 t2
 
-(** [infer ctx t] synthesizes the type of [t] as a value, by the rules:
-
-    {v
-      (x : A) ∈ Γ
-      ─────────── (Var)
-       Γ ⊢ x : A
-
-      ──────────────────────── (Sort)
-      Γ ⊢ Sort i : Sort (i+1)
-
-      Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
-      ──────────────────────────────────────── (Pi)
-          Γ ⊢ (x : A) -> B : Sort (imax i j)
-
-        where imax i 0 = 0 (Prop is impredicative)
-        and   imax i j = max i j otherwise (the Type tower is predicative)
-
-      Γ ⊢ A : Sort i    Γ, x : A ⊢ b : B
-      ─────────────────────────────────── (Lam)
-      Γ ⊢ fun (x : A) => b : (x : A) -> B
-
-      Γ ⊢ f : (x : A) -> B    Γ ⊢ a : A
-      ────────────────────────────────── (App)
-              Γ ⊢ f a : B[a/x]
-    v}
-
-    In (App), the substitution [B[a/x]] is closure application. *)
-let rec infer ctx (t : Type.t) : Value.t =
+(* the rule markers below refer to the typing rules spelled out on [infer] in
+   check.mli *)
+let rec infer ctx t =
   match t with
   | Type.Var i -> List.nth ctx.types i (* (Var) *)
   | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
@@ -222,7 +161,7 @@ let rec infer ctx (t : Type.t) : Value.t =
           type_error "expected a function, but %s has type %s" (show_term ctx f)
             (show ctx ty))
 
-(* infers and requires a universe: used where the rules demand "a type" *)
+(* infers and requires a sort: used where the rules demand "a type" *)
 and infer_univ ctx t =
   match infer ctx t with
   | Value.Sort i -> i
@@ -230,8 +169,7 @@ and infer_univ ctx t =
       type_error "expected a type, but %s has type %s" (show_term ctx t)
         (show ctx ty)
 
-(** [check ctx t expected] verifies that [t] has type [expected] *)
-and check ctx (t : Type.t) (expected : Value.t) =
+and check ctx t expected =
   match (t, expected) with
   (* a lambda against a Pi: the annotation must match the domain, then the body
      is checked against the codomain at a fresh variable *)
@@ -243,7 +181,8 @@ and check ctx (t : Type.t) (expected : Value.t) =
           (show ctx va) (show ctx dom);
       check (bind x va ctx) b
         (Value.apply_closure c (Value.Neutral (Value.Var ctx.lvl)))
-  (* subsumption: infer and compare up to βη-conversion and cumulativity *)
+  (* subsumption: infer and compare up to definitional equality (βδη plus proof
+     irrelevance) and cumulativity *)
   | _ ->
       let ty = infer ctx t in
       if not (sub ctx ty expected) then

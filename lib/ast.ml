@@ -1,4 +1,3 @@
-(** Abstract syntax tree (AST) *)
 type t =
   | Var of string
   | Sort of int
@@ -21,9 +20,6 @@ let pis groups body =
     (fun (xs, a) acc -> List.fold_right (fun x acc -> Pi (x, a, acc)) xs acc)
     groups body
 
-(** [var_spine t] is [Some [x1; ...; xn]] if [t] is an application spine of
-    variables [x1 ... xn]: used to read the ascription [(x y : A)] as a
-    multi-name pi binder when it appears left of an arrow *)
 let var_spine t =
   let rec go acc = function
     | Var x -> Some (x :: acc)
@@ -34,9 +30,6 @@ let var_spine t =
 
 exception Unbound_variable of string
 
-(** [to_term names s] scope-checks [s], converting named binders to de Bruijn
-    indices; [names] binds free variables (innermost first), e.g. top-level
-    declarations. Raises {!Unbound_variable} if a variable is not in scope. *)
 let to_term names s =
   let rec go env = function
     | Var x -> (
