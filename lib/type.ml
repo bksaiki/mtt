@@ -4,6 +4,8 @@ type t =
   | Pi of string * t * t (* Π (x : A). B, B binds index 0 *)
   | Lam of string * t * t (* λ (x : A). b *)
   | App of t * t
+  | Unit (* the unit type *)
+  | Tt (* the element of Unit *)
 
 let rec occurs k = function
   | Var i -> i = k
@@ -12,6 +14,9 @@ let rec occurs k = function
   | Lam (_, a, b) ->
       occurs k a || occurs (k + 1) b
   | App (f, a) -> occurs k f || occurs k a
+  | Unit
+  | Tt ->
+      false
 
 let pp_in names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
@@ -69,6 +74,8 @@ let pp_in names fmt t =
     | App (f, a) ->
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[%a@ %a@]" (go 10 names) f (go 11 names) a)
+    | Unit -> Format.pp_print_string fmt "Unit"
+    | Tt -> Format.pp_print_string fmt "tt"
   in
   go 0 names fmt t
 

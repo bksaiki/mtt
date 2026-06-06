@@ -1,6 +1,6 @@
 %token <string> ID
 %token <int> INT
-%token FUN PI TYPE PROP CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI TYPE PROP UNIT TT CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -84,6 +84,8 @@ atom:
   | TYPE; i = INT { Ast.mk $loc (Ast.Sort (i + 1)) }
   | TYPE { Ast.mk $loc (Ast.Sort 1) }
   | PROP { Ast.mk $loc (Ast.Sort 0) }
+  | UNIT { Ast.mk $loc Ast.Unit }
+  | TT { Ast.mk $loc Ast.Tt }
   | LPAREN; t = term; RPAREN { t }
   | LPAREN; t = term; COLON; a = term; RPAREN
     { Ast.mk $loc (Ast.Ascribe (t, a)) }

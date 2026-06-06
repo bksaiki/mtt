@@ -63,8 +63,9 @@ val show_term : ctx -> Type.t -> string
 (** [conv ctx ty v1 v2] decides definitional equality of the values [v1] and
     [v2] at the type [ty], which both must inhabit. Type-directed: at a Prop,
     true by proof irrelevance; at a Pi, both sides are applied to a fresh
-    variable (η, so lambda annotations are never compared); at a sort, the
-    values are types and are compared structurally. *)
+    variable (η, so lambda annotations are never compared); at [Unit], true (η:
+    every element is [tt]); at a sort, the values are types and are compared
+    structurally. *)
 val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
 
 (** [infer ctx t] synthesizes the type of [t] as a value, by the rules:
@@ -76,6 +77,9 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
 
       ──────────────────────── (Sort)
       Γ ⊢ Sort i : Sort (i+1)
+
+      ─────────────── (Unit)      ───────────── (Tt)
+      Γ ⊢ Unit : Type             Γ ⊢ tt : Unit
 
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Pi)

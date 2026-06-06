@@ -9,6 +9,8 @@ type t =
   | Pi of string * t * t  (** Π (x : A). B, where B binds index 0 *)
   | Lam of string * t * t  (** λ (x : A). b, where b binds index 0 *)
   | App of t * t
+  | Unit  (** the unit type, with definitional η: every element is [Tt] *)
+  | Tt  (** the element of [Unit] *)
 
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool

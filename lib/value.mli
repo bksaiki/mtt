@@ -8,6 +8,8 @@ type t =
   | Sort of int
   | Pi of string * t * closure
   | Lam of string * t * closure
+  | Unit
+  | Tt
   | Neutral of neutral
 
 (** a stuck term: a variable applied to a spine of arguments *)

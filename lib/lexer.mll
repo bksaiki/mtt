@@ -25,6 +25,8 @@ rule token = parse
   | "∏" { PI }
   | "Type" { TYPE }
   | "Prop" { PROP }
+  | "Unit" { UNIT }
+  | "tt" { TT }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }
   | "#eval" { EVAL }
