@@ -82,7 +82,7 @@ let run (ctx : Check.ctx) (stmt : t) : Check.ctx * string option =
       Check.check ctx u ty;
       let vt = Value.eval ctx.env t in
       let vu = Value.eval ctx.env u in
-      if not (Check.conv ctx.lvl vt vu) then
+      if not (Check.conv ctx ty vt vu) then
         Check.type_error "#check_equal failed: %s is not convertible with %s"
           (Check.show ctx vt) (Check.show ctx vu);
       (ctx, None)

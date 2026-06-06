@@ -10,10 +10,11 @@
 - [x] Universe cumulativity (subsumption-only; products covariant in codomain)
 - [ ] Identity type (`Eq` / `refl` / `J`) — internalizes `#check_equal`
       (today only the Leibniz encoding is expressible; see `examples/leibniz.mtt`)
-- [ ] `Prop`: impredicative bottom sort à la CoC (`Sort` hierarchy, `imax`
-      Pi rule) — would let `examples/logic.mtt` stay at one level and prove
-      the sum swap by elimination
-- [ ] Proof irrelevance for `Prop` (makes `theorem` opacity principled)
+- [x] `Prop`: impredicative bottom sort à la CoC (`Sort` hierarchy, `imax`
+      Pi rule); `examples/logic.mtt` now lives at one level and proves the
+      sum swap by elimination
+- [x] Proof irrelevance for `Prop` (conversion is now type-directed:
+      `conv ctx ty v1 v2`)
 - [ ] Universe polymorphism (Leibniz `sym`/`trans` are unprovable without
       it: predicates can't return `Type 1`)
 - [ ] Holes / implicit arguments (elaboration with metavariables)

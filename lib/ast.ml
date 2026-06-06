@@ -1,7 +1,7 @@
 (** Abstract syntax tree (AST) *)
 type t =
   | Var of string
-  | Univ of int
+  | Sort of int
   | Pi of string * t * t (* (x : A) -> B *)
   | Arrow of t * t (* A -> B *)
   | Lam of string * t * t (* fun (x : A) => b *)
@@ -43,7 +43,7 @@ let to_term names s =
         match List.find_index (String.equal x) env with
         | Some i -> Type.Var i
         | None -> raise (Unbound_variable x))
-    | Univ i -> Type.Univ i
+    | Sort i -> Type.Sort i
     | Pi (x, a, b) -> Type.Pi (x, go env a, go (x :: env) b)
     (* non-dependent: extend the env with a dummy no identifier can equal, so
        indices in [b] still shift across the binder *)

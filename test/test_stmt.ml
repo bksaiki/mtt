@@ -159,3 +159,20 @@ let%expect_test "def return annotations are optional, with telescopes" =
     fun (f : Nat -> Nat) => fun (n : Nat) => f (f n) : (Nat -> Nat) -> Nat -> Nat
     (A : Type) -> A -> A -> A : Type 1
     |}]
+
+let%expect_test "proof irrelevance" =
+  session
+    [ "axiom p : Prop"
+    ; "axiom h1 : p"
+    ; "axiom h2 : p"
+    ; (* any two proofs of the same proposition are equal *)
+      "#check_equal h1 h2"
+    ; (* ... including inside neutral spines: P h1 and P h2 are the same type,
+         so coercion between them checks *)
+      "axiom P : p -> Type"
+    ; "def coerce (y : P h1) : P h2 := y"
+    ; (* proofs of different propositions are not equated *)
+      "axiom q : Prop"
+    ; "#check_equal p q"
+    ];
+  [%expect {| type error: #check_equal failed: p is not convertible with q |}]

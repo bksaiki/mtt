@@ -1,7 +1,7 @@
 (** semantic values: the result of evaluation; binder bodies are closures
     holding unevaluated syntax, and stuck variables are de Bruijn levels *)
 type t =
-  | Univ of int
+  | Sort of int
   | Pi of string * t * closure
   | Lam of string * t * closure
   | Neutral of neutral
@@ -23,7 +23,7 @@ exception Not_a_function
 let rec eval env (t : Type.t) : t =
   match t with
   | Type.Var i -> List.nth env i
-  | Type.Univ i -> Univ i
+  | Type.Sort i -> Sort i
   | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
   | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
@@ -44,7 +44,7 @@ and apply_closure { env; body } a = eval (a :: env) body
     scope. Levels convert to indices by [l - k - 1]. *)
 let rec quote l (v : t) : Type.t =
   match v with
-  | Univ i -> Type.Univ i
+  | Sort i -> Type.Sort i
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
   | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
   | Neutral n -> quote_neutral l n

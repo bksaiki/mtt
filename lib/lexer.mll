@@ -17,6 +17,7 @@ rule token = parse
   | "Π" { PI }
   | "∏" { PI }
   | "Type" { TYPE }
+  | "Prop" { PROP }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }
   | "#eval" { EVAL }

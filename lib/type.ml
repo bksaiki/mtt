@@ -2,7 +2,7 @@
     ignored by all algorithms (variables are de Bruijn indices) *)
 type t =
   | Var of int (* de Bruijn index *)
-  | Univ of int (* Type 0, Type 1, ... *)
+  | Sort of int (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of string * t * t (* Π (x : A). B, B binds index 0 *)
   | Lam of string * t * t (* λ (x : A). b *)
   | App of t * t
@@ -10,7 +10,7 @@ type t =
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 let rec occurs k = function
   | Var i -> i = k
-  | Univ _ -> false
+  | Sort _ -> false
   | Pi (_, a, b)
   | Lam (_, a, b) ->
       occurs k a || occurs (k + 1) b
@@ -48,8 +48,10 @@ let pp_in names fmt t =
         match List.nth_opt names i with
         | Some x -> Format.pp_print_string fmt x
         | None -> Format.fprintf fmt "!%d" i)
-    | Univ 0 -> Format.pp_print_string fmt "Type"
-    | Univ i -> paren_if (prec > 10) (fun fmt -> Format.fprintf fmt "Type %d" i)
+    | Sort 0 -> Format.pp_print_string fmt "Prop"
+    | Sort 1 -> Format.pp_print_string fmt "Type"
+    | Sort u ->
+        paren_if (prec > 10) (fun fmt -> Format.fprintf fmt "Type %d" (u - 1))
     | Pi (x, a, b) ->
         paren_if (prec > 1) (fun fmt ->
             if occurs 0 b then
