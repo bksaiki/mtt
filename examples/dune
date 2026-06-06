@@ -1,0 +1,13 @@
+; every example is checked as part of `dune test`
+
+(rule
+ (alias runtest)
+ (deps church_bool.mtt %{bin:mtt})
+ (action
+  (run mtt church_bool.mtt)))
+
+(rule
+ (alias runtest)
+ (deps leibniz.mtt %{bin:mtt})
+ (action
+  (run mtt leibniz.mtt)))

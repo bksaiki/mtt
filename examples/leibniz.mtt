@@ -1,0 +1,18 @@
+def Eq : (A : Type) -> A -> A -> Type 1 =
+  fun (A : Type) => fun (x : A) => fun (y : A) =>
+    (P : A -> Type) -> P x -> P y
+
+def refl : (A : Type) -> (x : A) -> Eq A x x =
+  fun (A : Type) => fun (x : A) =>
+    fun (P : A -> Type) => fun (h : P x) => h
+
+axiom Nat : Type
+axiom zero : Nat
+
+def id : (A : Type) -> A -> A = fun (A : Type) => fun (x : A) => x
+
+theorem id_zero : Eq Nat (id Nat zero) zero = refl Nat zero
+theorem beta : Eq Nat ((fun (x : Nat) => x) zero) zero = refl Nat zero
+
+#check_equal (id Nat zero) zero
+#check_equal ((fun (x : Nat) => x) zero) zero

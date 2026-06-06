@@ -1,5 +1,9 @@
 (lang dune 3.23)
 
+(using menhir 3.0)
+
+(cram enable)
+
 (name mtt)
 
 (generate_opam_files true)
@@ -19,7 +23,10 @@
  (name mtt)
  (synopsis "A dependent type theory implementation in OCaml")
  (description "A dependent type theory implementation in OCaml")
- (depends ocaml)
+ (depends
+  ocaml
+  (menhir :build)
+  (ppx_expect :with-test))
  (tags
   ("type theory")))
 
