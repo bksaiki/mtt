@@ -31,3 +31,18 @@ let%expect_test "unbound variables are rejected" =
   (try roundtrip "fun (x : Type) => y" with
   | Ast.Unbound_variable x -> Printf.printf "unbound: %s\n" x);
   [%expect {| unbound: y |}]
+
+let%expect_test "ascription elaborates to the typed identity" =
+  roundtrip "(Type : Type 1)";
+  [%expect {| (fun (x : Type 1) => x) Type |}];
+  roundtrip "fun (f : Type -> Type) => f (Type : Type)";
+  [%expect {| fun (f : Type -> Type) => f ((fun (x : Type) => x) Type) |}]
+
+let%expect_test "ascribed variable left of an arrow is a pi binder" =
+  roundtrip "(A : Type) -> A";
+  [%expect {| (A : Type) -> A |}];
+  (* non-variable ascriptions and bare domains are plain arrows *)
+  roundtrip "(Type : Type 1) -> Type";
+  [%expect {| (fun (x : Type 1) => x) Type -> Type |}];
+  roundtrip "fun (g : ((A : Type) -> A) -> Type) => g";
+  [%expect {| fun (g : ((A : Type) -> A) -> Type) => g |}]

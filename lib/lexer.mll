@@ -13,13 +13,12 @@ rule token = parse
   | "fun" { FUN }
   | "Type" { TYPE }
   | "#check" { CHECK }
+  | "#check_equal" { CHECK_EQUAL }
   | "#eval" { EVAL }
   | "axiom" { AXIOM }
   | "def" { DEF }
   | "theorem" { THEOREM }
   | "lemma" { THEOREM }
-  | "assert_ty" { ASSERT_TY }
-  | "assert_eq" { ASSERT_EQ }
   | "->" { ARROW }
   | "=>" { DARROW }
   | "=" { EQUALS }

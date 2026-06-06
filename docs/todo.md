@@ -15,8 +15,7 @@
 - [ ] Parameter telescopes: `def f (A : Type) (x y : A) : A = ...`
 - [ ] Unicode alternatives: `∏`/`Π`, `→`, `⇒`, `λ`, `:=`
 - [ ] Multi-binder groups in `fun`/Pi: `fun (t f : A) => ...`
-- [ ] Type ascription `(t : A)` as a term (makes `assert_ty t = A` literally
-      `#check (t : A)`; useful for annotating redexes generally)
+- [x] Type ascription `(t : A)` as a term (desugars to the typed identity)
 
 ## Errors & UX
 

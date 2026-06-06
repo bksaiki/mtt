@@ -3,9 +3,6 @@ def Bool : Type 1 = (A : Type) -> A -> A -> A
 def true : Bool = fun (A : Type) => fun (t : A) => fun (f : A) => t
 def false : Bool = fun (A : Type) => fun (t : A) => fun (f : A) => f
 
-assert_ty true = Bool
-assert_ty false = Bool
-
 def not : Bool -> Bool =
   fun (p : Bool) => fun (A : Type) => fun (t : A) => fun (f : A) =>
     p A (false A t f) (true A t f)
@@ -30,54 +27,30 @@ def ife : Bool -> Bool -> Bool -> Bool =
     fun (A : Type) => fun (t : A) => fun (f : A) =>
       p A (a A t f) (b A t f)
 
-assert_ty not = Bool -> Bool
-assert_ty and = Bool -> Bool -> Bool
-assert_ty or = Bool -> Bool -> Bool
-assert_ty xor = Bool -> Bool -> Bool
-assert_ty ife = Bool -> Bool -> Bool -> Bool
-
 axiom B : Type
 axiom T : B
 axiom F : B
 
-assert_ty (true B T F) = B
-assert_eq (true B T F) = T
-assert_ty (false B T F) = B
-assert_eq (false B T F) = F
+#check_equal (true B T F) T
+#check_equal (false B T F) F
 
-assert_ty ((not true) B T F) = B
-assert_eq ((not true) B T F) = F
-assert_ty ((not false) B T F) = B
-assert_eq ((not false) B T F) = T
+#check_equal ((not true) B T F) F
+#check_equal ((not false) B T F) T
 
-assert_ty ((and false false) B T F) = B
-assert_eq ((and false false) B T F) = F
-assert_ty ((and false true) B T F) = B
-assert_eq ((and false true) B T F) = F
-assert_ty ((and true false) B T F) = B
-assert_eq ((and true false) B T F) = F
-assert_ty ((and true true) B T F) = B
-assert_eq ((and true true) B T F) = T
+#check_equal ((and false false) B T F) F
+#check_equal ((and false true) B T F) F
+#check_equal ((and true false) B T F) F
+#check_equal ((and true true) B T F) T
 
-assert_ty ((or false false) B T F) = B
-assert_eq ((or false false) B T F) = F
-assert_ty ((or false true) B T F) = B
-assert_eq ((or false true) B T F) = T
-assert_ty ((or true false) B T F) = B
-assert_eq ((or true false) B T F) = T
-assert_ty ((or true true) B T F) = B
-assert_eq ((or true true) B T F) = T
+#check_equal ((or false false) B T F) F
+#check_equal ((or false true) B T F) T
+#check_equal ((or true false) B T F) T
+#check_equal ((or true true) B T F) T
 
-assert_ty ((xor false false) B T F) = B
-assert_eq ((xor false false) B T F) = F
-assert_ty ((xor false true) B T F) = B
-assert_eq ((xor false true) B T F) = T
-assert_ty ((xor true false) B T F) = B
-assert_eq ((xor true false) B T F) = T
-assert_ty ((xor true true) B T F) = B
-assert_eq ((xor true true) B T F) = F
+#check_equal ((xor false false) B T F) F
+#check_equal ((xor false true) B T F) T
+#check_equal ((xor true false) B T F) T
+#check_equal ((xor true true) B T F) F
 
-assert_ty ((ife true true false) B T F) = B
-assert_eq ((ife true true false) B T F) = T
-assert_ty ((ife false true false) B T F) = B
-assert_eq ((ife false true false) B T F) = F
+#check_equal ((ife true true false) B T F) T
+#check_equal ((ife false true false) B T F) F

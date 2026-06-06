@@ -1,6 +1,6 @@
 %token <string> ID
 %token <int> INT
-%token FUN TYPE CHECK EVAL AXIOM DEF THEOREM ASSERT_TY ASSERT_EQ LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN TYPE CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -30,19 +30,23 @@ decl:
   | DEF; x = ID; EQUALS; t = term { Stmt.Def (x, None, t) }
   | THEOREM; x = ID; COLON; a = term; EQUALS; t = term
     { Stmt.Theorem (x, a, t) }
-  | ASSERT_TY; t = term; EQUALS; a = term { Stmt.AssertTy (t, a) }
-  | ASSERT_EQ; t = term; EQUALS; u = term { Stmt.AssertEq (t, u) }
+  | CHECK_EQUAL; t = atom; u = atom { Stmt.CheckEqual (t, u) }
 
 term:
   | FUN; LPAREN; x = ID; COLON; a = term; RPAREN; DARROW; b = term
     { Ast.Lam (x, a, b) }
   | t = pi_term { t }
 
-(* arrows are right-associative; the domain is one level tighter *)
+(* arrows are right-associative; the domain is one level tighter. There is
+   no dedicated pi-binder production: "(x : A)" parses as an ascription
+   atom, and an ascribed *variable* directly left of an arrow is read as a
+   dependent pi binder. (Consequently extra parens cannot force the
+   ascription reading there.) *)
 pi_term:
-  | LPAREN; x = ID; COLON; a = term; RPAREN; ARROW; b = pi_term
-    { Ast.Pi (x, a, b) }
-  | a = app_term; ARROW; b = pi_term { Ast.Arrow (a, b) }
+  | a = app_term; ARROW; b = pi_term
+    { match a with
+      | Ast.Ascribe (Ast.Var x, ty) -> Ast.Pi (x, ty, b)
+      | a -> Ast.Arrow (a, b) }
   | t = app_term { t }
 
 (* application is left-associative *)
@@ -55,3 +59,4 @@ atom:
   | TYPE; i = INT { Ast.Univ i }
   | TYPE { Ast.Univ 0 }
   | LPAREN; t = term; RPAREN { t }
+  | LPAREN; t = term; COLON; a = term; RPAREN { Ast.Ascribe (t, a) }

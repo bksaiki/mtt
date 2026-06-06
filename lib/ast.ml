@@ -6,6 +6,7 @@ type t =
   | Arrow of t * t (* A -> B *)
   | Lam of string * t * t (* fun (x : A) => b *)
   | App of t * t
+  | Ascribe of t * t (* (t : A) *)
 
 exception Unbound_variable of string
 
@@ -25,5 +26,9 @@ let to_term names s =
     | Arrow (a, b) -> Type.Pi ("", go env a, go ("" :: env) b)
     | Lam (x, a, b) -> Type.Lam (x, go env a, go (x :: env) b)
     | App (f, a) -> Type.App (go env f, go env a)
+    (* ascription is the typed identity: applying (fun (x : A) => x) to [t]
+       forces the checking judgment t ⇐ A, and the redex evaporates under
+       evaluation. No core constructor needed. *)
+    | Ascribe (t, a) -> Type.App (Type.Lam ("x", go env a, Type.Var 0), go env t)
   in
   go names s

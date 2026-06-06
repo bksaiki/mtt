@@ -14,5 +14,5 @@ def id : (A : Type) -> A -> A = fun (A : Type) => fun (x : A) => x
 theorem id_zero : Eq Nat (id Nat zero) zero = refl Nat zero
 theorem beta : Eq Nat ((fun (x : Nat) => x) zero) zero = refl Nat zero
 
-assert_eq id Nat zero = zero
-assert_eq (fun (x : Nat) => x) zero = zero
+#check_equal (id Nat zero) zero
+#check_equal ((fun (x : Nat) => x) zero) zero

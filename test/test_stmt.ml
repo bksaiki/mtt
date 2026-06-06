@@ -91,18 +91,28 @@ let%expect_test "#eval reports just the normal form" =
     type error: expected a function, but Type has type Type 1
     |}]
 
-let%expect_test "assertions succeed silently and fail loudly" =
+let%expect_test "#check_equal succeeds silently and fails loudly" =
   session
     [ "axiom Nat : Type"
     ; "axiom zero : Nat"
-    ; "assert_ty zero = Nat"
-    ; "assert_eq zero = zero"
-    ; "assert_eq (fun (x : Nat) => x) zero = zero"
-    ; "assert_ty Nat = Nat"
-    ; "assert_eq zero = Nat"
+    ; "#check_equal zero zero"
+    ; "#check_equal ((fun (x : Nat) => x) zero) zero"
+    ; "#check_equal zero Nat"
+    ];
+  [%expect {| type error: this term has type Type but Nat was expected |}]
+
+let%expect_test "#check with ascription, and #check_equal" =
+  session
+    [ "axiom Nat : Type"
+    ; "axiom zero : Nat"
+    ; "#check (zero : Nat)"
+    ; "#check ((fun (A : Type) => fun (x : A) => x) : (B : Type) -> B -> B)"
+    ; "#check (zero : Type)"
+    ; "#check_equal (zero : Nat) zero"
     ];
   [%expect
     {|
-    type error: assertion failed: this term has type Type but Nat was expected
-    type error: this term has type Type but Nat was expected
+    zero : Nat
+    fun (A : Type) => fun (x : A) => x : (B : Type) -> B -> B
+    type error: this term has type Nat but Type was expected
     |}]
