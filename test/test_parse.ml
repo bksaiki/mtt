@@ -84,3 +84,15 @@ let%expect_test "single binders may drop their parens" =
   [%expect {| fun (y : Type) => y |}];
   roundtrip {|Π C : Type ⇒ C → C|};
   [%expect {| (C : Type) -> C -> C |}]
+
+let%expect_test "unit syntax" =
+  roundtrip {|λ x : Unit ⇒ ()|};
+  [%expect {| fun (x : Unit) => () |}]
+
+let%expect_test "() is the unit element" =
+  roundtrip "()";
+  [%expect {| () |}];
+  roundtrip "( )";
+  [%expect {| () |}];
+  roundtrip {|λ f : Unit → Unit ⇒ f ()|};
+  [%expect {| fun (f : Unit -> Unit) => f () |}]

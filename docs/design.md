@@ -56,6 +56,8 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **δ** — `def`s unfold eagerly: a defined name is bound in the env to its
   value, so evaluation replaces it (no `Const` constructor, no kernel
   lookup). Upgrade path if unfolded output hurts: glued evaluation.
+- **η for `Unit`** — at type `Unit`, any two values are equal (every
+  element is `()`); the same one-line pattern as proof irrelevance.
 - **proof irrelevance** — at a type in `Prop`, any two values are equal
   (a one-line guard in `conv`, made possible by type direction); applies
   inside neutral spines, so `P h1 ≡ P h2` for any proofs `h1`, `h2`.

@@ -62,11 +62,14 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.Pi (x, a, c) ->
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
       imax (sort_of ctx a) j
+  | Value.Unit -> 1 (* Unit : Type *)
   | Value.Neutral n -> (
       match infer_neutral ctx n with
       | Value.Sort i -> i
       | _ -> assert false)
-  | Value.Lam _ -> assert false (* a lambda is never a type *)
+  | Value.Lam _
+  | Value.MkUnit ->
+      assert false (* not types *)
 
 (* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
    types themselves (with optional cumulativity). β/δ have already happened
@@ -84,6 +87,8 @@ let rec conv ctx ty v1 v2 =
         (Value.apply v2 v)
   (* at a sort, the values are types: compare strictly *)
   | Value.Sort _ -> conv_ty ~cumul:false ctx v1 v2
+  (* η for Unit: every element is tt, so any two are equal *)
+  | Value.Unit -> true
   (* at a stuck type there are no intro forms: both sides are neutral *)
   | _ -> (
       match (v1, v2) with
@@ -106,6 +111,7 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
       let v = fresh ctx in
       conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
         (Value.apply_closure c2 v)
+  | Value.Unit, Value.Unit -> true
   | Value.Neutral n1, Value.Neutral n2 ->
       Option.is_some (conv_neutral ctx n1 n2)
   | _ -> false
@@ -138,6 +144,8 @@ let rec infer ctx t =
   match t with
   | Type.Var i -> List.nth ctx.types i (* (Var) *)
   | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
+  | Type.Unit -> Value.Sort 1 (* (Unit): Unit : Type *)
+  | Type.MkUnit -> Value.Unit (* (MkUnit) *)
   (* (Pi) *)
   | Type.Pi (x, a, b) ->
       let i = infer_univ ctx a in

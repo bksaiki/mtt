@@ -3,8 +3,18 @@
 ## Core theory
 
 - [ ] Local `let` expressions
-- [ ] Sigma types (pairs), unit, empty
-- [ ] Inductive types / naturals with eliminator (replaces Church encodings)
+- [ ] Σ types (negative: pairs + projections, η; subsumes `A × B`):
+      formation at `Sort (max i j)` (no imax — but `Prop × Prop : Prop`),
+      pairs check-only, `conv` gets surjective pairing at `Sigma` type
+- [ ] Binary sums `A + B` (first positive type: stuck `case` frames in
+      neutrals, motives for dependent elimination, and the Prop
+      large-elimination restriction becomes a real check)
+- [x] `Unit` with definitional η (`Unit : Type`, deliberately not `Prop`:
+      a `Prop` unit would collapse `Bool := Unit + Unit` by irrelevance)
+- [ ] `Empty` (`absurd`, subsingleton elimination: `Empty : Prop` but
+      eliminates into any sort); then `Bool := Unit + Unit`
+- [ ] Inductive types / naturals with eliminator (replaces Church encodings;
+      sums + Σ + unit/empty are the warm-up)
 - [ ] Identity type (`Eq` / `refl` / `J`) — internalizes `#check_equal`
       (today only the Leibniz encoding is expressible; see `examples/leibniz.mtt`)
 - [ ] Universe polymorphism (Leibniz `sym`/`trans` are unprovable without

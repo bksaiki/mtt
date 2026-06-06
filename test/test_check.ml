@@ -104,3 +104,11 @@ let%expect_test "Prop is impredicative" =
 let%expect_test "cumulativity: Prop flows into Type" =
   infer "(fun (A : Type) => A) ((p : Prop) -> p)";
   [%expect {| Type |}]
+
+let%expect_test "Unit and its element" =
+  infer "Unit";
+  [%expect {| Type |}];
+  infer "()";
+  [%expect {| Unit |}];
+  infer "Unit -> Unit";
+  [%expect {| Type |}]

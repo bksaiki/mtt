@@ -176,3 +176,16 @@ let%expect_test "proof irrelevance" =
     ; "#check_equal p q"
     ];
   [%expect {| type error: #check_equal failed: p is not convertible with q |}]
+
+let%expect_test "eta for Unit: every element is definitionally ()" =
+  session
+    [ "axiom u : Unit"
+    ; "#check_equal u ()"
+    ; (* by Pi-eta then Unit-eta, all functions into Unit are equal *)
+      "axiom f : Unit -> Unit"
+    ; "#check_equal f (λ x : Unit ⇒ ())"
+    ; (* but Unit is not equal to other types *)
+      "#check_equal Unit Prop"
+    ];
+  [%expect
+    {| type error: #check_equal failed: Unit is not convertible with Prop |}]
