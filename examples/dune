@@ -11,3 +11,15 @@
  (deps leibniz.mtt %{bin:mtt})
  (action
   (run mtt leibniz.mtt)))
+
+(rule
+ (alias runtest)
+ (deps church_nat.mtt %{bin:mtt})
+ (action
+  (run mtt church_nat.mtt)))
+
+(rule
+ (alias runtest)
+ (deps logic.mtt %{bin:mtt})
+ (action
+  (run mtt logic.mtt)))

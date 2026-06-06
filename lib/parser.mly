@@ -45,6 +45,9 @@ binder_group:
 term:
   | FUN; bs = nonempty_list(binder_group); DARROW; b = term { Ast.lams bs b }
   | PI; bs = nonempty_list(binder_group); DARROW; b = term { Ast.pis bs b }
+  (* a single binder may drop its parens: λ x : A ⇒ b *)
+  | FUN; x = ID; COLON; a = term; DARROW; b = term { Ast.Lam (x, a, b) }
+  | PI; x = ID; COLON; a = term; DARROW; b = term { Ast.Pi (x, a, b) }
   | t = pi_term { t }
 
 (* arrows are right-associative; the domain is one level tighter. There is

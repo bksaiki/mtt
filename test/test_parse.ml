@@ -72,3 +72,9 @@ let%expect_test "line comments are skipped" =
   [%expect {| Type |}];
   roundtrip "Type ->-- arrows still lex next to comments\n Type";
   [%expect {| Type -> Type |}]
+
+let%expect_test "single binders may drop their parens" =
+  roundtrip {|λ y : Type ⇒ y|};
+  [%expect {| fun (y : Type) => y |}];
+  roundtrip {|Π C : Type ⇒ C → C|};
+  [%expect {| (C : Type) -> C -> C |}]
