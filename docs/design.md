@@ -87,6 +87,10 @@ the statement type and its processor, per the module-per-concept convention):
 ## Conventions
 
 - One module per concept, type named `t`.
-- No `.mli` files while the design moves; planned kernel boundary later.
+- Every library module has an `.mli`; doc comments live there (odoc and
+  editor hover read them), `.ml` files keep implementation notes. `Check`
+  hides its conversion internals (`conv_ty`, `conv_neutral`, `sort_of`,
+  `sub`); the syntax/value types stay concrete — they're the shared
+  vocabulary, not an implementation detail.
 - Tests: `ppx_expect` snapshot tests per module (`dune promote` workflow);
   expected strings are always promoted, never hand-typed.

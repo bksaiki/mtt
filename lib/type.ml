@@ -1,5 +1,3 @@
-(** type of both terms and types; binder names are display hints only and are
-    ignored by all algorithms (variables are de Bruijn indices) *)
 type t =
   | Var of int (* de Bruijn index *)
   | Sort of int (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
@@ -7,7 +5,6 @@ type t =
   | Lam of string * t * t (* λ (x : A). b *)
   | App of t * t
 
-(** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 let rec occurs k = function
   | Var i -> i = k
   | Sort _ -> false
@@ -16,9 +13,6 @@ let rec occurs k = function
       occurs k a || occurs (k + 1) b
   | App (f, a) -> occurs k f || occurs k a
 
-(** [pp_in names fmt t] pretty-prints [t] using binder name hints, priming names
-    that would shadow an enclosing binder; [names] supplies the names of
-    enclosing binders for [t]'s free indices. Unbound indices print as [!i]. *)
 let pp_in names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
   let freshen names x =
@@ -48,6 +42,7 @@ let pp_in names fmt t =
         match List.nth_opt names i with
         | Some x -> Format.pp_print_string fmt x
         | None -> Format.fprintf fmt "!%d" i)
+    (* surface names for sorts: Sort 0 is Prop, Sort (i+1) is Type i *)
     | Sort 0 -> Format.pp_print_string fmt "Prop"
     | Sort 1 -> Format.pp_print_string fmt "Type"
     | Sort u ->
@@ -77,11 +72,8 @@ let pp_in names fmt t =
   in
   go 0 names fmt t
 
-(** [pp fmt t] pretty-prints the closed term [t] *)
 let pp fmt t = pp_in [] fmt t
 
-(** [to_string_in names t] is [t] rendered via {!pp_in} *)
 let to_string_in names t = Format.asprintf "%a" (pp_in names) t
 
-(** [to_string t] is the closed term [t] rendered via {!pp} *)
 let to_string t = to_string_in [] t

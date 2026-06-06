@@ -1,6 +1,11 @@
+(* The lexer (ocamllex). Whitespace and [--] line comments are skipped;
+   keywords win over identifiers by rule order, and longest-match keeps the
+   multi-character operators ([->], [=>], [:=], [#check_equal]) unambiguous. *)
+
 {
 open Parser
 
+(* raised on a character no rule matches, with a human-readable message *)
 exception Error of string
 }
 
