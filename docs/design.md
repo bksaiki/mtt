@@ -47,7 +47,8 @@ Bidirectional: `infer` synthesizes, `check` verifies (lambda-vs-Pi rule,
 plus subsumption via conversion). The context carries `env`/`types`/
 `names`/`lvl` together; binders are bound to fresh neutrals.
 
-Definitional equality (`conv`, on values):
+Definitional equality (`conv`, on values, **type-directed**: values are
+compared *at a type*, reconstructing spine types via `infer_neutral`):
 
 - **β** — already performed by evaluation
 - **η** — for functions, lambda-vs-neutral case applies both to a fresh var
@@ -55,6 +56,9 @@ Definitional equality (`conv`, on values):
 - **δ** — `def`s unfold eagerly: a defined name is bound in the env to its
   value, so evaluation replaces it (no `Const` constructor, no kernel
   lookup). Upgrade path if unfolded output hurts: glued evaluation.
+- **proof irrelevance** — at a type in `Prop`, any two values are equal
+  (a one-line guard in `conv`, made possible by type direction); applies
+  inside neutral spines, so `P h1 ≡ P h2` for any proofs `h1`, `h2`.
 - **cumulativity** (subsumption rule only, via `sub`): `Sort i ≤ Sort j`
   when `i ≤ j` (Rocq-flavored: `Prop ≤ Type`); products invariant in
   domains, covariant in codomains. `infer` still returns principal types

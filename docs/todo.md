@@ -13,7 +13,8 @@
 - [x] `Prop`: impredicative bottom sort à la CoC (`Sort` hierarchy, `imax`
       Pi rule); `examples/logic.mtt` now lives at one level and proves the
       sum swap by elimination
-- [ ] Proof irrelevance for `Prop` (makes `theorem` opacity principled)
+- [x] Proof irrelevance for `Prop` (conversion is now type-directed:
+      `conv ctx ty v1 v2`)
 - [ ] Universe polymorphism (Leibniz `sym`/`trans` are unprovable without
       it: predicates can't return `Type 1`)
 - [ ] Holes / implicit arguments (elaboration with metavariables)

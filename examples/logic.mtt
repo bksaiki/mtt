@@ -79,3 +79,10 @@ def forall_not (A : Type) (P : A → Prop) := my_forall A (λ y : A ⇒ negate (
 -- not (exists x, P(x)) => forall y, not P(y)
 theorem f6 (A : Type) (P : A → Prop) (x : not_exists A P) : forall_not A P :=
   λ (y : A) (z : P y) ⇒ x (exists_intro A P y z)
+
+-- proof irrelevance: any two proofs of the same proposition are
+-- definitionally equal — even these two opaque theorems, whose proofs
+-- were checked and then forgotten
+theorem k1 (A B : Prop) (x : A) (y : B) : A := x
+theorem k2 (A B : Prop) (x : A) (y : B) : B → A := λ z : B ⇒ x
+#check_equal k1 f1
