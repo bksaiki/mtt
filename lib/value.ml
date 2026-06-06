@@ -12,7 +12,7 @@ and neutral =
 
 and closure =
   { env : env
-  ; body : Type.term
+  ; body : Type.t
   }
 
 and env = t list
@@ -20,7 +20,7 @@ and env = t list
 exception Not_a_function
 
 (** [eval env t] evaluates [t] in [env], which must bind every free index *)
-let rec eval env (t : Type.term) : t =
+let rec eval env (t : Type.t) : t =
   match t with
   | Type.Var i -> List.nth env i
   | Type.Univ i -> Univ i
@@ -42,7 +42,7 @@ and apply_closure { env; body } a = eval (a :: env) body
 
 (** [quote l v] reads a value back into syntax; [l] is the number of binders in
     scope. Levels convert to indices by [l - k - 1]. *)
-let rec quote l (v : t) : Type.term =
+let rec quote l (v : t) : Type.t =
   match v with
   | Univ i -> Type.Univ i
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)

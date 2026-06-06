@@ -1,11 +1,11 @@
 (** type of both terms and types; binder names are display hints only and are
     ignored by all algorithms (variables are de Bruijn indices) *)
-type term =
+type t =
   | Var of int (* de Bruijn index *)
   | Univ of int (* Type 0, Type 1, ... *)
-  | Pi of string * term * term (* Π (x : A). B, B binds index 0 *)
-  | Lam of string * term * term (* λ (x : A). b *)
-  | App of term * term
+  | Pi of string * t * t (* Π (x : A). B, B binds index 0 *)
+  | Lam of string * t * t (* λ (x : A). b *)
+  | App of t * t
 
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 let rec occurs k = function

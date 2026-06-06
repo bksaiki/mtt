@@ -6,17 +6,17 @@ hierarchy, checked with normalization by evaluation (NbE).
 ## Pipeline
 
 ```
-string ─parse─▶ Ast.t ─to_term─▶ Type.term ─eval─▶ Value.t ─quote─▶ Type.term ─pp─▶ string
+string ─parse─▶ Ast.t ─to_term─▶ Type.t ─eval─▶ Value.t ─quote─▶ Type.t ─pp─▶ string
        lexer.mll        scope             value.ml          value.ml         type.ml
        parser.mly       check (ast.ml)
 ```
 
-Type checking (`check.ml`) sits on `Type.term` and decides equality on
+Type checking (`check.ml`) sits on `Type.t` and decides equality on
 `Value.t`.
 
 ## Representations
 
-One unified syntax for terms and types (`Type.term`) — in a dependent
+One unified syntax for terms and types (`Type.t`) — in a dependent
 theory "is a type" is a judgment, not a syntactic class. Three layers:
 
 | layer | module | variables | binders |
@@ -71,7 +71,7 @@ the statement type and its processor, per the module-per-concept convention):
 
 ## Conventions
 
-- One module per concept, type named `t` (exception: `Type.term`, since
+- One module per concept, type named `t` (exception: `Type.t`, since
   `Type.t` reads as "types only").
 - No `.mli` files while the design moves; planned kernel boundary later.
 - Tests: `ppx_expect` snapshot tests per module (`dune promote` workflow);

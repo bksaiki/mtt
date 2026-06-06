@@ -87,7 +87,7 @@ and conv_neutral l n1 n2 =
   | _ -> false
 
 (** [infer ctx t] synthesizes the type of [t] as a value *)
-let rec infer ctx (t : Type.term) : Value.t =
+let rec infer ctx (t : Type.t) : Value.t =
   match t with
   (* (x : A) ∈ Γ ──────────── (Var) Γ ⊢ x : A *)
   | Type.Var i -> List.nth ctx.types i
@@ -129,7 +129,7 @@ and infer_univ ctx t =
         (show ctx ty)
 
 (** [check ctx t expected] verifies that [t] has type [expected] *)
-and check ctx (t : Type.term) (expected : Value.t) =
+and check ctx (t : Type.t) (expected : Value.t) =
   match (t, expected) with
   (* a lambda against a Pi: the annotation must match the domain, then the body
      is checked against the codomain at a fresh variable *)
