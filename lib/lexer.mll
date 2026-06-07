@@ -47,6 +47,13 @@ rule token = parse
   | "," { COMMA }
   | ".1" { FST }
   | ".2" { SND }
+  | "." digits as s
+    { raise
+        (Error
+           (Printf.sprintf
+              "no projection %s: tuples are right-nested pairs, so e.g. the \
+               third component of a triple is .2.2"
+              s)) }
   | "(" { LPAREN }
   | ")" { RPAREN }
   | ":" { COLON }
