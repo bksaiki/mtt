@@ -3,6 +3,9 @@
 A minimal dependent type theory: Π types and a predicative universe
 hierarchy, checked with normalization by evaluation (NbE).
 
+This file records *settled* decisions; open questions live in
+`questions.md`, agreed-on work in `todo.md`.
+
 ## Pipeline
 
 ```
