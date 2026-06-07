@@ -64,6 +64,7 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       | Value.Sigma (_, _, c) ->
           Value.apply_closure c (Value.Neutral (Value.Fst n))
       | _ -> assert false)
+  | Value.Case (p, n, _, _) -> Value.apply p (Value.Neutral n)
 
 (* [sort_of ctx ty] is the i such that [ty : Sort i] *)
 let rec sort_of ctx (ty : Value.t) : int =
@@ -79,13 +80,17 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.Sigma (x, a, c) ->
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
       max (sort_of ctx a) j
+  (* plain max, like sigma: a sum is a proposition only when both sides are *)
+  | Value.Sum (a, b) -> max (sort_of ctx a) (sort_of ctx b)
   | Value.Neutral n -> (
       match infer_neutral ctx n with
       | Value.Sort i -> i
       | _ -> assert false)
   | Value.Lam _
   | Value.MkUnit
-  | Value.Pair _ ->
+  | Value.Pair _
+  | Value.Inl _
+  | Value.Inr _ ->
       assert false (* not types *)
 
 (* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
@@ -112,6 +117,15 @@ let rec conv ctx ty v1 v2 =
       let f1 = Value.vfst v1 in
       conv ctx a f1 (Value.vfst v2)
       && conv ctx (Value.apply_closure c f1) (Value.vsnd v1) (Value.vsnd v2)
+  (* at a sum type there is no η: injections compare componentwise, and a stuck
+     value equals nothing but another stuck value *)
+  | Value.Sum (a, b) -> (
+      match (v1, v2) with
+      | Value.Inl x1, Value.Inl x2 -> conv ctx a x1 x2
+      | Value.Inr y1, Value.Inr y2 -> conv ctx b y1 y2
+      | Value.Neutral n1, Value.Neutral n2 ->
+          Option.is_some (conv_neutral ctx n1 n2)
+      | _ -> false)
   (* at a stuck type there are no intro forms: both sides are neutral *)
   | _ -> (
       match (v1, v2) with
@@ -144,6 +158,9 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
       let v = fresh ctx in
       conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
         (Value.apply_closure c2 v)
+  (* sum: covariant in both sides, like sigma *)
+  | Value.Sum (a1, b1), Value.Sum (a2, b2) ->
+      conv_ty ~cumul ctx a1 a2 && conv_ty ~cumul ctx b1 b2
   | Value.Neutral n1, Value.Neutral n2 ->
       Option.is_some (conv_neutral ctx n1 n2)
   | _ -> false
@@ -173,6 +190,33 @@ and conv_neutral ctx n1 n2 : Value.t option =
       match conv_neutral ctx n1 n2 with
       | Some (Value.Sigma (_, _, c)) ->
           Some (Value.apply_closure c (Value.Neutral (Value.Fst n1)))
+      | _ -> None)
+  (* stuck cases: scrutinees, then motives (as type families at a fresh
+     variable), then both branches at their Pi types built from the motive *)
+  | Value.Case (p1, n1, u1, v1), Value.Case (p2, n2, u2, v2) -> (
+      match conv_neutral ctx n1 n2 with
+      | Some (Value.Sum (a, b) as sty) ->
+          let motives_ok =
+            conv_ty ~cumul:false (bind "s" sty ctx)
+              (Value.apply p1 (fresh ctx))
+              (Value.apply p2 (fresh ctx))
+          in
+          (* the motive, weakened to sit under one binder *)
+          let pq = Value.quote (ctx.lvl + 1) p1 in
+          let branch_ty x inj comp =
+            Value.Pi
+              ( x
+              , comp
+              , { env = ctx.env; body = Type.App (pq, inj (Type.Var 0)) } )
+          in
+          if
+            motives_ok
+            && conv ctx (branch_ty "x" (fun t -> Type.Inl t) a) u1 u2
+            && conv ctx (branch_ty "y" (fun t -> Type.Inr t) b) v1 v2
+          then
+            Some (Value.apply p1 (Value.Neutral n1))
+          else
+            None
       | _ -> None)
   (* stuck ex falso: the motives must agree; the proofs are of type Empty, a
      Prop, so by irrelevance they need not be compared at all *)
@@ -223,6 +267,65 @@ let rec infer ctx t =
       let _ = infer_univ ctx a in
       check ctx h Value.Empty;
       Value.eval ctx.env a
+  (* (Sum): plain max, like sigma *)
+  | Type.Sum (a, b) ->
+      let i = infer_univ ctx a in
+      let j = infer_univ ctx b in
+      Value.Sort (max i j)
+  (* an injection does not determine the other side of its sum: inl/inr are
+     checked, not inferred *)
+  | Type.Inl _
+  | Type.Inr _ ->
+      type_error
+        "cannot infer the type of an injection: ascribe it, e.g. (inl a : A + \
+         B)"
+  (* (Case): the recursor. The motive is a function from the scrutinee's type
+     into a sort; each branch covers one injection. When the scrutinee is a
+     proposition the motive must land in Prop: by proof irrelevance inl h ≡ inr
+     h', so a Type-valued case could distinguish equal proofs — the
+     large-elimination restriction. *)
+  | Type.Case (p, s, u, v) -> (
+      match infer ctx s with
+      | Value.Sum (va, vb) as sty ->
+          let j =
+            match infer ctx p with
+            | Value.Pi (_, dom, c) -> (
+                if not (conv_ty ~cumul:false ctx dom sty) then
+                  type_error
+                    "the motive's domain %s does not match the scrutinee's \
+                     type %s"
+                    (show ctx dom) (show ctx sty);
+                match Value.apply_closure c (fresh ctx) with
+                | Value.Sort j -> j
+                | cod ->
+                    type_error "the motive must land in a sort, not %s"
+                      (show (bind "s" sty ctx) cod))
+            | ty ->
+                type_error
+                  "expected a motive from %s into a sort, but %s has type %s"
+                  (show ctx sty) (show_term ctx p) (show ctx ty)
+          in
+          if sort_of ctx sty = 0 && j <> 0 then
+            type_error
+              "cannot eliminate a proof of %s into %s: a case on a proposition \
+               must target Prop"
+              (show ctx sty)
+              (Type.to_string (Type.Sort j));
+          let vp = Value.eval ctx.env p in
+          (* the motive, weakened to sit under each branch's binder *)
+          let pq = Value.quote (ctx.lvl + 1) vp in
+          let branch_ty x inj comp =
+            Value.Pi
+              ( x
+              , comp
+              , { env = ctx.env; body = Type.App (pq, inj (Type.Var 0)) } )
+          in
+          check ctx u (branch_ty "x" (fun t -> Type.Inl t) va);
+          check ctx v (branch_ty "y" (fun t -> Type.Inr t) vb);
+          Value.apply vp (Value.eval ctx.env s)
+      | ty ->
+          type_error "expected a sum, but %s has type %s" (show_term ctx s)
+            (show ctx ty))
   (* (Sigma): plain max — no imax, see sort_of *)
   | Type.Sigma (x, a, b) ->
       let i = infer_univ ctx a in
@@ -273,6 +376,9 @@ and check ctx t expected =
           (show ctx va) (show ctx dom);
       check (bind x va ctx) b
         (Value.apply_closure c (Value.Neutral (Value.Var ctx.lvl)))
+  (* (Inl)/(Inr): an injection checks against a sum *)
+  | Type.Inl a, Value.Sum (va, _) -> check ctx a va
+  | Type.Inr b, Value.Sum (_, vb) -> check ctx b vb
   (* (Pair): check the components, the second against the family instantiated at
      the first *)
   | Type.Pair (a, b), Value.Sigma (_, dom, c) ->

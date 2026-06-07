@@ -7,6 +7,9 @@ type t =
   | Empty
   | Sigma of string * t * closure
   | Pair of t * t
+  | Sum of t * t
+  | Inl of t
+  | Inr of t
   | Neutral of neutral
 
 and neutral =
@@ -15,6 +18,7 @@ and neutral =
   | Absurd of t * neutral (* a stuck ex falso: motive and stuck proof *)
   | Fst of neutral (* a stuck first projection *)
   | Snd of neutral (* a stuck second projection *)
+  | Case of t * neutral * t * t (* a stuck case: motive, scrutinee, branches *)
 
 and closure =
   { env : env
@@ -45,6 +49,11 @@ let rec eval env t =
   | Type.Pair (a, b) -> Pair (eval env a, eval env b)
   | Type.Fst t -> vfst (eval env t)
   | Type.Snd t -> vsnd (eval env t)
+  | Type.Sum (a, b) -> Sum (eval env a, eval env b)
+  | Type.Inl t -> Inl (eval env t)
+  | Type.Inr t -> Inr (eval env t)
+  | Type.Case (p, s, u, v) ->
+      vcase (eval env p) (eval env s) (eval env u) (eval env v)
 
 (* β-reduction: (fun (x : A) => b) a ≡ b[a/x]. The substitution is just
    evaluating the closure body in an extended environment: no term-level
@@ -70,12 +79,24 @@ and vsnd = function
   | Neutral n -> Neutral (Snd n)
   | _ -> assert false
 
+(* ι-reduction: a case on an injection picks the matching branch; a stuck
+   scrutinee freezes the whole case as a neutral frame *)
+and vcase p s u v =
+  match s with
+  | Inl a -> apply u a
+  | Inr b -> apply v b
+  | Neutral n -> Neutral (Case (p, n, u, v))
+  | _ -> assert false
+
 let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
   | Unit -> Type.Unit
   | MkUnit -> Type.MkUnit
   | Empty -> Type.Empty
+  | Sum (a, b) -> Type.Sum (quote l a, quote l b)
+  | Inl t -> Type.Inl (quote l t)
+  | Inr t -> Type.Inr (quote l t)
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
   | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
   | Sigma (x, a, c) -> Type.Sigma (x, quote l a, quote_closure l c)
@@ -93,5 +114,7 @@ and quote_neutral l = function
   | Absurd (a, n) -> Type.Absurd (quote l a, quote_neutral l n)
   | Fst n -> Type.Fst (quote_neutral l n)
   | Snd n -> Type.Snd (quote_neutral l n)
+  | Case (p, n, u, v) ->
+      Type.Case (quote l p, quote_neutral l n, quote l u, quote l v)
 
 let normalize t = quote 0 (eval [] t)

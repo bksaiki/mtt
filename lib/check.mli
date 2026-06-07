@@ -112,6 +112,25 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
       ────────────────────── (Fst)   ─────────────────────── (Snd)
           Γ ⊢ p.1 : A                  Γ ⊢ p.2 : B[p.1/x]
 
+      Γ ⊢ A : Sort i    Γ ⊢ B : Sort j
+      ───────────────────────────────── (Sum)
+          Γ ⊢ A + B : Sort (max i j)
+
+       Γ ⊢ a ⇐ A                  Γ ⊢ b ⇐ B
+      ────────────────── (Inl)   ────────────────── (Inr)
+      Γ ⊢ inl a ⇐ A + B          Γ ⊢ inr b ⇐ A + B
+
+        checking only: an injection does not determine the other side
+
+      Γ ⊢ s : A + B    Γ ⊢ P : A + B → Sort j
+      Γ ⊢ u ⇐ Π (x : A) ⇒ P (inl x)    Γ ⊢ v ⇐ Π (y : B) ⇒ P (inr y)
+      ─────────────────────────────────────────────────────────────── (Case)
+                        Γ ⊢ case P s u v : P s
+
+        with the large-elimination restriction: if A + B is a Prop, then
+        j = 0 — proof irrelevance makes inl h ≡ inr h', so a Type-valued
+        case could distinguish equal proofs
+
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Pi)
           Γ ⊢ (x : A) -> B : Sort (imax i j)
