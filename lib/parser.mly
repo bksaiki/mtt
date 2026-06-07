@@ -1,6 +1,6 @@
 %token <string> ID
 %token <int> INT
-%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES PLUS INL INR CASE COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -67,7 +67,7 @@ term:
    dependent pi binder. (Consequently extra parens cannot force the
    ascription reading there.) *)
 pi_term:
-  | a = prod_term; ARROW; b = pi_term
+  | a = sum_term; ARROW; b = pi_term
     { match a.Ast.desc with
       | Ast.Ascribe (e, ty) -> (
           (* an ascribed variable spine [(x y : A)] is a pi binder group *)
@@ -75,9 +75,14 @@ pi_term:
           | Some xs -> Ast.pis $loc [ (xs, ty) ] b
           | None -> Ast.mk $loc (Ast.Arrow (a, b)))
       | _ -> Ast.mk $loc (Ast.Arrow (a, b)) }
+  | t = sum_term { t }
+
+(* sums sit between arrows and products; right-associative *)
+sum_term:
+  | a = prod_term; PLUS; b = sum_term { Ast.mk $loc (Ast.Sum (a, b)) }
   | t = prod_term { t }
 
-(* products bind tighter than arrows, looser than application;
+(* products bind tighter than sums, looser than application;
    right-associative *)
 prod_term:
   | a = app_term; TIMES; b = prod_term { Ast.mk $loc (Ast.Prod (a, b)) }
@@ -88,6 +93,11 @@ app_term:
   | f = app_term; a = atom { Ast.mk $loc (Ast.App (f, a)) }
   (* the eliminator for Empty is primitive syntax: motive, then proof *)
   | ABSURD; a = atom; h = atom { Ast.mk $loc (Ast.Absurd (a, h)) }
+  (* injections, and the sum recursor: motive, scrutinee, branches *)
+  | INL; t = atom { Ast.mk $loc (Ast.Inl t) }
+  | INR; t = atom { Ast.mk $loc (Ast.Inr t) }
+  | CASE; p = atom; s = atom; u = atom; v = atom
+    { Ast.mk $loc (Ast.Case (p, s, u, v)) }
   | t = atom { t }
 
 atom:

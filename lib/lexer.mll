@@ -29,6 +29,9 @@ rule token = parse
   | "Unit" { UNIT }
   | "Empty" { EMPTY }
   | "absurd" { ABSURD }
+  | "inl" { INL }
+  | "inr" { INR }
+  | "case" { CASE }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }
   | "#eval" { EVAL }
@@ -42,6 +45,7 @@ rule token = parse
   | "⇒" { DARROW }
   | "=" { EQUALS }
   | ":=" { EQUALS }
+  | "+" { PLUS }
   | "×" { TIMES }
   | "*" { TIMES }
   | "," { COMMA }
