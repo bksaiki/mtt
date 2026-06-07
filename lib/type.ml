@@ -13,6 +13,10 @@ type t =
   | Pair of t * t (* (a, b) *)
   | Fst of t (* p.1 *)
   | Snd of t (* p.2 *)
+  | Sum of t * t (* A + B *)
+  | Inl of t (* left injection *)
+  | Inr of t (* right injection *)
+  | Case of t * t * t * t (* case P s u v: eliminates s : A + B at motive P *)
 
 let rec occurs k = function
   | Unit
@@ -31,6 +35,11 @@ let rec occurs k = function
   | Fst t
   | Snd t ->
       occurs k t
+  | Sum (a, b) -> occurs k a || occurs k b
+  | Inl t
+  | Inr t ->
+      occurs k t
+  | Case (p, s, u, v) -> occurs k p || occurs k s || occurs k u || occurs k v
 
 let pp_in names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
@@ -54,8 +63,8 @@ let pp_in names fmt t =
     else
       body fmt
   in
-  (* precedence: 0 = binders, 1 = arrow, 3 = product, 10 = application, 11 =
-     atom *)
+  (* precedence: 0 = binders, 1 = arrow, 2 = sum, 3 = product, 10 = application,
+     11 = atom *)
   let rec go prec names fmt t =
     match t with
     | Unit -> Format.pp_print_string fmt "Unit"
@@ -125,6 +134,20 @@ let pp_in names fmt t =
           (a :: components b)
     | Fst t -> Format.fprintf fmt "%a.1" (go 11 names) t
     | Snd t -> Format.fprintf fmt "%a.2" (go 11 names) t
+    (* + is right-associative, between arrows and products *)
+    | Sum (a, b) ->
+        paren_if (prec > 2) (fun fmt ->
+            Format.fprintf fmt "@[%a +@ %a@]" (go 3 names) a (go 2 names) b)
+    | Inl t ->
+        paren_if (prec > 10) (fun fmt ->
+            Format.fprintf fmt "@[inl@ %a@]" (go 11 names) t)
+    | Inr t ->
+        paren_if (prec > 10) (fun fmt ->
+            Format.fprintf fmt "@[inr@ %a@]" (go 11 names) t)
+    | Case (p, s, u, v) ->
+        paren_if (prec > 10) (fun fmt ->
+            Format.fprintf fmt "@[case@ %a@ %a@ %a@ %a@]" (go 11 names) p
+              (go 11 names) s (go 11 names) u (go 11 names) v)
   in
   go 0 names fmt t
 

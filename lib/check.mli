@@ -65,7 +65,8 @@ val show_term : ctx -> Type.t -> string
     true by proof irrelevance; at a Pi, both sides are applied to a fresh
     variable (η, so lambda annotations are never compared); at [Unit], true (η:
     every element is [()]); at a Σ, by comparing projections (surjective
-    pairing); at a sort, the values are types and are compared structurally. *)
+    pairing); at a sum, injections compare componentwise and there is no η; at a
+    sort, the values are types and are compared structurally. *)
 val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
 
 (** [infer ctx t] synthesizes the type of [t] as a value, by the rules:
@@ -111,6 +112,25 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
       Γ ⊢ p : Σ (x : A) ⇒ B          Γ ⊢ p : Σ (x : A) ⇒ B
       ────────────────────── (Fst)   ─────────────────────── (Snd)
           Γ ⊢ p.1 : A                  Γ ⊢ p.2 : B[p.1/x]
+
+      Γ ⊢ A : Sort i    Γ ⊢ B : Sort j
+      ───────────────────────────────── (Sum)
+          Γ ⊢ A + B : Sort (max i j)
+
+       Γ ⊢ a ⇐ A                  Γ ⊢ b ⇐ B
+      ────────────────── (Inl)   ────────────────── (Inr)
+      Γ ⊢ inl a ⇐ A + B          Γ ⊢ inr b ⇐ A + B
+
+        checking only: an injection does not determine the other side
+
+      Γ ⊢ s : A + B    Γ ⊢ P : A + B → Sort j
+      Γ ⊢ u ⇐ Π (x : A) ⇒ P (inl x)    Γ ⊢ v ⇐ Π (y : B) ⇒ P (inr y)
+      ─────────────────────────────────────────────────────────────── (Case)
+                        Γ ⊢ case P s u v : P s
+
+        with the large-elimination restriction: if A + B is a Prop, then
+        j = 0 — proof irrelevance makes inl h ≡ inr h', so a Type-valued
+        case could distinguish equal proofs
 
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Pi)

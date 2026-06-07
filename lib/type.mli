@@ -22,6 +22,13 @@ type t =
   | Pair of t * t  (** (a, b) *)
   | Fst of t  (** p.1 *)
   | Snd of t  (** p.2 *)
+  | Sum of t * t  (** A + B *)
+  | Inl of t  (** left injection *)
+  | Inr of t  (** right injection *)
+  | Case of t * t * t * t
+      (** [Case (P, s, u, v)]: the recursor — eliminates [s : A + B] at motive
+          [P : A + B → Sort j], with branches [u : Π (x : A) ⇒ P (inl x)] and
+          [v : Π (y : B) ⇒ P (inr y)] *)
 
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool

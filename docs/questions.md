@@ -34,9 +34,11 @@ because there is no elaborator to infer motives. `match`-style syntax with
 an inferred constant motive could be layered on later without kernel
 changes.
 
-**Status**: recursor decided for the first iteration; the sugar question
-is open. **Revisit**: after sums land and the verbosity is felt in
-`bool.mtt`.
+**Status**: recursor implemented; the verbosity is real but largely
+absorbed by library combinators (`elim` in `sum.mtt`, `ife` in `bool.mtt`)
+— the motive is written once per combinator, not per use. **Revisit**: when
+dependent eliminations (where combinators can't help) become common, or
+with the elaborator.
 
 ## Statement boundaries in files
 

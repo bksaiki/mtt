@@ -134,3 +134,29 @@ let%expect_test "flat .n projections explain themselves" =
   | Parse.Error (loc, msg) -> Printf.printf "%s: %s\n" (Loc.to_string loc) msg);
   [%expect
     {| 1:2: no projection .3: tuples are right-nested pairs, so e.g. the third component of a triple is .2.2 |}]
+
+let%expect_test "sums: precedence, injections, case" =
+  (* + is right-associative, between × and -> *)
+  roundtrip "Unit + Unit + Unit";
+  [%expect {| Unit + Unit + Unit |}];
+  roundtrip "(Unit + Unit) + Unit";
+  [%expect {| (Unit + Unit) + Unit |}];
+  roundtrip "Unit × Unit + Unit × Unit";
+  [%expect {| Unit × Unit + Unit × Unit |}];
+  roundtrip "Unit + Unit -> Unit";
+  [%expect {| Unit + Unit -> Unit |}];
+  roundtrip "(Unit -> Unit) + Unit";
+  [%expect {| (Unit -> Unit) + Unit |}];
+  (* injections and case are prefix forms at application precedence *)
+  roundtrip "(inl () : Unit + Empty)";
+  [%expect {| (fun (x : Unit + Empty) => x) (inl ()) |}];
+  roundtrip {|λ f : Unit → Unit + Unit ⇒ f ()|};
+  [%expect {| fun (f : Unit -> Unit + Unit) => f () |}];
+  roundtrip
+    {|λ s : Unit + Unit ⇒ case (λ x : Unit + Unit ⇒ Unit) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
+  [%expect
+    {|
+    fun (s : Unit + Unit) =>
+    case (fun (x : Unit + Unit) => Unit) s (fun (x : Unit) => x)
+    (fun (y : Unit) => y)
+    |}]

@@ -6,14 +6,17 @@
 - [x] Σ types (negative: pairs + projections `.1`/`.2`, surjective
       pairing in `conv`; `A × B` as the non-dependent case, `*` ascii;
       bare pairs infer at the constant family, Lean-style)
-- [ ] Binary sums `A + B` (first positive type: stuck `case` frames in
-      neutrals, motives for dependent elimination, and the Prop
-      large-elimination restriction becomes a real check)
+- [x] Binary sums `A + B` (first positive type: `case` recursor with
+      explicit motive, ι-reduction, stuck `case` frames, and the Prop
+      large-elimination restriction enforced)
 - [x] `Unit` with definitional η (`Unit : Type`, deliberately not `Prop`:
       a `Prop` unit would collapse `Bool := Unit + Unit` by irrelevance)
 - [x] `Empty` (`absurd`, subsingleton elimination: `Empty : Prop` but
       eliminates into any sort)
-- [ ] `Bool := Unit + Unit` once sums land
+- [x] `Bool := Unit + Unit` — derived, not kernel (`examples/bool.mtt`);
+      dependent elimination on it works via Unit-η
+- [ ] A prelude: definitions (Bool, elim, ...) preloaded into every
+      session, once an import mechanism exists
 - [ ] Inductive types / naturals with eliminator (replaces Church encodings;
       sums + Σ + unit/empty are the warm-up)
 - [ ] Identity type (`Eq` / `refl` / `J`) — internalizes `#check_equal`

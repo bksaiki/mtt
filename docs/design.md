@@ -1,7 +1,10 @@
 # Design
 
-A minimal dependent type theory: Π types and a predicative universe
-hierarchy, checked with normalization by evaluation (NbE).
+A small dependent type theory in the Calculus of Constructions family:
+Π and Σ types, binary sums, `Unit` and `Empty`, and an impredicative
+`Prop` under a predicative cumulative `Type` tower — checked bidirectionally
+with normalization by evaluation (NbE), type-directed conversion, and
+definitional proof irrelevance.
 
 This file records *settled* decisions; open questions live in
 `questions.md`, agreed-on work in `todo.md`.
@@ -64,6 +67,9 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **η for pairs** (surjective pairing) — at a Σ type, values are compared
   by their projections, the second at the family instantiated by the
   first; `p ≡ (p.1, p.2)` holds for neutral `p`.
+- **ι** — `case` on an injection picks the branch (`vcase`); sums are
+  positive, so there is **no η**: a stuck sum equals only another stuck
+  sum with convertible scrutinee, motive, and branches.
 - **proof irrelevance** — at a type in `Prop`, any two values are equal
   (a one-line guard in `conv`, made possible by type direction); applies
   inside neutral spines, so `P h1 ≡ P h2` for any proofs `h1`, `h2`.
@@ -85,10 +91,12 @@ where `imax i 0 = 0` — a product into a proposition is a proposition, no
 matter the domain — and `max i j` otherwise. The whole difference between
 `Prop` and `Type` is that one `imax` in `check.ml`'s Pi rule, plus proof
 irrelevance in `conv`. `Empty : Prop` eliminates into any sort via `absurd`
-— subsingleton elimination, sound because it has no introduction forms; the
-general large-elimination restriction becomes mandatory with sums/inductives
-(a `Prop` with two constructors must not eliminate into `Type`, or
-irrelevance is unsound).
+— subsingleton elimination, sound because it has no introduction forms. For
+sums the general large-elimination restriction is enforced: `+` forms at
+plain `max` (so `p + q : Prop` is native disjunction), proof irrelevance
+makes `inl h ≡ inr h'` at a `Prop`-sum, and therefore `case` on a
+proposition must target `Prop` — a `Type`-valued motive could distinguish
+definitionally equal proofs.
 
 ## Errors and locations
 

@@ -13,6 +13,9 @@ type t =
   | Empty
   | Sigma of string * t * closure
   | Pair of t * t
+  | Sum of t * t
+  | Inl of t
+  | Inr of t
   | Neutral of neutral
 
 (** a stuck term: a variable applied to a spine of eliminations *)
@@ -22,6 +25,8 @@ and neutral =
   | Absurd of t * neutral  (** a stuck ex falso: motive and stuck proof *)
   | Fst of neutral  (** a stuck first projection *)
   | Snd of neutral  (** a stuck second projection *)
+  | Case of t * neutral * t * t
+      (** a stuck case: motive, stuck scrutinee, both branches *)
 
 (** a suspended binder body: syntax waiting for the bound variable's value *)
 and closure =
@@ -58,6 +63,10 @@ val vfst : t -> t
 
 (** [vsnd v] is the second-component counterpart of {!vfst} *)
 val vsnd : t -> t
+
+(** [vcase p s u v] eliminates the sum value [s]: ι-reduction on an injection, a
+    stuck {!neutral.Case} frame otherwise *)
+val vcase : t -> t -> t -> t -> t
 
 (** [normalize t] is the βδ-normal form of the closed term [t]:
     [quote 0 (eval [] t)] *)
