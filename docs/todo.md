@@ -3,9 +3,9 @@
 ## Core theory
 
 - [ ] Local `let` expressions
-- [ ] Σ types (negative: pairs + projections, η; subsumes `A × B`):
-      formation at `Sort (max i j)` (no imax — but `Prop × Prop : Prop`),
-      pairs check-only, `conv` gets surjective pairing at `Sigma` type
+- [x] Σ types (negative: pairs + projections `.1`/`.2`, surjective
+      pairing in `conv`; `A × B` as the non-dependent case, `*` ascii;
+      bare pairs infer at the constant family, Lean-style)
 - [ ] Binary sums `A + B` (first positive type: stuck `case` frames in
       neutrals, motives for dependent elimination, and the Prop
       large-elimination restriction becomes a real check)

@@ -19,6 +19,11 @@ and desc =
   | MkUnit
   | Empty
   | Absurd of t * t  (** [absurd A h] *)
+  | Sigma of string * t * t  (** Σ (x : A) ⇒ B *)
+  | Prod of t * t  (** A × B *)
+  | Pair of t * t  (** (a, b) *)
+  | Fst of t  (** p.1 *)
+  | Snd of t  (** p.2 *)
 
 (** [mk loc desc] is the node [desc] located at [loc] *)
 val mk : Loc.t -> desc -> t
@@ -30,6 +35,9 @@ val lams : Loc.t -> (string list * t) list -> t -> t
 
 (** [pis loc groups body] is the Π counterpart of {!lams} *)
 val pis : Loc.t -> (string list * t) list -> t -> t
+
+(** [sigmas loc groups body] is the Σ counterpart of {!lams} *)
+val sigmas : Loc.t -> (string list * t) list -> t -> t
 
 (** [var_spine t] is [Some [x1; ...; xn]] if [t] is an application spine of
     variables [x1 ... xn]: used by the parser to read the ascription [(x y : A)]

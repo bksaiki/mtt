@@ -11,6 +11,8 @@ type t =
   | Unit
   | MkUnit
   | Empty
+  | Sigma of string * t * closure
+  | Pair of t * t
   | Neutral of neutral
 
 (** a stuck term: a variable applied to a spine of eliminations *)
@@ -18,6 +20,8 @@ and neutral =
   | Var of int  (** de Bruijn level *)
   | App of neutral * t
   | Absurd of t * neutral  (** a stuck ex falso: motive and stuck proof *)
+  | Fst of neutral  (** a stuck first projection *)
+  | Snd of neutral  (** a stuck second projection *)
 
 (** a suspended binder body: syntax waiting for the bound variable's value *)
 and closure =
@@ -47,6 +51,13 @@ val apply_closure : closure -> t -> t
     scope. Levels convert to indices by [l - k - 1]; closures are quoted by
     applying them to a fresh stuck variable. *)
 val quote : int -> t -> Type.t
+
+(** [vfst v] projects a value's first component: reduction on a pair, a stuck
+    [Fst] frame on a neutral *)
+val vfst : t -> t
+
+(** [vsnd v] is the second-component counterpart of {!vfst} *)
+val vsnd : t -> t
 
 (** [normalize t] is the βδ-normal form of the closed term [t]:
     [quote 0 (eval [] t)] *)

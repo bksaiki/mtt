@@ -4,18 +4,24 @@
     (α-equivalence is structural equality). *)
 
 type t =
+  | Unit  (** the unit type, with definitional η: every element is [MkUnit] *)
+  | MkUnit  (** the element of [Unit] *)
+  | Empty  (** the empty type: falsity, in Prop *)
   | Var of int  (** de Bruijn index *)
   | Sort of int  (** the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of string * t * t  (** Π (x : A). B, where B binds index 0 *)
   | Lam of string * t * t  (** λ (x : A). b, where b binds index 0 *)
   | App of t * t
-  | Unit  (** the unit type, with definitional η: every element is [MkUnit] *)
-  | MkUnit  (** the element of [Unit] *)
-  | Empty  (** the empty type: falsity, in Prop *)
   | Absurd of t * t
       (** [Absurd (A, h)]: ex falso — eliminates [h : Empty] at motive [A] in
           any sort (subsingleton elimination, sound because [Empty] has no
           introduction forms) *)
+  | Sigma of string * t * t
+      (** Σ (x : A) ⇒ B, where B binds index 0; prints as [A × B] when
+          non-dependent *)
+  | Pair of t * t  (** (a, b) *)
+  | Fst of t  (** p.1 *)
+  | Snd of t  (** p.2 *)
 
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool

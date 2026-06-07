@@ -35,3 +35,9 @@
  (deps empty.mtt %{bin:mtt})
  (action
   (run mtt empty.mtt)))
+
+(rule
+ (alias runtest)
+ (deps sigma.mtt %{bin:mtt})
+ (action
+  (run mtt sigma.mtt)))

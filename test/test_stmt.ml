@@ -206,3 +206,27 @@ let%expect_test "Empty: irrelevance and stuck absurd" =
     ; "theorem dni (x : p) : negate (negate p) := λ k : negate p ⇒ k x"
     ];
   [%expect {| fun (A : Prop) => A -> Empty : Prop -> Prop |}]
+
+let%expect_test "sigma: beta, eta, dependent pairs, irrelevance" =
+  session
+    [ "axiom Nat : Type"
+    ; "axiom zero : Nat"
+    ; (* beta: projections of a literal pair *)
+      "def p : Nat × Nat := (zero, zero)"
+    ; "#check_equal p.1 zero"
+    ; (* a dependent pair: the type of the package depends on its head *)
+      "def package : Σ (A : Type) ⇒ A := (Unit, ())"
+    ; "#check package.2"
+    ; (* eta (surjective pairing) on a neutral pair *)
+      "axiom q : Nat × Nat"
+    ; "#check_equal q (q.1, q.2)"
+    ; (* eta and unit-eta compose: any two pairs of units are equal *)
+      "axiom r : Unit × Unit"
+    ; "#check_equal r ((), ())"
+    ; (* proof pairs are props, hence irrelevant *)
+      "axiom a : Prop"
+    ; "axiom c1 : a × a"
+    ; "axiom c2 : a × a"
+    ; "#check_equal c1 c2"
+    ];
+  [%expect {| () : Unit |}]

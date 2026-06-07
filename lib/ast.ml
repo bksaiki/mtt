@@ -15,6 +15,11 @@ and desc =
   | MkUnit
   | Empty
   | Absurd of t * t (* absurd A h *)
+  | Sigma of string * t * t (* Σ (x : A) ⇒ B *)
+  | Prod of t * t (* A × B *)
+  | Pair of t * t (* (a, b) *)
+  | Fst of t (* p.1 *)
+  | Snd of t (* p.2 *)
 
 let mk loc desc = { loc; desc }
 
@@ -32,6 +37,12 @@ let pis loc groups body =
   List.fold_right
     (fun (xs, a) acc ->
       List.fold_right (fun x acc -> mk loc (Pi (x, a, acc))) xs acc)
+    groups body
+
+let sigmas loc groups body =
+  List.fold_right
+    (fun (xs, a) acc ->
+      List.fold_right (fun x acc -> mk loc (Sigma (x, a, acc))) xs acc)
     groups body
 
 let var_spine t =
@@ -63,6 +74,12 @@ let to_term names s =
     | MkUnit -> Type.MkUnit
     | Empty -> Type.Empty
     | Absurd (a, h) -> Type.Absurd (go env a, go env h)
+    | Sigma (x, a, b) -> Type.Sigma (x, go env a, go (x :: env) b)
+    (* non-dependent product: same dummy-binder trick as Arrow *)
+    | Prod (a, b) -> Type.Sigma ("", go env a, go ("" :: env) b)
+    | Pair (a, b) -> Type.Pair (go env a, go env b)
+    | Fst t -> Type.Fst (go env t)
+    | Snd t -> Type.Snd (go env t)
     (* ascription is the typed identity: applying (fun (x : A) => x) to [t]
        forces the checking judgment t ⇐ A, and the redex evaporates under
        evaluation. No core constructor needed. *)

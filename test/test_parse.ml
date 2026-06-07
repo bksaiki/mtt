@@ -96,3 +96,41 @@ let%expect_test "() is the unit element" =
   [%expect {| () |}];
   roundtrip {|λ f : Unit → Unit ⇒ f ()|};
   [%expect {| fun (f : Unit -> Unit) => f () |}]
+
+let%expect_test "sigma, products, pairs, projections" =
+  roundtrip {|Σ (A : Type) ⇒ A|};
+  [%expect {| Σ (A : Type) ⇒ A |}];
+  roundtrip {|Σ (A B : Type) (x : A) ⇒ B|};
+  [%expect {| Σ (A : Type) ⇒ Σ (B : Type) ⇒ A × B |}];
+  roundtrip {|Σ A : Type ⇒ A|};
+  [%expect {| Σ (A : Type) ⇒ A |}];
+  (* * is the ascii spelling of × *)
+  roundtrip "Type * Unit";
+  [%expect {| Type × Unit |}];
+  (* products bind tighter than arrows, looser than application *)
+  roundtrip {|Unit × Unit → Unit|};
+  [%expect {| Unit × Unit -> Unit |}];
+  roundtrip {|λ f : Type → Type ⇒ f Unit × Unit|};
+  [%expect {| fun (f : Type -> Type) => f Unit × Unit |}];
+  (* × is right-associative *)
+  roundtrip {|Unit × Unit × Unit|};
+  [%expect {| Unit × Unit × Unit |}];
+  roundtrip {|(Unit × Unit) × Unit|};
+  [%expect {| (Unit × Unit) × Unit |}];
+  (* tuples right-nest; projections are postfix and tightest *)
+  roundtrip "((), ((), ()))";
+  [%expect {| ((), (), ()) |}];
+  roundtrip "((), (), ())";
+  [%expect {| ((), (), ()) |}];
+  roundtrip {|λ p : Unit × Unit ⇒ p.1|};
+  [%expect {| fun (p : Unit × Unit) => p.1 |}];
+  roundtrip {|λ p : Unit × (Unit × Unit) ⇒ p.2.1|};
+  [%expect {| fun (p : Unit × Unit × Unit) => p.2.1 |}];
+  roundtrip {|λ f : Unit → Unit × Unit ⇒ λ u : Unit ⇒ (f u).2|};
+  [%expect {| fun (f : Unit -> Unit × Unit) => fun (u : Unit) => (f u).2 |}]
+
+let%expect_test "flat .n projections explain themselves" =
+  (try roundtrip "t.3" with
+  | Parse.Error (loc, msg) -> Printf.printf "%s: %s\n" (Loc.to_string loc) msg);
+  [%expect
+    {| 1:2: no projection .3: tuples are right-nested pairs, so e.g. the third component of a triple is .2.2 |}]

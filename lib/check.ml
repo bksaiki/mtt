@@ -55,6 +55,15 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       | Value.Pi (_, _, c) -> Value.apply_closure c a
       | _ -> assert false (* values are well-typed by invariant *))
   | Value.Absurd (a, _) -> a (* the motive is the type *)
+  | Value.Fst n -> (
+      match infer_neutral ctx n with
+      | Value.Sigma (_, a, _) -> a
+      | _ -> assert false)
+  | Value.Snd n -> (
+      match infer_neutral ctx n with
+      | Value.Sigma (_, _, c) ->
+          Value.apply_closure c (Value.Neutral (Value.Fst n))
+      | _ -> assert false)
 
 (* [sort_of ctx ty] is the i such that [ty : Sort i] *)
 let rec sort_of ctx (ty : Value.t) : int =
@@ -65,12 +74,18 @@ let rec sort_of ctx (ty : Value.t) : int =
       imax (sort_of ctx a) j
   | Value.Unit -> 1 (* Unit : Type *)
   | Value.Empty -> 0 (* Empty : Prop *)
+  (* plain max, no imax: a Σ is a proposition only when both components are, so
+     data can never hide inside a Prop *)
+  | Value.Sigma (x, a, c) ->
+      let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
+      max (sort_of ctx a) j
   | Value.Neutral n -> (
       match infer_neutral ctx n with
       | Value.Sort i -> i
       | _ -> assert false)
   | Value.Lam _
-  | Value.MkUnit ->
+  | Value.MkUnit
+  | Value.Pair _ ->
       assert false (* not types *)
 
 (* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
@@ -89,8 +104,14 @@ let rec conv ctx ty v1 v2 =
         (Value.apply v2 v)
   (* at a sort, the values are types: compare strictly *)
   | Value.Sort _ -> conv_ty ~cumul:false ctx v1 v2
-  (* η for Unit: every element is tt, so any two are equal *)
+  (* η for Unit: every element is (), so any two are equal *)
   | Value.Unit -> true
+  (* η for pairs (surjective pairing): compare the projections, the second at
+     the instantiated component type *)
+  | Value.Sigma (_, a, c) ->
+      let f1 = Value.vfst v1 in
+      conv ctx a f1 (Value.vfst v2)
+      && conv ctx (Value.apply_closure c f1) (Value.vsnd v1) (Value.vsnd v2)
   (* at a stuck type there are no intro forms: both sides are neutral *)
   | _ -> (
       match (v1, v2) with
@@ -115,6 +136,14 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
         (Value.apply_closure c2 v)
   | Value.Unit, Value.Unit -> true
   | Value.Empty, Value.Empty -> true
+  (* sigma: unlike pi there is no contravariant position, so both components are
+     covariant under cumulativity *)
+  | Value.Sigma (x, a1, c1), Value.Sigma (_, a2, c2) ->
+      conv_ty ~cumul ctx a1 a2
+      &&
+      let v = fresh ctx in
+      conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
+        (Value.apply_closure c2 v)
   | Value.Neutral n1, Value.Neutral n2 ->
       Option.is_some (conv_neutral ctx n1 n2)
   | _ -> false
@@ -136,6 +165,15 @@ and conv_neutral ctx n1 n2 : Value.t option =
           else
             None
       | _ -> None)
+  | Value.Fst n1, Value.Fst n2 -> (
+      match conv_neutral ctx n1 n2 with
+      | Some (Value.Sigma (_, a, _)) -> Some a
+      | _ -> None)
+  | Value.Snd n1, Value.Snd n2 -> (
+      match conv_neutral ctx n1 n2 with
+      | Some (Value.Sigma (_, _, c)) ->
+          Some (Value.apply_closure c (Value.Neutral (Value.Fst n1)))
+      | _ -> None)
   (* stuck ex falso: the motives must agree; the proofs are of type Empty, a
      Prop, so by irrelevance they need not be compared at all *)
   | Value.Absurd (a1, _), Value.Absurd (a2, _) ->
@@ -152,17 +190,11 @@ let sub ctx t1 t2 = conv_ty ~cumul:true ctx t1 t2
    check.mli *)
 let rec infer ctx t =
   match t with
-  | Type.Var i -> List.nth ctx.types i (* (Var) *)
-  | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
   | Type.Unit -> Value.Sort 1 (* (Unit): Unit : Type *)
   | Type.MkUnit -> Value.Unit (* (MkUnit) *)
   | Type.Empty -> Value.Sort 0 (* (Empty): Empty : Prop *)
-  (* (Absurd): subsingleton elimination — the motive may live in any sort, even
-     though Empty is a Prop, because Empty has no introduction forms *)
-  | Type.Absurd (a, h) ->
-      let _ = infer_univ ctx a in
-      check ctx h Value.Empty;
-      Value.eval ctx.env a
+  | Type.Var i -> List.nth ctx.types i (* (Var) *)
+  | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
   (* (Pi) *)
   | Type.Pi (x, a, b) ->
       let i = infer_univ ctx a in
@@ -185,6 +217,41 @@ let rec infer ctx t =
       | ty ->
           type_error "expected a function, but %s has type %s" (show_term ctx f)
             (show ctx ty))
+  (* (Absurd): subsingleton elimination — the motive may live in any sort, even
+     though Empty is a Prop, because Empty has no introduction forms *)
+  | Type.Absurd (a, h) ->
+      let _ = infer_univ ctx a in
+      check ctx h Value.Empty;
+      Value.eval ctx.env a
+  (* (Sigma): plain max — no imax, see sort_of *)
+  | Type.Sigma (x, a, b) ->
+      let i = infer_univ ctx a in
+      let j = infer_univ (bind x (Value.eval ctx.env a) ctx) b in
+      Value.Sort (max i j)
+  (* (Pair-infer): a bare pair infers at the constant family — the components
+     cannot determine a dependent one, so like Lean we default to (type of a) ×
+     (type of b); dependent pairs arrive via checking. Quoting [tb] one level up
+     weakens it across the closure's binder. *)
+  | Type.Pair (a, b) ->
+      let ta = infer ctx a in
+      let tb = infer ctx b in
+      Value.Sigma
+        ("", ta, { env = ctx.env; body = Value.quote (ctx.lvl + 1) tb })
+  (* (Fst) *)
+  | Type.Fst p -> (
+      match infer ctx p with
+      | Value.Sigma (_, a, _) -> a
+      | ty ->
+          type_error "expected a pair, but %s has type %s" (show_term ctx p)
+            (show ctx ty))
+  (* (Snd): the result type instantiates the family at the first projection *)
+  | Type.Snd p -> (
+      match infer ctx p with
+      | Value.Sigma (_, _, c) ->
+          Value.apply_closure c (Value.vfst (Value.eval ctx.env p))
+      | ty ->
+          type_error "expected a pair, but %s has type %s" (show_term ctx p)
+            (show ctx ty))
 
 (* infers and requires a sort: used where the rules demand "a type" *)
 and infer_univ ctx t =
@@ -206,6 +273,11 @@ and check ctx t expected =
           (show ctx va) (show ctx dom);
       check (bind x va ctx) b
         (Value.apply_closure c (Value.Neutral (Value.Var ctx.lvl)))
+  (* (Pair): check the components, the second against the family instantiated at
+     the first *)
+  | Type.Pair (a, b), Value.Sigma (_, dom, c) ->
+      check ctx a dom;
+      check ctx b (Value.apply_closure c (Value.eval ctx.env a))
   (* subsumption: infer and compare up to definitional equality (βδη plus proof
      irrelevance) and cumulativity *)
   | _ ->

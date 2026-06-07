@@ -127,3 +127,33 @@ let%expect_test "Empty and absurd" =
   (* the proof must actually be of type Empty *)
   infer "absurd Unit ()";
   [%expect {| type error: this term has type Unit but Empty was expected |}]
+
+let%expect_test "sigma formation sorts" =
+  infer {|Σ (A : Type) ⇒ A|};
+  [%expect {| Type 1 |}];
+  infer "Unit × Unit";
+  [%expect {| Type |}];
+  (* plain max: a pair of props is a prop, data never hides in Prop *)
+  infer "(p : Prop) -> (q : Prop) -> (p × q : Prop) -> Unit";
+  [%expect {| Type |}];
+  infer "Unit × Empty";
+  [%expect {| Type |}]
+
+let%expect_test "pair inference defaults to the constant family (Lean-style)" =
+  infer "((), ())";
+  [%expect {| Unit × Unit |}];
+  (* the components' types may mention bound variables *)
+  infer {|λ (A : Type) (x : A) ⇒ (x, x)|};
+  [%expect {| (A : Type) -> A -> A × A |}];
+  (* the constant family is the default; a dependent type needs checking *)
+  infer "(Unit, ())";
+  [%expect {| Type × Unit |}];
+  infer {|((Unit, ()) : Σ (A : Type) ⇒ A)|};
+  [%expect {| Σ (A : Type) ⇒ A |}];
+  infer {|(((), ()) : Unit × Unit)|};
+  [%expect {| Unit × Unit |}];
+  (* dependent: the second projection's type mentions the first *)
+  infer {|λ p : (Σ (A : Type) ⇒ A) ⇒ p.2|};
+  [%expect {| (p : Σ (A : Type) ⇒ A) -> p.1 |}];
+  infer "λ u : Unit ⇒ u.1";
+  [%expect {| type error: expected a pair, but u has type Unit |}]
