@@ -46,6 +46,12 @@ let imax i j =
 (* the fresh variable for going under a binder *)
 let fresh ctx = Value.Neutral (Value.Var ctx.lvl)
 
+(* the type of a case branch, Π (x : comp) ⇒ P (inj x): the motive [p] is
+   weakened by quoting one level up so it can sit under the branch's binder *)
+let branch_ty ctx p x inj comp =
+  let pq = Value.quote (ctx.lvl + 1) p in
+  Value.Pi (x, comp, { env = ctx.env; body = Type.App (pq, inj (Type.Var 0)) })
+
 (* the type of a stuck neutral, reconstructed by walking the spine *)
 let rec infer_neutral ctx (n : Value.neutral) : Value.t =
   match n with
@@ -201,18 +207,10 @@ and conv_neutral ctx n1 n2 : Value.t option =
               (Value.apply p1 (fresh ctx))
               (Value.apply p2 (fresh ctx))
           in
-          (* the motive, weakened to sit under one binder *)
-          let pq = Value.quote (ctx.lvl + 1) p1 in
-          let branch_ty x inj comp =
-            Value.Pi
-              ( x
-              , comp
-              , { env = ctx.env; body = Type.App (pq, inj (Type.Var 0)) } )
-          in
           if
             motives_ok
-            && conv ctx (branch_ty "x" (fun t -> Type.Inl t) a) u1 u2
-            && conv ctx (branch_ty "y" (fun t -> Type.Inr t) b) v1 v2
+            && conv ctx (branch_ty ctx p1 "x" (fun t -> Type.Inl t) a) u1 u2
+            && conv ctx (branch_ty ctx p1 "y" (fun t -> Type.Inr t) b) v1 v2
           then
             Some (Value.apply p1 (Value.Neutral n1))
           else
@@ -312,16 +310,8 @@ let rec infer ctx t =
               (show ctx sty)
               (Type.to_string (Type.Sort j));
           let vp = Value.eval ctx.env p in
-          (* the motive, weakened to sit under each branch's binder *)
-          let pq = Value.quote (ctx.lvl + 1) vp in
-          let branch_ty x inj comp =
-            Value.Pi
-              ( x
-              , comp
-              , { env = ctx.env; body = Type.App (pq, inj (Type.Var 0)) } )
-          in
-          check ctx u (branch_ty "x" (fun t -> Type.Inl t) va);
-          check ctx v (branch_ty "y" (fun t -> Type.Inr t) vb);
+          check ctx u (branch_ty ctx vp "x" (fun t -> Type.Inl t) va);
+          check ctx v (branch_ty ctx vp "y" (fun t -> Type.Inr t) vb);
           Value.apply vp (Value.eval ctx.env s)
       | ty ->
           type_error "expected a sum, but %s has type %s" (show_term ctx s)

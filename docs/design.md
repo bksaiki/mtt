@@ -1,7 +1,10 @@
 # Design
 
-A minimal dependent type theory: Π types and a predicative universe
-hierarchy, checked with normalization by evaluation (NbE).
+A small dependent type theory in the Calculus of Constructions family:
+Π and Σ types, binary sums, `Unit` and `Empty`, and an impredicative
+`Prop` under a predicative cumulative `Type` tower — checked bidirectionally
+with normalization by evaluation (NbE), type-directed conversion, and
+definitional proof irrelevance.
 
 This file records *settled* decisions; open questions live in
 `questions.md`, agreed-on work in `todo.md`.

@@ -65,7 +65,8 @@ val show_term : ctx -> Type.t -> string
     true by proof irrelevance; at a Pi, both sides are applied to a fresh
     variable (η, so lambda annotations are never compared); at [Unit], true (η:
     every element is [()]); at a Σ, by comparing projections (surjective
-    pairing); at a sort, the values are types and are compared structurally. *)
+    pairing); at a sum, injections compare componentwise and there is no η; at a
+    sort, the values are types and are compared structurally. *)
 val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
 
 (** [infer ctx t] synthesizes the type of [t] as a value, by the rules:
