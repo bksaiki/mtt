@@ -119,9 +119,9 @@ let%expect_test "sigma, products, pairs, projections" =
   [%expect {| (Unit × Unit) × Unit |}];
   (* tuples right-nest; projections are postfix and tightest *)
   roundtrip "((), ((), ()))";
-  [%expect {| ((), ((), ())) |}];
+  [%expect {| ((), (), ()) |}];
   roundtrip "((), (), ())";
-  [%expect {| ((), ((), ())) |}];
+  [%expect {| ((), (), ()) |}];
   roundtrip {|λ p : Unit × Unit ⇒ p.1|};
   [%expect {| fun (p : Unit × Unit) => p.1 |}];
   roundtrip {|λ p : Unit × (Unit × Unit) ⇒ p.2.1|};

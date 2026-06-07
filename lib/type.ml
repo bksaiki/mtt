@@ -111,7 +111,18 @@ let pp_in names fmt t =
                 (go 3 ("" :: names))
                 b)
     | Pair (a, b) ->
-        Format.fprintf fmt "@[(%a,@ %a)@]" (go 0 names) a (go 0 names) b
+        (* tuples are right-nested pairs: print the right spine flat, so (x, (y,
+           z)) renders as (x, y, z) — its canonical spelling *)
+        let rec components t =
+          match t with
+          | Pair (a, b) -> a :: components b
+          | t -> [ t ]
+        in
+        Format.fprintf fmt "@[(%a)@]"
+          (Format.pp_print_list
+             ~pp_sep:(fun fmt () -> Format.fprintf fmt ",@ ")
+             (go 0 names))
+          (a :: components b)
     | Fst t -> Format.fprintf fmt "%a.1" (go 11 names) t
     | Snd t -> Format.fprintf fmt "%a.2" (go 11 names) t
   in
