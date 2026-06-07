@@ -230,3 +230,52 @@ let%expect_test "sigma: beta, eta, dependent pairs, irrelevance" =
     ; "#check_equal c1 c2"
     ];
   [%expect {| () : Unit |}]
+
+let%expect_test "sums: iota, stuck cases, irrelevance" =
+  session
+    [ "axiom A : Type"
+    ; "axiom B : Type"
+    ; "axiom a : A"
+    ; "axiom b : B"
+    ; "def swap (s : A + B) : B + A :="
+      ^ " case (λ x : A + B ⇒ B + A) s (λ x : A ⇒ (inr x : B + A)) (λ y : B ⇒ \
+         (inl y : B + A))"
+    ; (* ι-reduction picks each branch; injections in argument and checked
+         positions need no ascription *)
+      "#check_equal (swap (inl a)) (inr a)"
+    ; "#check_equal (swap (inr b)) (inl b)"
+    ; (* a stuck case is equal to itself, and not to a sibling with other
+         branches *)
+      "axiom s : A + B"
+    ; "#check swap s"
+    ; "#check_equal (swap s) (swap s)"
+    ; (* same type, different branches: conv compares the stuck branches *)
+      "axiom t : A + A"
+    ; "def same (s : A + A) : A + A :="
+      ^ " case (λ x : A + A ⇒ A + A) s (λ x : A ⇒ (inl x : A + A)) (λ y : A ⇒ \
+         (inr y : A + A))"
+    ; "def cross (s : A + A) : A + A :="
+      ^ " case (λ x : A + A ⇒ A + A) s (λ x : A ⇒ (inr x : A + A)) (λ y : A ⇒ \
+         (inl y : A + A))"
+    ; "#check_equal (same t) (same t)"
+    ; "#check_equal (same t) (cross t)"
+    ; (* no η for sums: a stuck value is not its case-rebuilt self *)
+      "#check_equal (same t) t"
+    ; (* proofs of a disjunction are irrelevant: even different injections are
+         equal *)
+      "axiom p : Prop"
+    ; "axiom q : Prop"
+    ; "axiom hp : p"
+    ; "axiom hq : q"
+    ; "#check_equal (inl hp : p + q) (inr hq : p + q)"
+    ];
+  [%expect
+    {|
+    case (fun (x : A + B) => B + A) s (fun (x : A) => inr x)
+    (fun (y : B) => inl y) : B + A
+    type error: #check_equal failed: case (fun (x : A + A) => A + A) t (fun (x : A) => inl x)
+    (fun (y : A) => inr y) is not convertible with case (fun (x : A + A) => A + A) t (fun (x : A) => inr x)
+    (fun (y : A) => inl y)
+    type error: #check_equal failed: case (fun (x : A + A) => A + A) t (fun (x : A) => inl x)
+    (fun (y : A) => inr y) is not convertible with t
+    |}]

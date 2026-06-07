@@ -41,3 +41,9 @@
  (deps sigma.mtt %{bin:mtt})
  (action
   (run mtt sigma.mtt)))
+
+(rule
+ (alias runtest)
+ (deps sum.mtt %{bin:mtt})
+ (action
+  (run mtt sum.mtt)))

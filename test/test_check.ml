@@ -157,3 +157,48 @@ let%expect_test "pair inference defaults to the constant family (Lean-style)" =
   [%expect {| (p : Σ (A : Type) ⇒ A) -> p.1 |}];
   infer "λ u : Unit ⇒ u.1";
   [%expect {| type error: expected a pair, but u has type Unit |}]
+
+let%expect_test "sum formation sorts" =
+  infer "Unit + Unit";
+  [%expect {| Type |}];
+  infer "Unit + Empty";
+  [%expect {| Type |}];
+  (* plain max: a sum of props is a prop (native disjunction) *)
+  infer "(p : Prop) -> (q : Prop) -> (p + q : Prop) -> Unit";
+  [%expect {| Type |}]
+
+let%expect_test "injections are check-only" =
+  infer "inl ()";
+  [%expect
+    {| type error: cannot infer the type of an injection: ascribe it, e.g. (inl a : A + B) |}];
+  infer "(inl () : Unit + Empty)";
+  [%expect {| Unit + Empty |}]
+
+let%expect_test "case: typing, dependent motive, errors" =
+  infer
+    {|λ s : Unit + Unit ⇒ case (λ x : Unit + Unit ⇒ Unit) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
+  [%expect {| Unit + Unit -> Unit |}];
+  (* a Type-valued motive: large elimination of a data sum is fine *)
+  infer
+    {|λ s : Unit + Empty ⇒ case (λ x : Unit + Empty ⇒ Type) s (λ x : Unit ⇒ Unit) (λ h : Empty ⇒ Empty)|};
+  [%expect {| Unit + Empty -> Type |}];
+  (* the motive must consume the scrutinee's type *)
+  infer
+    {|λ s : Unit + Unit ⇒ case (λ x : Unit ⇒ Unit) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
+  [%expect
+    {| type error: the motive's domain Unit does not match the scrutinee's type Unit + Unit |}];
+  (* and must land in a sort *)
+  infer
+    {|λ s : Unit + Unit ⇒ case (λ x : Unit + Unit ⇒ x) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
+  [%expect {| type error: the motive must land in a sort, not Unit + Unit |}]
+
+let%expect_test "the large-elimination restriction" =
+  (* a proof of a disjunction cannot be eliminated into Type... *)
+  infer
+    {|λ (p q : Prop) (s : p + q) ⇒ case (λ x : p + q ⇒ Unit) s (λ x : p ⇒ ()) (λ y : q ⇒ ())|};
+  [%expect
+    {| type error: cannot eliminate a proof of p + q into Type: a case on a proposition must target Prop |}];
+  (* ...but eliminating into Prop is fine: Or-swap by elimination *)
+  infer
+    {|λ (p q : Prop) (s : p + q) ⇒ case (λ x : p + q ⇒ q + p) s (λ x : p ⇒ (inr x : q + p)) (λ y : q ⇒ (inl y : q + p))|};
+  [%expect {| (p : Prop) -> (q : Prop) -> p + q -> q + p |}]

@@ -6,9 +6,9 @@
 - [x] Σ types (negative: pairs + projections `.1`/`.2`, surjective
       pairing in `conv`; `A × B` as the non-dependent case, `*` ascii;
       bare pairs infer at the constant family, Lean-style)
-- [ ] Binary sums `A + B` (first positive type: stuck `case` frames in
-      neutrals, motives for dependent elimination, and the Prop
-      large-elimination restriction becomes a real check)
+- [x] Binary sums `A + B` (first positive type: `case` recursor with
+      explicit motive, ι-reduction, stuck `case` frames, and the Prop
+      large-elimination restriction enforced)
 - [x] `Unit` with definitional η (`Unit : Type`, deliberately not `Prop`:
       a `Prop` unit would collapse `Bool := Unit + Unit` by irrelevance)
 - [x] `Empty` (`absurd`, subsingleton elimination: `Empty : Prop` but
