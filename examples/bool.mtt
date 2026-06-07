@@ -1,0 +1,55 @@
+-- Booleans, derived: a Bool is a tag with no payload, so it is a sum of
+-- units. Compare church_bool.mtt — same interface, but these booleans are
+-- data: case analysis computes by ι-reduction instead of by application.
+
+def Bool := Unit + Unit
+def true : Bool := inl ()
+def false : Bool := inr ()
+
+-- if-then-else: the non-dependent case, motive written once
+def ife (C : Type) (b : Bool) (t f : C) : C :=
+  case (λ x : Bool ⇒ C) b (λ x : Unit ⇒ t) (λ x : Unit ⇒ f)
+
+def not (b : Bool) : Bool := ife Bool b false true
+def and (a b : Bool) : Bool := ife Bool a b false
+def or (a b : Bool) : Bool := ife Bool a a b
+def xor (a b : Bool) : Bool := ife Bool a (not b) b
+
+-- truth tables, by ι-reduction
+#check_equal (not true) false
+#check_equal (not false) true
+
+#check_equal (and false false) false
+#check_equal (and false true) false
+#check_equal (and true false) false
+#check_equal (and true true) true
+
+#check_equal (or false false) false
+#check_equal (or false true) true
+#check_equal (or true false) true
+#check_equal (or true true) true
+
+#check_equal (xor false false) false
+#check_equal (xor false true) true
+#check_equal (xor true false) true
+#check_equal (xor true true) false
+
+-- dependent elimination: to prove P b for every b, prove it for true and
+-- false. The branches have types Π (x : Unit) ⇒ P (inl x) — so this
+-- type-checks precisely because Unit's η makes inl x ≡ inl () ≡ true:
+-- three features interlocking.
+theorem bool_cases (P : Bool → Prop) (ht : P true) (hf : P false) (b : Bool)
+    : P b :=
+  case (λ x : Bool ⇒ P x) b (λ x : Unit ⇒ ht) (λ x : Unit ⇒ hf)
+
+-- e.g.: every boolean satisfies "is true or is false" — a Prop-sum
+-- motive, proved by bool_cases; the injections check against the branch
+-- types with no ascriptions, since application arguments are checked
+axiom IsTrue : Bool → Prop
+axiom IsFalse : Bool → Prop
+axiom is_true : IsTrue true
+axiom is_false : IsFalse false
+
+theorem true_or_false (b : Bool) : IsTrue b + IsFalse b :=
+  bool_cases (λ x : Bool ⇒ IsTrue x + IsFalse x) (inl is_true)
+    (inr is_false) b

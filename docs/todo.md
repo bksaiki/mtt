@@ -13,7 +13,10 @@
       a `Prop` unit would collapse `Bool := Unit + Unit` by irrelevance)
 - [x] `Empty` (`absurd`, subsingleton elimination: `Empty : Prop` but
       eliminates into any sort)
-- [ ] `Bool := Unit + Unit` once sums land
+- [x] `Bool := Unit + Unit` — derived, not kernel (`examples/bool.mtt`);
+      dependent elimination on it works via Unit-η
+- [ ] A prelude: definitions (Bool, elim, ...) preloaded into every
+      session, once an import mechanism exists
 - [ ] Inductive types / naturals with eliminator (replaces Church encodings;
       sums + Σ + unit/empty are the warm-up)
 - [ ] Identity type (`Eq` / `refl` / `J`) — internalizes `#check_equal`
