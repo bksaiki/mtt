@@ -71,17 +71,27 @@ type t =
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool
 
-(** [pp_in names fmt t] pretty-prints [t] using binder name hints, priming names
-    that would shadow an enclosing binder; [names] supplies the names of
-    enclosing binders for [t]'s free indices, innermost first. Unbound indices
-    print as [!i]. *)
-val pp_in : string list -> Format.formatter -> t -> unit
+(** Display notation: which constructors the printer renders with surface sugar
+    instead of their plain qualified form. The kernel stays notation-ignorant —
+    it never names [Unit]/[Nat]; the frontend builds this from the
+    [@[notation ...]] registry. *)
+type notation = { unit_ctor : ctor_head option  (** rendered as [()] *) }
 
-(** [pp fmt t] pretty-prints the closed term [t] *)
+(** notation that sugars nothing: the plain, faithful printing *)
+val no_notation : notation
+
+(** [pp_in ?notation names fmt t] pretty-prints [t] using binder name hints,
+    priming names that would shadow an enclosing binder; [names] supplies the
+    names of enclosing binders for [t]'s free indices, innermost first. Unbound
+    indices print as [!i]. [notation] (default {!no_notation}) sugars the
+    registered constructors. *)
+val pp_in : ?notation:notation -> string list -> Format.formatter -> t -> unit
+
+(** [pp fmt t] pretty-prints the closed term [t] (no notation) *)
 val pp : Format.formatter -> t -> unit
 
-(** [to_string_in names t] is [t] rendered via {!pp_in} *)
-val to_string_in : string list -> t -> string
+(** [to_string_in ?notation names t] is [t] rendered via {!pp_in} *)
+val to_string_in : ?notation:notation -> string list -> t -> string
 
 (** [to_string t] is the closed term [t] rendered via {!pp} *)
 val to_string : t -> string

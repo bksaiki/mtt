@@ -78,7 +78,16 @@ let rec occurs k = function
   | Rec _ ->
       false
 
-let pp_in names fmt t =
+(* Display notation: which constructors the printer should render with surface
+   sugar instead of their plain qualified form. The kernel itself stays
+   notation-ignorant — it never names [Unit]/[Nat]; the frontend builds this
+   config from the [@[notation ...]] registry and hands it to the printer (and,
+   for the forward direction, to [Ast.to_term]). *)
+type notation = { unit_ctor : ctor_head option (* rendered as [()] *) }
+
+let no_notation = { unit_ctor = None }
+
+let pp_in ?(notation = no_notation) names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
   let freshen names x =
     let rec prime x =
@@ -210,11 +219,10 @@ let pp_in names fmt t =
     (* inductive heads are atoms; their arguments print via the enclosing App
        nodes (so [Nat.rec P z s n] renders through application) *)
     | Ind name -> Format.pp_print_string fmt name
-    (* the designated unit element prints as its [()] sugar (mirroring the
-       surface); other constructors and the recursor print qualified by their
-       type, matching how they are written *)
-    | Ctor { ind = "Unit"; cname = "unit"; _ } ->
-        Format.pp_print_string fmt "()"
+    (* the constructor registered for the [unit] notation prints as its [()]
+       sugar (mirroring the surface); other constructors and the recursor print
+       qualified by their type, matching how they are written *)
+    | Ctor h when notation.unit_ctor = Some h -> Format.pp_print_string fmt "()"
     | Ctor h -> Format.fprintf fmt "%s.%s" h.ind h.cname
     | Rec h -> Format.fprintf fmt "%s.rec" h.rind
   in
@@ -222,6 +230,7 @@ let pp_in names fmt t =
 
 let pp fmt t = pp_in [] fmt t
 
-let to_string_in names t = Format.asprintf "%a" (pp_in names) t
+let to_string_in ?(notation = no_notation) names t =
+  Format.asprintf "%a" (pp_in ~notation names) t
 
 let to_string t = to_string_in [] t

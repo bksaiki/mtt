@@ -140,6 +140,7 @@ type ctx =
   ; names : string list  (** binder names, for error messages *)
   ; lvl : int  (** binders in scope = next fresh de Bruijn level *)
   ; signature : Signature.t  (** the inductive types declared so far *)
+  ; notation : Type.notation  (** display sugar, from [@[notation ...]] decls *)
   }
 
 val empty : ctx
@@ -187,6 +188,13 @@ val check : ctx -> Type.t -> Value.t -> unit
 (** [add_ind spec ctx] registers an inductive declaration in the context's
     signature, so its former, constructors and recursor can be referenced *)
 val add_ind : Inductive.spec -> ctx -> ctx
+
+(** [register_notation role spec ctx] records that the inductive [spec] fills
+    the notation [role] (currently only ["unit"], for [()]), updating the
+    context's display config. Shape-checks that [spec] can play the role and
+    rejects re-registering an already-bound role. Raises {!Type_error}
+    otherwise. *)
+val register_notation : string -> Inductive.spec -> ctx -> ctx
 
 (** [check_inductive ctx spec] validates an inductive declaration: kind-checks
     the parameter telescope and each constructor's field types, and enforces

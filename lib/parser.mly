@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP TIMES PLUS INL INR CASE EQ REFL J NAT SUCC NATREC COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI SIGMA TYPE PROP TIMES PLUS INL INR CASE EQ REFL J NAT SUCC NATREC COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -47,16 +47,24 @@ decl_desc:
      bar-separated list of constructors. The parameters are explicit and in
      scope for the sort and every constructor. A type with no constructors (e.g.
      Empty) drops the [:=] entirely: [inductive Empty : Prop]. *)
-  | INDUCTIVE; x = ID; ps = list(binder_group); COLON; s = term; cs = ctors_opt
+  | a = ioption(attribute); INDUCTIVE; x = ID; ps = list(binder_group); COLON;
+    s = term; cs = ctors_opt
     { Stmt.Inductive
         { Stmt.iname = x
         ; iparams = List.concat_map (fun (xs, a) -> List.map (fun y -> (y, a)) xs) ps
         ; isort = s
         ; ictors = cs
+        ; iattr = a
         } }
   (* a directive (first statement only) that opts out of the auto-loaded
      standard prelude *)
   | PRELUDE { Stmt.Prelude }
+
+(* a declaration attribute [@[name arg]], e.g. [@[notation unit]]. The name and
+   argument are bare identifiers; their meaning is validated when the statement
+   is run, not here. *)
+attribute:
+  | ATTR_OPEN; name = ID; arg = ID; ATTR_CLOSE { (name, arg) }
 
 (* the constructors of an inductive: omitted entirely for an empty type, else
    [:=] followed by a bar-separated list (the [:=] with no constructors after it

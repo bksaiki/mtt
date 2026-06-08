@@ -58,6 +58,8 @@ rule token = parse
   | "*" { TIMES }
   | "," { COMMA }
   | "|" { BAR }
+  | "@[" { ATTR_OPEN }
+  | "]" { ATTR_CLOSE }
   | ".1" { FST }
   | ".2" { SND }
   | "." digits as s

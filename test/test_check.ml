@@ -6,7 +6,9 @@ let prelude = Prelude.load Check.empty
 
 let infer s =
   match
-    Check.infer prelude (Parse.term_of_string_in prelude.Check.signature s)
+    Check.infer prelude
+      (Parse.term_of_string_in prelude.Check.signature
+         ~notation:prelude.Check.notation s)
   with
   | ty -> print_endline (Check.show prelude ty)
   | exception Check.Type_error msg -> Printf.printf "type error: %s\n" msg

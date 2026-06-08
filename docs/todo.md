@@ -68,22 +68,28 @@ the notation registry under Surface syntax; the two share that registry.
 
 - [ ] `open`-style form to use a type's constructors unqualified (`nil` instead
       of `List.nil`); also lets the printer drop the qualifier when unambiguous
-- [ ] Notation registry + delaborator ("blessed" inductives, done right).
+- [~] Notation registry + delaborator ("blessed" inductives, done right).
       The `()`/numeral/`×`/`Σ`/`=`/`+` sugar is *notation* in both directions,
       and none of it is the kernel's checking/eval concern — only parse and
       print. Replace today's hardcoded strings (the `()` printer case, the
       `Unit`/`Sigma` lookups in `to_term`) with one registry:
-      - a **role registry** mapping notation roles (`unit`/`nat`/`sum`/`sigma`/
-        `eq`) to the inductive that fills them, populated declaratively by an
-        attribute on the declaration, e.g. `@[notation unit] inductive Unit …`;
-        registration is **one-shot** (no overwrite) and **shape-checked** (the
-        `unit` role demands a single nullary constructor, `nat` demands
-        `zero`/`succ`, …), so a malformed or duplicate binding is rejected
-      - **forward** (parser/`to_term`): `()`→`Unit.unit`, `2`→`succ (succ zero)`,
-        `A × B`/`Σ`/`=`/`+` → the registered inductive applied
-      - **reverse** (a **delaborator** — the elaborator's mirror, core → surface):
-        the registered unit ctor → `()`, succ-chains of the registered `Nat` →
-        decimals, the relevant inductives → infix `×`/`+`/`=`
+      - [x] a **role registry** mapping notation roles (`unit`/`nat`/`sum`/
+        `sigma`/`eq`) to the inductive that fills them, populated declaratively
+        by an attribute on the declaration, e.g. `@[notation unit] inductive
+        Unit …`; registration is **one-shot** (no overwrite) and
+        **shape-checked** (the `unit` role demands a single nullary constructor,
+        `nat` demands `zero`/`succ`, …), so a malformed or duplicate binding is
+        rejected. *Done for the `unit` role* (`@[notation unit]`, the `@[ ]`
+        attribute surface, one-shot + shape check); `nat`/`sum`/`sigma`/`eq`
+        roles land with their respective builtin removals.
+      - **forward** (parser/`to_term`): `()`→`Unit.unit` *(done)*,
+        `2`→`succ (succ zero)`, `A × B`/`Σ`/`=`/`+` → the registered inductive
+        applied
+      - **reverse** (a **delaborator** — the elaborator's mirror, core → surface;
+        for now realized as the kernel printer parameterized by a generic
+        notation config, not a separate rewriter): the registered unit ctor →
+        `()` *(done)*, succ-chains of the registered `Nat` → decimals, the
+        relevant inductives → infix `×`/`+`/`=`
       - the kernel printer stays **faithful/plain** (`Unit.unit`,
         `Nat.succ (… Nat.zero)`, qualified ctors); the delaborator applies sugar
         in the frontend. This forces a decision on error messages: either accept
@@ -91,9 +97,17 @@ the notation registry under Surface syntax; the two share that registry.
         (not pre-rendered strings) so the driver can delaborate them — the latter
         is what lets the kernel stay entirely notation-ignorant. Pairs naturally
         with the elaborator (forward) since they share the registry.
-- [x] Print `Unit.unit` as `()` — interim: the kernel printer hardcodes the
-      designated `Unit.unit` ctor head. Subsumed by the notation registry +
-      delaborator above (which should retire this special case).
+      - **rendering decision (chosen):** for now the kernel printer takes a
+        *generic* notation config (which ctor heads to fold to `()`/decimals),
+        carried in the checking context, so `#check`/`#eval` output *and* error
+        messages render notation consistently while the printer never names
+        `Unit`/`Nat` (option 1). The eventual cleaner target is to make
+        `Type_error` carry terms so the kernel emits no strings and the frontend
+        delaborates everything (option 3) — a follow-up refactor of the ~30
+        `type_error` sites.
+- [x] Print `Unit.unit` as `()` — now via the notation registry above (the
+      `@[notation unit]` ctor, folded by the printer's notation config); the
+      hardcoded `Unit.unit` printer case and `to_term` lookup are gone.
 - [ ] Block comments: `/- ... -/` (nesting)
 - [ ] Unicode identifiers (needs sedlex; ocamllex handles only fixed
       keyword literals)

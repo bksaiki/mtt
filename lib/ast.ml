@@ -69,7 +69,7 @@ let var_spine t =
 
 exception Unbound_variable of Loc.t * string
 
-let to_term sg names s =
+let to_term sg ?(notation = Type.no_notation) names s =
   let rec go env s =
     match s.desc with
     (* a bare name is a local binder (de Bruijn) first, otherwise a global
@@ -106,12 +106,15 @@ let to_term sg names s =
     | Arrow (a, b) -> Type.Pi ("", go env a, go ("" :: env) b)
     | Lam (x, a, b) -> Type.Lam (x, go env a, go (x :: env) b)
     | App (f, a) -> Type.App (go env f, go env a)
-    (* () is sugar for the unit constructor; the unit type itself is the
-       ordinary prelude inductive [Unit] (resolved as a [Var] above) *)
+    (* () is sugar for whichever constructor is registered for the [unit]
+       notation (the prelude's [Unit.unit]); the unit type itself is an ordinary
+       inductive, resolved as a [Var] above *)
     | MkUnit -> (
-        match Signature.find sg "Unit" with
-        | Some spec -> Type.Ctor (Inductive.ctor_head spec 0)
-        | None -> raise (Unbound_variable (s.loc, "() (Unit is not in scope)")))
+        match notation.Type.unit_ctor with
+        | Some h -> Type.Ctor h
+        | None ->
+            raise (Unbound_variable (s.loc, "() (no unit notation registered)"))
+        )
     | Sigma (x, a, b) -> Type.Sigma (x, go env a, go (x :: env) b)
     (* non-dependent product: same dummy-binder trick as Arrow *)
     | Prod (a, b) -> Type.Sigma ("", go env a, go ("" :: env) b)

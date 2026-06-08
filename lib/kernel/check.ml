@@ -8,10 +8,17 @@ type ctx =
   ; names : string list (* binder names, for error messages *)
   ; lvl : int (* binders in scope = next fresh de Bruijn level *)
   ; signature : Signature.t (* the inductive types declared so far *)
+  ; notation : Type.notation (* display sugar, from @[notation ...] decls *)
   }
 
 let empty =
-  { env = []; types = []; names = []; lvl = 0; signature = Signature.empty }
+  { env = []
+  ; types = []
+  ; names = []
+  ; lvl = 0
+  ; signature = Signature.empty
+  ; notation = Type.no_notation
+  }
 
 (* extends the context with [x : ty] whose value is [v] *)
 let extend x v ty ctx =
@@ -32,16 +39,38 @@ let define = extend
 (* registers an inductive declaration in the context's signature *)
 let add_ind spec ctx = { ctx with signature = Signature.add spec ctx.signature }
 
+(* Registers an inductive under a notation [role], after shape-checking that it
+   can actually play that role. Notation is the frontend's, but the printer (and
+   so the config) lives in the kernel, so this sets the context's display config
+   from a [@[notation role]] declaration. One-shot: re-registering a role is an
+   error. *)
+let register_notation role spec ctx =
+  match role with
+  | "unit" ->
+      if ctx.notation.Type.unit_ctor <> None then
+        type_error "the unit notation is already registered";
+      (match spec.Inductive.ctors with
+      | [ { Inductive.fields = []; _ } ] when Inductive.nparams spec = 0 -> ()
+      | _ ->
+          type_error
+            "@@[notation unit] needs a parameterless inductive with a single \
+             nullary constructor");
+      { ctx with
+        notation = { Type.unit_ctor = Some (Inductive.ctor_head spec 0) }
+      }
+  | _ -> type_error "unknown notation role %s (expected: unit)" role
+
 (* the declared inductive [name], or a type error if it is unknown *)
 let lookup_ind ctx name =
   match Signature.find ctx.signature name with
   | Some spec -> spec
   | None -> type_error "unknown inductive type %s" name
 
-(* renders values and terms with the context's binder names *)
-let show ctx v = Type.to_string_in ctx.names (Value.quote ctx.lvl v)
+(* renders values and terms with the context's binder names and notation *)
+let show ctx v =
+  Type.to_string_in ~notation:ctx.notation ctx.names (Value.quote ctx.lvl v)
 
-let show_term ctx t = Type.to_string_in ctx.names t
+let show_term ctx t = Type.to_string_in ~notation:ctx.notation ctx.names t
 
 (* imax i 0 = 0: a product into a proposition is a proposition *)
 let imax i j =

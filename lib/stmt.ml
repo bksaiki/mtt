@@ -6,6 +6,7 @@ type ind_decl =
   ; isort : Ast.t (* the result sort *)
   ; ictors :
       (string * Ast.t) list (* each constructor's name and declared type *)
+  ; iattr : (string * string) option (* an attribute, e.g. @[notation unit] *)
   }
 
 type desc =
@@ -33,15 +34,16 @@ type t =
    it. *)
 let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
   let sg = ctx.Check.signature in
+  let notation = ctx.Check.notation in
   (* parameter telescope: each type is scope-checked under the earlier params *)
   let params, param_names =
     List.fold_left
       (fun (params, names) (x, aty) ->
-        (params @ [ (x, Ast.to_term sg names aty) ], x :: names))
+        (params @ [ (x, Ast.to_term sg ~notation names aty) ], x :: names))
       ([], []) d.iparams
   in
   let sort =
-    match Ast.to_term sg param_names d.isort with
+    match Ast.to_term sg ~notation param_names d.isort with
     | Type.Sort k -> k
     | _ ->
         Check.type_error
@@ -69,7 +71,9 @@ let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
               , result )
           | result -> ([], result)
         in
-        let fields, result = decompose 0 (Ast.to_term sg param_names cty) in
+        let fields, result =
+          decompose 0 (Ast.to_term sg ~notation param_names cty)
+        in
         if not (is_self (m + List.length fields) result) then
           Check.type_error
             "constructor %s must construct %s applied to its parameters" cname
@@ -80,7 +84,7 @@ let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
   { Inductive.name = d.iname; params; sort; ctors }
 
 let run (ctx : Check.ctx) stmt =
-  let to_term = Ast.to_term ctx.signature ctx.names in
+  let to_term = Ast.to_term ctx.signature ~notation:ctx.notation ctx.names in
   (* scope-check and evaluate an annotation, requiring it to be a type *)
   let eval_ann sa =
     let a = to_term sa in
@@ -138,7 +142,14 @@ let run (ctx : Check.ctx) stmt =
   | Inductive d ->
       let spec = elaborate_inductive ctx d in
       Check.check_inductive ctx spec;
-      (Check.add_ind spec ctx, None)
+      let ctx = Check.add_ind spec ctx in
+      let ctx =
+        match d.iattr with
+        | None -> ctx
+        | Some ("notation", role) -> Check.register_notation role spec ctx
+        | Some (name, _) -> Check.type_error "unknown attribute @@[%s ...]" name
+      in
+      (ctx, None)
   (* the prelude directive only controls the driver's choice of starting context
      (auto-load vs. bare); it is handled there, so by the time a statement
      reaches [run] it is a no-op *)

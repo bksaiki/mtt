@@ -10,9 +10,9 @@ let with_lexbuf ?(fname = "") s k =
   | Lexer.Error msg -> raise (Error (loc (), msg))
   | Parser.Error -> raise (Error (loc (), "unexpected token"))
 
-let term_of_string_in sg s =
+let term_of_string_in sg ?(notation = Type.no_notation) s =
   with_lexbuf s (fun lexbuf ->
-      Ast.to_term sg [] (Parser.main Lexer.token lexbuf))
+      Ast.to_term sg ~notation [] (Parser.main Lexer.token lexbuf))
 
 let term_of_string s = term_of_string_in Signature.empty s
 

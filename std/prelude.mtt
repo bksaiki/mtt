@@ -8,7 +8,10 @@ prelude
 -- === Data ===
 
 -- the unit type: a record (single constructor, no fields), so it has
--- definitional η — any two elements are equal. `()` is sugar for `Unit.unit`.
+-- definitional η — any two elements are equal. The `@[notation unit]` attribute
+-- registers it as the type whose constructor `()` abbreviates (and which the
+-- printer renders back as `()`).
+@[notation unit]
 inductive Unit : Type :=
 | unit : Unit
 

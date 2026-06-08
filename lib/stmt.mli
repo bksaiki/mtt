@@ -26,6 +26,9 @@ type ind_decl =
   ; isort : Ast.t  (** the result sort *)
   ; ictors : (string * Ast.t) list
         (** each constructor's name and declared type *)
+  ; iattr : (string * string) option
+        (** an optional [@[name arg]] attribute, e.g. [@[notation unit]];
+            validated by {!run} *)
   }
 
 type desc =
