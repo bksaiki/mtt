@@ -29,6 +29,12 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
       - [x] `Empty` (pilot): `inductive Empty : Prop`, `absurd` a prelude def
             over `Empty.rec`; generic recursor conversion now respects
             Prop-scrutinee irrelevance
+            - [ ] possibly align `absurd` with Lean. Ours is ex falso —
+                  `absurd (A : Type) (h : Empty) : A`, i.e. Lean's `False.elim`.
+                  Lean's `absurd : a → ¬a → b` instead takes `p` and `¬p` and
+                  forms the contradiction itself; switching would leave raw ex
+                  falso as just `Empty.rec`. Wants implicit args + universe
+                  polymorphism for full parity (`b : Sort v`)
       - [ ] `Sum` (surfaces the implicit-argument question for `inl`/`inr`)
       - [ ] `Nat` (needs numeral/printer "blessed inductive" support)
       - [ ] `Unit`, `Σ` (need record-η, above)
