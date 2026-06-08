@@ -53,3 +53,9 @@
  (deps bool.mtt %{bin:mtt})
  (action
   (run mtt bool.mtt)))
+
+(rule
+ (alias runtest)
+ (deps eq.mtt %{bin:mtt})
+ (action
+  (run mtt eq.mtt)))

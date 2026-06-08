@@ -67,9 +67,9 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **η for pairs** (surjective pairing) — at a Σ type, values are compared
   by their projections, the second at the family instantiated by the
   first; `p ≡ (p.1, p.2)` holds for neutral `p`.
-- **ι** — `case` on an injection picks the branch (`vcase`); sums are
-  positive, so there is **no η**: a stuck sum equals only another stuck
-  sum with convertible scrutinee, motive, and branches.
+- **ι** — `case` on an injection picks the branch (`vcase`), and `J` on
+  `refl` picks the diagonal (`vj`); these positive types have **no η**, so a
+  stuck `case`/`J` equals only another with convertible parts.
 - **proof irrelevance** — at a type in `Prop`, any two values are equal
   (a one-line guard in `conv`, made possible by type direction); applies
   inside neutral spines, so `P h1 ≡ P h2` for any proofs `h1`, `h2`.
@@ -96,7 +96,12 @@ sums the general large-elimination restriction is enforced: `+` forms at
 plain `max` (so `p + q : Prop` is native disjunction), proof irrelevance
 makes `inl h ≡ inr h'` at a `Prop`-sum, and therefore `case` on a
 proposition must target `Prop` — a `Type`-valued motive could distinguish
-definitionally equal proofs.
+definitionally equal proofs. `Eq A x y : Prop` is the other side of that
+coin: a single-constructor subsingleton, so — like `Empty`/`absurd` — its
+eliminator `J` carries *no* restriction and may land in any sort (this is
+what lets `subst` transport between types). UIP holds definitionally for
+free: `Eq` is a `Prop`, so proof irrelevance already equates all of its
+proofs.
 
 ## Errors and locations
 

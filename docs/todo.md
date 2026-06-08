@@ -19,10 +19,12 @@
       session, once an import mechanism exists
 - [ ] Inductive types / naturals with eliminator (replaces Church encodings;
       sums + Σ + unit/empty are the warm-up)
-- [ ] Identity type (`Eq` / `refl` / `J`) — internalizes `#check_equal`
-      (today only the Leibniz encoding is expressible; see `examples/leibniz.mtt`)
-- [ ] Universe polymorphism (Leibniz `sym`/`trans` are unprovable without
-      it: predicates can't return `Type 1`)
+- [x] Identity type (`Eq A x y` / `refl` / `J`) — explicit type arg for now
+      (`=` infix awaits an elaborator); `sym`/`trans`/`cong`/`subst` and UIP
+      in `examples/eq.mtt`
+- [ ] Elaborator: infer implicit arguments (would give `x = y` infix over
+      the explicit `Eq A x y`, motive inference for `case`/`J`, ...)
+- [ ] Universe polymorphism (level-polymorphic defs; see questions.md)
 - [ ] Holes / implicit arguments (elaboration with metavariables)
 
 ## Surface syntax

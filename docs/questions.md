@@ -53,14 +53,17 @@ for real, or alongside parse-error recovery work.
 
 ## Universe polymorphism
 
-Cumulativity has absorbed most everyday universe pressure, but some
-statements remain inexpressible: Leibniz `sym`/`trans` need a predicate
-returning `Type 1`. A native `Eq` removes the motivating example; full
+Cumulativity has absorbed most everyday universe pressure. Full
 polymorphism (levels as parameters, `imax` algebra on level expressions)
 is the deepest rabbit hole on the board.
 
-**Status**: open, deliberately deferred. **Revisit**: after the identity
-type lands — whatever still can't be said then is the real test case.
+**Status**: open, deliberately deferred. The native `Eq` (now landed)
+removed the old motivating example — `sym`/`trans`/`subst` are all
+monomorphic `def`s in `eq.mtt`. The remaining real test case: definitions
+meant to work at *every* level at once (e.g. a single `subst` usable for
+both `P : A → Type` and `P : A → Prop` without copies) still need copies.
+**Revisit**: when that duplication becomes painful — likely once a standard
+library accumulates.
 
 ## Display of unfolded definitions
 
