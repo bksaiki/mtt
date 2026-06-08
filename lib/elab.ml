@@ -27,8 +27,8 @@ let peel s =
 
 (* what the head of an application resolves to, for the spine rules below *)
 type head =
-  | Recursor of Type.rec_head
-  | Constructor of Inductive.spec * Type.ctor_head
+  | Rec of Type.rec_head
+  | Ctor of Inductive.spec * Type.ctor_head
   | Other
 
 let classify_head sg (s : Ast.t) =
@@ -38,14 +38,14 @@ let classify_head sg (s : Ast.t) =
       | None -> Other
       | Some spec -> (
           if String.equal field "rec" then
-            Recursor (Inductive.rec_head spec)
+            Rec (Inductive.rec_head spec)
           else
             match
               List.find_index
                 (fun (c : Inductive.ctor) -> String.equal c.cname field)
                 spec.Inductive.ctors
             with
-            | Some i -> Constructor (spec, Inductive.ctor_head spec i)
+            | Some i -> Ctor (spec, Inductive.ctor_head spec i)
             | None -> Other))
   | _ -> Other
 
@@ -118,11 +118,11 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
     match classify_head sg head with
     (* a recursor is motive-polymorphic; produce its core structurally and let
        the kernel's bespoke rule type the saturated spine *)
-    | Recursor rh ->
+    | Rec rh ->
         List.fold_left
           (fun core a -> Type.App (core, go ctx Infer a))
           (Type.Rec rh) args
-    | Constructor (spec, h) -> (
+    | Ctor (spec, h) -> (
         let nfields = h.Type.carity - h.Type.nparams in
         match mode with
         (* checked against its own inductive with the parameters omitted:
