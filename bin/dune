@@ -1,4 +1,4 @@
 (executable
  (public_name mtt)
  (name main)
- (libraries mtt unix))
+ (libraries mtt mtt_kernel unix))
