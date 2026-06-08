@@ -105,6 +105,41 @@ what lets `subst` transport between types). UIP holds definitionally for
 free: `Eq` is a `Prop`, so proof irrelevance already equates all of its
 proofs.
 
+## Inductive types
+
+`inductive T (params) : sort := | c : ty | ...` declares a parameterized
+inductive type (no indices yet). It generalizes the hardcoded
+`Nat`/`zero`/`succ`/`natrec` quadruple: a declaration introduces a type former
+(`Ind`), constructors (`Ctor`), and a recursor (`Rec`), all driven by the
+constructor signatures. These are mtt's first **global named constants** — a
+signature `Σ` (`signature.ml`) keyed by name, beside the de Bruijn context.
+
+- **Representation.** The NbE core stays signature-free: the *computational
+  skeleton* (constructor index/arity and a per-constructor flag list marking
+  recursive fields) is baked into the `Ctor`/`Rec` syntax nodes — all `vrec`
+  (the generic ι-rule) needs. The full types (former, constructors, recursor)
+  are derived from the spec (`inductive.ml`) and consulted only by the
+  scope-checker and `infer`, which holds `Σ` in its context.
+- **Recursor.** Fully dependent: the motive is `P : T params → Sort`, with one
+  minor premise per constructor — a Π over the constructor's fields, an
+  induction hypothesis `P fⱼ` after each recursive field, concluding in
+  `P (c …)`. A recursor is motive-polymorphic, so (like `natrec`/`J`) it has no
+  type as a constant; `infer` types a saturated application as a bespoke rule.
+- **Surface.** Parameters are explicit; constructors and the recursor are
+  qualified by their type (`Bool.true`, `Nat'.rec`), so constructor names need
+  only be unique within a type. (`Nat`/`succ`/`Empty`/`Eq`/`Unit` are reserved
+  for the builtins, which remain until they are re-derived.)
+- **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
+  only as a *direct* recursive field `T params`, never under an arrow or nested
+  (more conservative than full strict positivity, a later extension);
+  predicativity — a field's sort fits the inductive's, except for an
+  impredicative `Prop`; and the large-elimination restriction — a `Prop`
+  inductive eliminates into a larger sort only when it is a subsingleton (≤ 1
+  constructor, all fields proofs), generalizing the rule on `case`.
+
+See `examples/inductive.mtt`; the design notes and deferred work (indices,
+mutual/nested, `open`, replacing the builtins) live in `inductive-plan.md`.
+
 ## Errors and locations
 
 Syntax errors (`Parse.Error`), scope errors (`Ast.Unbound_variable`), and —
@@ -127,6 +162,8 @@ the statement type and its processor, per the module-per-concept convention):
 - `def x [: A] = t` — `define`: bound to `t`'s value, unfolds (δ)
 - `theorem x : A = t` — proof checked, then `bind`: opaque (Qed-style);
   a theorem behaves exactly like an axiom whose obligation was discharged
+- `inductive T params : sort := | c : ty | ...` — declares an inductive type;
+  see the Inductive types section
 - `prelude` — a directive (first statement only) that opts *out* of the
   auto-loaded standard library; see the Prelude section
 

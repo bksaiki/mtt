@@ -32,10 +32,10 @@ use other names.)
   > #eval length Bool (List.cons Bool Bool.true (List.cons Bool Bool.false (List.nil Bool)))
   > EOF
   $ mtt data.mtt
-  false
-  true
-  su (su (su (su ze)))
-  su (su ze)
+  Bool.false
+  Bool.true
+  MyNat.su (MyNat.su (MyNat.su (MyNat.su MyNat.ze)))
+  MyNat.su (MyNat.su MyNat.ze)
 
 A constructor and the former infer their derived types:
 
@@ -48,7 +48,7 @@ A constructor and the former infer their derived types:
   > EOF
   $ mtt types.mtt
   List : Type -> Type
-  cons : (A : Type) -> A -> List A -> List A
+  List.cons : (A : Type) -> A -> List A -> List A
 
 A bare constructor name is not in scope — constructors must be qualified:
 

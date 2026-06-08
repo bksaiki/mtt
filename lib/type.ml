@@ -223,7 +223,9 @@ let pp_in names fmt t =
     (* inductive heads are atoms; their arguments print via the enclosing App
        nodes (so [Nat.rec P z s n] renders through application) *)
     | Ind name -> Format.pp_print_string fmt name
-    | Ctor h -> Format.pp_print_string fmt h.cname
+    (* constructors and the recursor print qualified by their type, matching how
+       they are written *)
+    | Ctor h -> Format.fprintf fmt "%s.%s" h.ind h.cname
     | Rec h -> Format.fprintf fmt "%s.rec" h.rind
   in
   go 0 names fmt t

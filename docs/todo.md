@@ -21,9 +21,14 @@
       use it for free; the `church_*`/`logic` encodings opt out
 - [x] `Nat` (hand-rolled inductive: `0`/`succ`/`natrec` with the induction
       hypothesis, numeral literals, recursion + induction in `examples/nat.mtt`)
-- [ ] General inductive schema (one mechanism generating recursors + ι, with
-      strict positivity; subsumes the hand-rolled Nat/Σ/sum/Eq/Unit/Empty —
-      those become the regression spec). The big one.
+- [~] General inductive schema (one mechanism generating recursors + ι). Done:
+      parameterized inductives with a dependent recursor, strict positivity,
+      the Prop large-elimination restriction, qualified `T.c`/`T.rec` surface
+      (`inductive.ml`/`signature.ml`, `examples/inductive.mtt`). Remaining:
+      indices (Vec/Fin, an indexed Eq), mutual/nested, full strict positivity
+      (function-typed recursive args), an `open`-style form for bare
+      constructors, and re-deriving the hardcoded Nat/Σ/sum/Eq/Unit/Empty so
+      they become the regression spec. See `inductive-plan.md`.
 - [x] Identity type (`Eq A x y` / `refl` / `J`) — explicit type arg for now
       (`=` infix awaits an elaborator); `sym`/`trans`/`cong`/`subst` and UIP
       in `examples/eq.mtt`

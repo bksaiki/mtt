@@ -65,3 +65,9 @@
  (deps eq.mtt %{bin:mtt})
  (action
   (run mtt eq.mtt)))
+
+(rule
+ (alias runtest)
+ (deps inductive.mtt %{bin:mtt})
+ (action
+  (run mtt inductive.mtt)))

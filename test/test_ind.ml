@@ -69,9 +69,9 @@ let list_rec = Type.Rec (Inductive.rec_head list_spec)
 
 let%expect_test "constructors are canonical and print by name" =
   norm zero;
-  [%expect {| zero |}];
+  [%expect {| Nat.zero |}];
   norm (numeral 3);
-  [%expect {| succ (succ (succ zero)) |}]
+  [%expect {| Nat.succ (Nat.succ (Nat.succ Nat.zero)) |}]
 
 let%expect_test "recursor reduces on a constructor (double via Nat.rec)" =
   (* double n = natrec (fun _ => Nat) zero (fun k ih => succ (succ ih)) n *)
@@ -83,9 +83,9 @@ let%expect_test "recursor reduces on a constructor (double via Nat.rec)" =
     Type.App (Type.App (Type.App (Type.App (nat_rec, motive), zero), step), n)
   in
   norm (double (numeral 2));
-  [%expect {| succ (succ (succ (succ zero))) |}];
+  [%expect {| Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))) |}];
   norm (double zero);
-  [%expect {| zero |}]
+  [%expect {| Nat.zero |}]
 
 let%expect_test "a recursor on a stuck variable stays neutral" =
   (* fun (x : Nat) => natrec (fun _ => Nat) zero (fun k ih => ih) x *)
@@ -99,7 +99,8 @@ let%expect_test "a recursor on a stuck variable stays neutral" =
   [%expect
     {|
     fun (x : Nat) =>
-    Nat.rec (fun (_ : Nat) => Nat) zero (fun (k : Nat) => fun (ih : Nat) => ih) x
+    Nat.rec (fun (_ : Nat) => Nat) Nat.zero
+    (fun (k : Nat) => fun (ih : Nat) => ih) x
     |}]
 
 let%expect_test "parameterized recursor: length of a two-element list" =
@@ -134,7 +135,7 @@ let%expect_test "parameterized recursor: length of a two-element list" =
   in
   norm term;
   [%expect
-    {| fun (A : Type) => fun (a : A) => fun (b : A) => succ (succ zero) |}]
+    {| fun (A : Type) => fun (a : A) => fun (b : A) => Nat.succ (Nat.succ Nat.zero) |}]
 
 (* --- Phase 2: type checking --- *)
 
