@@ -37,3 +37,19 @@ val ctor_head : spec -> int -> Type.ctor_head
 
 (** [rec_head spec] is the skeleton of the recursor *)
 val rec_head : spec -> Type.rec_head
+
+(** [apply spec depth] is the inductive applied to its parameters as variables,
+    read in a context of [depth] binders whose outermost {!nparams} are the
+    parameters. This is what constructors return and the exact shape a direct
+    recursive field must have. *)
+val apply : spec -> int -> Type.t
+
+(** the type former's type: [(params) -> Sort sort] *)
+val former_type : spec -> Type.t
+
+(** [ctor_type spec i] is the [i]-th constructor's type,
+    [(params) -> (fields) -> Ind params] *)
+val ctor_type : spec -> int -> Type.t
+
+(** [occurs name t] is whether the inductive [name] occurs anywhere in [t] *)
+val occurs : string -> Type.t -> bool

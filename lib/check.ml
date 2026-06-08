@@ -7,15 +7,18 @@ type ctx =
   ; types : Value.t list (* their types, index-aligned with [env] *)
   ; names : string list (* binder names, for error messages *)
   ; lvl : int (* binders in scope = next fresh de Bruijn level *)
+  ; signature : Signature.t (* the inductive types declared so far *)
   }
 
-let empty = { env = []; types = []; names = []; lvl = 0 }
+let empty =
+  { env = []; types = []; names = []; lvl = 0; signature = Signature.empty }
 
 (* extends the context with a variable [x] of type [ty]; the variable is bound
    to a fresh neutral, so under the binder it blocks reduction instead of
    disappearing *)
 let bind x ty ctx =
-  { env = Value.Neutral (Value.Var ctx.lvl) :: ctx.env
+  { ctx with
+    env = Value.Neutral (Value.Var ctx.lvl) :: ctx.env
   ; types = ty :: ctx.types
   ; names = x :: ctx.names
   ; lvl = ctx.lvl + 1
@@ -25,11 +28,21 @@ let bind x ty ctx =
    value [v] rather than a neutral, so occurrences unfold during evaluation
    (δ-reduction) *)
 let define x v ty ctx =
-  { env = v :: ctx.env
+  { ctx with
+    env = v :: ctx.env
   ; types = ty :: ctx.types
   ; names = x :: ctx.names
   ; lvl = ctx.lvl + 1
   }
+
+(* registers an inductive declaration in the context's signature *)
+let add_ind spec ctx = { ctx with signature = Signature.add spec ctx.signature }
+
+(* the declared inductive [name], or a type error if it is unknown *)
+let lookup_ind ctx name =
+  match Signature.find ctx.signature name with
+  | Some spec -> spec
+  | None -> type_error "unknown inductive type %s" name
 
 (* renders values and terms with the context's binder names *)
 let show ctx v = Type.to_string_in ctx.names (Value.quote ctx.lvl v)
@@ -67,6 +80,55 @@ let step_ty ctx p =
   in
   Value.Pi ("k", Value.Nat, { env = ctx.env; body })
 
+(* builds a dependent function type [Π (name : aval) ⇒ B] as a value, where the
+   codomain is computed by [k] given the extended context and the bound
+   variable's value. The quote/eval round-trip handles the de Bruijn
+   bookkeeping: applying the closure to an argument re-runs [k]'s result with
+   the bound variable replaced by that argument. *)
+let pi_val ctx name aval k =
+  let ctx' = bind name aval ctx in
+  let bval = k ctx' (fresh ctx) in
+  Value.Pi (name, aval, { env = ctx.env; body = Value.quote ctx'.lvl bval })
+
+(* The minor-premise type for the [i]-th constructor of [spec], given the
+   recursor's parameter values [pvals] and motive value [pmot]:
+
+   Π (f₀ : F₀) ⇒ [P f₀ ⇒] … Π (fₙ : Fₙ) ⇒ [P fₙ ⇒] P (c params fields)
+
+   i.e. a binder per field, an induction hypothesis [P fⱼ] after each recursive
+   field, concluding in the motive applied to the constructor. Field types come
+   from the spec (in the context [params, earlier fields]) and are evaluated
+   with the parameters and earlier fields substituted. *)
+let minor_type ctx spec pvals pmot i =
+  let c = List.nth spec.Inductive.ctors i in
+  let chead = Inductive.ctor_head spec i in
+  (* fieldvals is innermost-first; the spec field type is read in the context
+     [params, earlier fields], so its env is [earlier fields (newest first)] ++
+     [params (reverse)] *)
+  let rec go ctx fieldvals = function
+    | [] ->
+        let ctor =
+          List.fold_left Value.apply
+            (Value.VCtor (chead, []))
+            (pvals @ List.rev fieldvals)
+        in
+        Value.apply pmot ctor
+    | (a : Inductive.arg) :: rest ->
+        let aval = Value.eval (fieldvals @ List.rev pvals) a.aty in
+        pi_val ctx a.aname aval (fun ctx' fv ->
+            if a.recursive then
+              pi_val ctx' "_ih" (Value.apply pmot fv) (fun ctx'' _ ->
+                  go ctx'' (fv :: fieldvals) rest)
+            else
+              go ctx' (fv :: fieldvals) rest)
+  in
+  go ctx [] c.fields
+
+(* the type value of a constructor head: its full [(params) -> (fields) -> Ind
+   params] Pi, used to walk a constructor's argument spine type-directedly *)
+let ctor_type_val ctx (h : Type.ctor_head) =
+  Value.eval [] (Inductive.ctor_type (lookup_ind ctx h.ind) h.cindex)
+
 (* the type of a stuck neutral, reconstructed by walking the spine *)
 let rec infer_neutral ctx (n : Value.neutral) : Value.t =
   match n with
@@ -93,7 +155,11 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       | _ -> assert false)
   (* natrec P pz ps n : P n *)
   | Value.NatRec (p, _, _, n) -> Value.apply p (Value.Neutral n)
-  | Value.Rec _ -> assert false (* phase 2 *)
+  (* T.rec params P minors major : P major; the motive sits after the params in
+     the recorded pre-major spine *)
+  | Value.Rec (h, pre, n) ->
+      let motive = List.nth pre h.Type.nparams in
+      Value.apply motive (Value.Neutral n)
 
 (* [sort_of ctx ty] is the i such that [ty : Sort i] *)
 let rec sort_of ctx (ty : Value.t) : int =
@@ -117,9 +183,9 @@ let rec sort_of ctx (ty : Value.t) : int =
       match infer_neutral ctx n with
       | Value.Sort i -> i
       | _ -> assert false)
-  (* VInd is a type (its sort comes from the signature in phase 2); the rest are
-     not types *)
-  | Value.VInd _
+  (* an inductive type lives at its declared sort *)
+  | Value.VInd (name, _) -> (lookup_ind ctx name).Inductive.sort
+  (* not types *)
   | Value.VCtor _
   | Value.VRec _
   | Value.Lam _
@@ -130,7 +196,7 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.Refl
   | Value.Zero
   | Value.Succ _ ->
-      assert false (* not types / phase 2 *)
+      assert false
 
 (* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
    types themselves (with optional cumulativity). β/δ have already happened
@@ -170,6 +236,17 @@ let rec conv ctx ty v1 v2 =
       match (v1, v2) with
       | Value.Zero, Value.Zero -> true
       | Value.Succ a, Value.Succ b -> conv ctx Value.Nat a b
+      | Value.Neutral n1, Value.Neutral n2 ->
+          Option.is_some (conv_neutral ctx n1 n2)
+      | _ -> false)
+  (* an inductive type is positive, like Nat: same constructor with convertible
+     arguments (compared type-directedly along the constructor's type), or two
+     stuck values *)
+  | Value.VInd _ -> (
+      match (v1, v2) with
+      | Value.VCtor (h1, args1), Value.VCtor (h2, args2) ->
+          String.equal h1.cname h2.cname
+          && conv_spine ctx (ctor_type_val ctx h1) args1 args2
       | Value.Neutral n1, Value.Neutral n2 ->
           Option.is_some (conv_neutral ctx n1 n2)
       | _ -> false)
@@ -213,8 +290,35 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
   | Value.Eq (a1, x1, y1), Value.Eq (a2, x2, y2) ->
       conv_ty ~cumul:false ctx a1 a2 && conv ctx a1 x1 x2 && conv ctx a1 y1 y2
   | Value.Nat, Value.Nat -> true
+  (* an inductive type former is invariant in its parameters: same name, and
+     parameters convertible at their (instantiated) telescope types *)
+  | Value.VInd (n1, ps1), Value.VInd (n2, ps2) ->
+      String.equal n1 n2
+      && conv_params ctx [] (lookup_ind ctx n1).Inductive.params ps1 ps2
   | Value.Neutral n1, Value.Neutral n2 ->
       Option.is_some (conv_neutral ctx n1 n2)
+  | _ -> false
+
+(* compares two parameter spines along a parameter telescope, instantiating each
+   binder's type with the earlier parameter values *)
+and conv_params ctx env params ps1 ps2 =
+  match (params, ps1, ps2) with
+  | [], [], [] -> true
+  | (_, pty) :: ps, v1 :: vs1, v2 :: vs2 ->
+      conv ctx (Value.eval env pty) v1 v2
+      && conv_params ctx (v1 :: env) ps vs1 vs2
+  | _ -> false
+
+(* compares two argument spines along a function type, instantiating the
+   codomain with each argument as it is consumed *)
+and conv_spine ctx ty args1 args2 =
+  match (args1, args2) with
+  | [], [] -> true
+  | a1 :: r1, a2 :: r2 -> (
+      match ty with
+      | Value.Pi (_, dom, c) ->
+          conv ctx dom a1 a2 && conv_spine ctx (Value.apply_closure c a1) r1 r2
+      | _ -> false)
   | _ -> false
 
 (* spine equality, returning the head's instantiated type so that arguments are
@@ -298,6 +402,44 @@ and conv_neutral ctx n1 n2 : Value.t option =
           else
             None
       | _ -> None)
+  (* stuck inductive recursion: like NatRec, but the recorded pre-major spine is
+     [params @ motive :: minors], and each minor is compared at its derived
+     minor-premise type *)
+  | Value.Rec (h, pre1, n1), Value.Rec (h2, pre2, n2)
+    when String.equal h.Type.rind h2.Type.rind -> (
+      match conv_neutral ctx n1 n2 with
+      | Some _ ->
+          let spec = lookup_ind ctx h.Type.rind in
+          let m = h.Type.nparams in
+          let params1 = List.filteri (fun i _ -> i < m) pre1 in
+          let params2 = List.filteri (fun i _ -> i < m) pre2 in
+          let motive1 = List.nth pre1 m and motive2 = List.nth pre2 m in
+          let minors1 = List.filteri (fun i _ -> i > m) pre1 in
+          let minors2 = List.filteri (fun i _ -> i > m) pre2 in
+          let ind_ty =
+            List.fold_left Value.apply (Value.VInd (h.Type.rind, [])) params1
+          in
+          let motives_ok =
+            conv_ty ~cumul:false (bind "x" ind_ty ctx)
+              (Value.apply motive1 (fresh ctx))
+              (Value.apply motive2 (fresh ctx))
+          in
+          let minors_ok =
+            List.for_all2
+              (fun (i, mn1) mn2 ->
+                conv ctx (minor_type ctx spec params1 motive1 i) mn1 mn2)
+              (List.mapi (fun i mn -> (i, mn)) minors1)
+              minors2
+          in
+          if
+            conv_params ctx [] spec.Inductive.params params1 params2
+            && motives_ok
+            && minors_ok
+          then
+            Some (Value.apply motive1 (Value.Neutral n1))
+          else
+            None
+      | None -> None)
   (* stuck ex falso: the motives must agree; the proofs are of type Empty, a
      Prop, so by irrelevance they need not be compared at all *)
   | Value.Absurd (a1, _), Value.Absurd (a2, _) ->
@@ -309,6 +451,44 @@ and conv_neutral ctx n1 n2 : Value.t option =
 
 (* the cumulativity relation t1 ≤ t2 on types, used by subsumption *)
 let sub ctx t1 t2 = conv_ty ~cumul:true ctx t1 t2
+
+(* peel an application into its head and its argument list (left-to-right) *)
+let spine t =
+  let rec go acc = function
+    | Type.App (f, a) -> go (a :: acc) f
+    | h -> (h, acc)
+  in
+  go [] t
+
+(* binds a parameter telescope as fresh neutrals; returns the extended context
+   and the env (newest-first) of parameter values for evaluating types that
+   mention earlier parameters *)
+let bind_params ctx params =
+  List.fold_left
+    (fun (ctx, env) (x, pty) ->
+      let ctx' = bind x (Value.eval env pty) ctx in
+      (ctx', fresh ctx :: env))
+    (ctx, []) params
+
+(* whether [spec] is a subsingleton — at most one constructor, all of whose
+   fields are proofs (in Prop). Such a Prop inductive may eliminate into any
+   sort (subsingleton elimination, like Empty and Eq); any other Prop inductive
+   is restricted to Prop-valued elimination. *)
+let subsingleton ctx spec =
+  match spec.Inductive.ctors with
+  | [] -> true
+  | [ c ] ->
+      let ctx0, env0 = bind_params ctx spec.Inductive.params in
+      let rec fields_are_proofs ctx env = function
+        | [] -> true
+        | (a : Inductive.arg) :: rest ->
+            sort_of ctx (Value.eval env a.aty) = 0
+            && fields_are_proofs
+                 (bind a.aname (Value.eval env a.aty) ctx)
+                 (fresh ctx :: env) rest
+      in
+      fields_are_proofs ctx0 env0 c.fields
+  | _ -> false
 
 (* the rule markers below refer to the typing rules in check.mli's header *)
 let rec infer ctx t =
@@ -331,15 +511,20 @@ let rec infer ctx t =
       (* [vb] is a value one binder deep; quote it back to syntax to form the
          codomain closure *)
       Value.Pi (x, va, { env = ctx.env; body = Value.quote (ctx.lvl + 1) vb })
-  (* (App) *)
+  (* (App) — but a recursor is motive-polymorphic, so it has no type as a
+     constant: a fully-applied recursor spine gets a bespoke rule (like NatRec),
+     detected by peeling the application head *)
   | Type.App (f, a) -> (
-      match infer ctx f with
-      | Value.Pi (_, dom, c) ->
-          check ctx a dom;
-          Value.apply_closure c (Value.eval ctx.env a)
-      | ty ->
-          type_error "expected a function, but %s has type %s" (show_term ctx f)
-            (show ctx ty))
+      match spine t with
+      | Type.Rec rh, args -> infer_rec ctx rh args
+      | _ -> (
+          match infer ctx f with
+          | Value.Pi (_, dom, c) ->
+              check ctx a dom;
+              Value.apply_closure c (Value.eval ctx.env a)
+          | ty ->
+              type_error "expected a function, but %s has type %s"
+                (show_term ctx f) (show ctx ty)))
   (* (Absurd): subsingleton elimination — the motive may live in any sort, even
      though Empty is a Prop, because Empty has no introduction forms *)
   | Type.Absurd (a, h) ->
@@ -512,12 +697,17 @@ let rec infer ctx t =
       check ctx z (Value.apply vp Value.Zero);
       check ctx s (step_ty ctx vp);
       Value.apply vp (Value.eval ctx.env n)
-  (* general inductive types: typing arrives in phase 2 (the kernel can already
-     evaluate them — see value.ml) *)
-  | Type.Ind _
-  | Type.Ctor _
+  (* an inductive type former and its constructors have fixed (non-polymorphic)
+     types derived from the declaration; they ride the normal (App) machinery *)
+  | Type.Ind name -> Value.eval [] (Inductive.former_type (lookup_ind ctx name))
+  | Type.Ctor h ->
+      Value.eval [] (Inductive.ctor_type (lookup_ind ctx h.ind) h.cindex)
+  (* a bare recursor is motive-polymorphic; only a saturated application (caught
+     in (App)) can be typed *)
   | Type.Rec _ ->
-      type_error "inductive type checking is not implemented yet"
+      type_error
+        "cannot infer the type of a bare recursor; apply it to its parameters, \
+         motive, minor premises and target"
 
 (* infers and requires a sort: used where the rules demand "a type" *)
 and infer_univ ctx t =
@@ -526,6 +716,73 @@ and infer_univ ctx t =
   | ty ->
       type_error "expected a type, but %s has type %s" (show_term ctx t)
         (show ctx ty)
+
+(* checks a parameter spine against the parameter telescope, returning the
+   parameter values (so later parameter types and the motive can be
+   instantiated) *)
+and check_telescope ctx params tms =
+  let rec go env params tms =
+    match (params, tms) with
+    | [], [] -> []
+    | (_, pty) :: ps, tm :: rest ->
+        check ctx tm (Value.eval env pty);
+        let v = Value.eval ctx.env tm in
+        v :: go (v :: env) ps rest
+    | _ -> type_error "wrong number of parameters for the inductive"
+  in
+  go [] params tms
+
+(* (Rec): the generic recursor. Generalizes (NatRec): the motive is [P : Ind
+   params → Sort j]; each constructor contributes a minor premise (see
+   {!minor_type}); the result is [P major]. Prop inductives that are not
+   subsingletons are restricted to Prop-valued elimination (large-elimination
+   restriction, generalizing the one on (Case)). *)
+and infer_rec ctx rh args =
+  let spec = lookup_ind ctx rh.Type.rind in
+  let m = rh.Type.nparams in
+  let nctors = List.length rh.Type.recs in
+  let expected = m + 1 + nctors + 1 in
+  if List.length args <> expected then
+    type_error "%s.rec expects %d arguments but got %d" rh.Type.rind expected
+      (List.length args);
+  let param_tms = List.filteri (fun i _ -> i < m) args in
+  let motive_tm = List.nth args m in
+  let minor_tms = List.filteri (fun i _ -> i > m && i <= m + nctors) args in
+  let major_tm = List.nth args (m + 1 + nctors) in
+  (* parameters, then the target type they determine *)
+  let pvals = check_telescope ctx spec.Inductive.params param_tms in
+  let ind_ty =
+    List.fold_left Value.apply (Value.VInd (rh.Type.rind, [])) pvals
+  in
+  (* the motive P : ind_ty → Sort j *)
+  let pmot = Value.eval ctx.env motive_tm in
+  let j =
+    match infer ctx motive_tm with
+    | Value.Pi (_, dom, c) -> (
+        if not (conv_ty ~cumul:false ctx dom ind_ty) then
+          type_error "the motive's domain %s does not match the target type %s"
+            (show ctx dom) (show ctx ind_ty);
+        match Value.apply_closure c (fresh ctx) with
+        | Value.Sort j -> j
+        | cod ->
+            type_error "the motive must land in a sort, not %s"
+              (show (bind "x" ind_ty ctx) cod))
+    | ty ->
+        type_error "expected a motive from %s into a sort, but %s has type %s"
+          (show ctx ind_ty) (show_term ctx motive_tm) (show ctx ty)
+  in
+  if spec.Inductive.sort = 0 && j <> 0 && not (subsingleton ctx spec) then
+    type_error
+      "cannot eliminate the proposition %s into %s: only a subsingleton (at \
+       most one constructor, all fields proofs) may eliminate large"
+      rh.Type.rind
+      (Type.to_string (Type.Sort j));
+  (* each minor premise against its derived type, then the target *)
+  List.iteri
+    (fun i mn -> check ctx mn (minor_type ctx spec pvals pmot i))
+    minor_tms;
+  check ctx major_tm ind_ty;
+  Value.apply pmot (Value.eval ctx.env major_tm)
 
 and check ctx t expected =
   match (t, expected) with
@@ -559,3 +816,49 @@ and check ctx t expected =
       if not (sub ctx ty expected) then
         type_error "this term has type %s but %s was expected" (show ctx ty)
           (show ctx expected)
+
+(* Validates an inductive declaration: kind-checks the parameter telescope, then
+   each constructor's field types in context. Enforces strict positivity (the
+   inductive may appear only as a direct recursive field [Ind params], never
+   elsewhere — under an arrow or nested) and predicativity (each field's sort
+   fits the inductive's, unless it is a Prop, which is impredicative). The
+   inductive is registered before checking constructors so their recursive
+   occurrences resolve. *)
+let check_inductive ctx spec =
+  let name = spec.Inductive.name in
+  let ctx = add_ind spec ctx in
+  let ctx_p =
+    List.fold_left
+      (fun ctx (x, pty) ->
+        let _ = infer_univ ctx pty in
+        bind x (Value.eval ctx.env pty) ctx)
+      ctx spec.Inductive.params
+  in
+  let m = Inductive.nparams spec in
+  List.iter
+    (fun (c : Inductive.ctor) ->
+      ignore
+        (List.fold_left
+           (fun (ctx_cur, j) (a : Inductive.arg) ->
+             let s = infer_univ ctx_cur a.aty in
+             if a.recursive then
+               begin if a.aty <> Inductive.apply spec (m + j) then
+                 type_error
+                   "constructor %s: a recursive field must have type %s" c.cname
+                   (show_term ctx_cur (Inductive.apply spec (m + j)))
+             end
+             else if Inductive.occurs name a.aty then
+               type_error
+                 "constructor %s: %s may occur only as a direct recursive \
+                  field, not inside %s (strict positivity)"
+                 c.cname name (show_term ctx_cur a.aty);
+             if spec.Inductive.sort <> 0 && s > spec.Inductive.sort then
+               type_error
+                 "constructor %s: a field of sort %s does not fit the \
+                  inductive's sort %s"
+                 c.cname
+                 (Type.to_string (Type.Sort s))
+                 (Type.to_string (Type.Sort spec.Inductive.sort));
+             (bind a.aname (Value.eval ctx_cur.env a.aty) ctx_cur, j + 1))
+           (ctx_p, 0) c.fields))
+    spec.Inductive.ctors

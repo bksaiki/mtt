@@ -69,9 +69,9 @@ in `ctx`).
 ## Phases (each compiles and tests green; stop for review between)
 
 1. **Kernel computation.** `type.ml`/`value.ml` nodes `Ind`/`Ctor`/`Rec` +
-   `eval`/`quote` + generic ι; `ind.ml` spec data model + skeleton extraction.
+   `eval`/`quote` + generic ι; `inductive.ml` spec data model + skeleton extraction.
    Tested by normalization. (`check.ml` typing stubbed.)
-2. **Kernel typing.** `sig.ml` + a signature field in `ctx`; former /
+2. **Kernel typing.** `signature.ml` + a signature field in `ctx`; former /
    constructor / recursor type derivation; `infer`/`check`/`conv`/`sort_of`
    cases; universe rule + Prop large-elimination; strict positivity. Tested by
    type-checking.
