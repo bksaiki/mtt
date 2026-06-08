@@ -1,3 +1,5 @@
+prelude
+
 -- Propositional logic via Curry-Howard: propositions are types, proofs
 -- are terms. Propositions live in Prop, the impredicative bottom sort:
 -- a Π whose codomain is a proposition is itself a proposition, however

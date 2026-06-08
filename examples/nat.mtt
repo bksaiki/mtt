@@ -1,40 +1,6 @@
--- The natural numbers, native and inductive. Nat is built from zero (0)
--- and succ; decimal literals are sugar for succ-chains. natrec is the
--- recursor: its step receives the predecessor AND the result on it (the
--- induction hypothesis), so natrec computes by recursion and proves by
--- induction. Compare church_nat.mtt, which encodes all this with Π.
-
--- ===========================================================================
--- Equality utilities (generic, any type; each one J at a chosen motive)
--- ===========================================================================
-
--- congruence: equals map to equals
-def cong (A B : Type) (f : A → B) (x y : A) (p : Eq A x y) : Eq B (f x) (f y) :=
-  J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl p
-
-def sym (A : Type) (x y : A) (p : Eq A x y) : Eq A y x :=
-  J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq A z x) refl p
-
-def trans (A : Type) (x y z : A) (p : Eq A x y) (q : Eq A y z) : Eq A x z :=
-  J (λ w : A ⇒ λ r : Eq A y w ⇒ Eq A x w) p q
-
--- transport along an equality (large elimination: the motive lands in Type)
-def subst (A : Type) (P : A → Type) (x y : A) (p : Eq A x y) (h : P x) : P y :=
-  J (λ z : A ⇒ λ q : Eq A x z ⇒ P z) h p
-
--- ===========================================================================
--- Arithmetic (by recursion on the first argument)
--- ===========================================================================
-
-def add (m n : Nat) : Nat :=
-  natrec (λ x : Nat ⇒ Nat) n (λ k : Nat ⇒ λ ih : Nat ⇒ succ ih) m
-
-def mul (m n : Nat) : Nat :=
-  natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ add n ih) m
-
--- predecessor: the step just returns the predecessor k, ignoring the IH
-def pred (n : Nat) : Nat :=
-  natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ k) n
+-- Building on the prelude (Nat, add/mul, the equality toolkit). This file
+-- demonstrates what the prelude does NOT include: computation by recursion,
+-- and constructor disjointness via large elimination.
 
 -- ι-reduction: closed numerals compute
 #check_equal (add 2 3) 5
@@ -42,51 +8,19 @@ def pred (n : Nat) : Nat :=
 #check_equal (pred 5) 4
 #check_equal (mul 10 10) 100
 
--- ===========================================================================
--- Theorems about Nat
--- ===========================================================================
-
--- 0 + n = n holds definitionally (add recurses on its first argument, so
--- add 0 n reduces straight to n) — provable by plain refl
-theorem zero_add (n : Nat) : Eq Nat (add 0 n) n := refl
-
--- pure ι: pred (succ n) reduces to n
-theorem pred_succ (n : Nat) : Eq Nat (pred (succ n)) n := refl
-
--- n + 0 = n does NOT reduce (the recursion is stuck on the variable n), so
--- it needs induction. The first genuine inductive proof: base is refl,
--- the step applies succ to both sides of the hypothesis via cong, and
--- add (succ k) 0 ≡ succ (add k 0) by ι ties the result type together.
-theorem add_zero (n : Nat) : Eq Nat (add n 0) n :=
-  natrec (λ m : Nat ⇒ Eq Nat (add m 0) m)
+-- a fresh inductive proof, building on the prelude's add_comm / add_succ:
+-- n * 0 = 0, by induction on n (mul recurses on its first argument, and
+-- add 0 _ reduces, so the step is just the induction hypothesis)
+theorem mul_zero (n : Nat) : Eq Nat (mul n 0) 0 :=
+  natrec (λ m : Nat ⇒ Eq Nat (mul m 0) 0)
     refl
-    (λ k : Nat ⇒ λ ih : Eq Nat (add k 0) k ⇒
-      cong Nat Nat (λ m : Nat ⇒ succ m) (add k 0) k ih)
+    (λ k : Nat ⇒ λ ih : Eq Nat (mul k 0) 0 ⇒ ih)
     n
 
--- add n (succ m) = succ (add n m), by induction on n
-theorem add_succ (n m : Nat) : Eq Nat (add n (succ m)) (succ (add n m)) :=
-  natrec (λ x : Nat ⇒ Eq Nat (add x (succ m)) (succ (add x m)))
-    refl
-    (λ k : Nat ⇒ λ ih : Eq Nat (add k (succ m)) (succ (add k m)) ⇒
-      cong Nat Nat (λ z : Nat ⇒ succ z) (add k (succ m)) (succ (add k m)) ih)
-    n
-
--- commutativity: the headline stress test — chains sym, trans, cong, and
--- the two lemmas above, with ι quietly reducing add on succ-headed args
-theorem add_comm (m n : Nat) : Eq Nat (add m n) (add n m) :=
-  natrec (λ x : Nat ⇒ Eq Nat (add x n) (add n x))
-    (sym Nat (add n 0) n (add_zero n))
-    (λ k : Nat ⇒ λ ih : Eq Nat (add k n) (add n k) ⇒
-      trans Nat (add (succ k) n) (succ (add n k)) (add n (succ k))
-        (cong Nat Nat (λ z : Nat ⇒ succ z) (add k n) (add n k) ih)
-        (sym Nat (add n (succ k)) (succ (add n k)) (add_succ n k)))
-    m
-
--- constructor disjointness (no confusion): 0 ≠ succ n. Define a Nat-indexed
--- type that is Unit at 0 and Empty at succ — large elimination, natrec into
--- Type — then transport () : code 0 along a bogus proof 0 = succ n to land
--- an inhabitant of code (succ n) ≡ Empty.
+-- constructor disjointness (no confusion): 0 ≠ succ n. A Nat-indexed type
+-- that is Unit at 0 and Empty at succ — large elimination, natrec into Type —
+-- lets us transport () : code 0 along a bogus 0 = succ n into code (succ n) ≡
+-- Empty. Uses the prelude's subst.
 def code (n : Nat) : Type :=
   natrec (λ x : Nat ⇒ Type) Unit (λ k : Nat ⇒ λ ih : Type ⇒ Empty) n
 

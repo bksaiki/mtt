@@ -1,3 +1,5 @@
+prelude
+
 -- Church-encoded (Leibniz) equality: x equals y when y satisfies every
 -- predicate x does. This is the *encoded* counterpart to the native
 -- inductive Eq (see eq.mtt); the operator is written LEq to leave the Eq

@@ -57,13 +57,12 @@ Cumulativity has absorbed most everyday universe pressure. Full
 polymorphism (levels as parameters, `imax` algebra on level expressions)
 is the deepest rabbit hole on the board.
 
-**Status**: open, deliberately deferred. The native `Eq` (now landed)
-removed the old motivating example — `sym`/`trans`/`subst` are all
-monomorphic `def`s in `eq.mtt`. The remaining real test case: definitions
-meant to work at *every* level at once (e.g. a single `subst` usable for
-both `P : A → Type` and `P : A → Prop` without copies) still need copies.
-**Revisit**: when that duplication becomes painful — likely once a standard
-library accumulates.
+**Status**: open, deliberately deferred. The native `Eq` removed the old
+motivating example; `sym`/`trans`/`subst` now live once in the prelude
+(`std/prelude.mtt`). The remaining real test case: definitions meant to
+work at *every* level at once — e.g. the prelude's `subst` is fixed at
+`P : A → Type`, so a `Prop`-valued transport needs a separate copy.
+**Revisit**: when the prelude wants the same lemma at multiple sorts.
 
 ## Display of unfolded definitions
 
