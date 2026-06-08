@@ -15,7 +15,7 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
       `T params` are allowed
 - [x] Definitional η for single-constructor inductives ("records"): an η case in
       `conv` comparing field projections, plus the positional `Proj` node — lets
-      `Unit`/`Σ` be replaced without losing their η (`record-eta-plan.md`). The
+      `Unit`/`Σ` be replaced without losing their η (see `design.md`). The
       surface `.i` projection syntax lands with the `Σ` removal.
 - [ ] Universe polymorphism (level-polymorphic defs; see questions.md); also
       needed for inductive `Sum`/`Σ`/`Eq` to form at the max of their
@@ -25,7 +25,8 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
       `Type.t`/`Value.t` constructors, eval/quote/conv/infer cases, and lexer
       keywords — collapsing the kernel to Sort/Pi/Lam/App/Var/Ind/Ctor/Rec
       (`Π`/`Sort` stay primitive), with the current builtin tests as the
-      regression spec. `builtin-removal-plan.md` has the order and prerequisites.
+      regression spec. Order and prerequisites below; `Sum`/`Σ`/`Eq`
+      introductions are gated on the elaborator.
       - [x] `Empty` (pilot): `inductive Empty : Prop`, `absurd` a prelude def
             over `Empty.rec`; generic recursor conversion now respects
             Prop-scrutinee irrelevance

@@ -142,13 +142,20 @@ signature `Σ` (`signature.ml`) keyed by name, beside the de Bruijn context.
   remaining builtins.)
 - **Records.** A single-constructor, non-recursive inductive is a record: it
   has positional field projections (`x.i`, generalizing `Fst`/`Snd`) and
-  definitional η (see "η for records" above). This is what lets `Unit`/`Σ`
-  become ordinary inductives.
+  definitional η (see "η for records" above). Projections are a *primitive*
+  node (`Proj`), not derived from the recursor — that is what buys definitional
+  η and a clean ι (this is how Lean/Coq do records too); `ctor_head` carries
+  `nparams` so `vproj` skips parameters, keeping the NbE core signature-free.
+  The stuck projection's field type is recovered by the checker from the
+  scrutinee's type, so the node needs only the index. The surface is positional
+  (`x.1`); named projection (`x.field`) awaits the elaborator. This is what lets
+  `Unit`/`Σ` become ordinary inductives.
 - **Replacing the builtins.** Retired so far: `Empty` (`inductive Empty : Prop`,
   with `absurd` a prelude `def` over `Empty.rec`) and `Unit` (a prelude record,
   `()` sugar for `Unit.unit`, η from the record rule). The remaining
-  inductively-describable builtins (`Sum`/`Nat`/`Σ`/`Eq`) follow;
-  `builtin-removal-plan.md` tracks the sequence and prerequisites.
+  inductively-describable builtins (`Sum`/`Nat`/`Σ`/`Eq`) follow; `todo.md`
+  tracks the sequence and prerequisites (`Sum`/`Σ`/`Eq` introductions are gated
+  on the elaborator).
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
   only as a *direct* recursive field `T params`, never under an arrow or nested
   (more conservative than full strict positivity, a later extension);
@@ -157,8 +164,8 @@ signature `Σ` (`signature.ml`) keyed by name, beside the de Bruijn context.
   inductive eliminates into a larger sort only when it is a subsingleton (≤ 1
   constructor, all fields proofs), generalizing the rule on `case`.
 
-See `examples/inductive.mtt`; the design notes and deferred work (indices,
-mutual/nested, `open`, replacing the builtins) live in `inductive-plan.md`.
+See `examples/inductive.mtt`; deferred work (indices, mutual/nested, `open`,
+replacing the builtins) is tracked in `todo.md`.
 
 ## Errors and locations
 
@@ -202,6 +209,13 @@ only loads when it is not `prelude`, so an opted-out file never pays for it;
 a `prelude` anywhere but first is an error. (`Stmt` sits below
 `Parse`/`Prelude`, so it cannot load — hence the driver owns this, and
 `Stmt.run` treats the `Prelude` marker as a no-op.)
+
+Builtins retired into inductives (`Empty`, `Unit`, …) live here, in the
+auto-loaded prelude — so they are *not* in scope for a file that opts out. That
+is fine while no opted-out file needs them (today none do; `church_*`/`logic`
+use their own encodings). When one eventually does — or once notation needs a
+designated `Nat` etc. — the escalation is a small always-loaded set of primitive
+inductives that `prelude` does not opt out of (a two-tier prelude).
 
 ## Conventions
 

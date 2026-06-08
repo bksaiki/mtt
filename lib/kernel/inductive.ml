@@ -1,7 +1,7 @@
 (* A parameterized inductive type declaration. Parameters are shared across the
    whole definition and appear as explicit leading arguments to the former,
-   every constructor, and the recursor. There are no indices yet (see
-   docs/inductive-plan.md). *)
+   every constructor, and the recursor. There are no indices yet (see the
+   Inductive types section of docs/design.md). *)
 
 type arg =
   { aname : string (* the field's binder name (display only) *)
