@@ -6,32 +6,6 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 `inductive.ml`/`signature.ml`); everything here is checked, not elaborated.
 
 - [ ] Local `let` expressions
-- [x] Σ types (negative: pairs + projections `.1`/`.2`, surjective
-      pairing in `conv`; `A × B` as the non-dependent case, `*` ascii;
-      bare pairs infer at the constant family, Lean-style)
-- [x] Binary sums `A + B` (first positive type: `case` recursor with
-      explicit motive, ι-reduction, stuck `case` frames, and the Prop
-      large-elimination restriction enforced)
-- [x] `Unit` with definitional η (`Unit : Type`, deliberately not `Prop`:
-      a `Prop` unit would collapse `Bool := Unit + Unit` by irrelevance)
-- [x] `Empty` (`absurd`, subsingleton elimination: `Empty : Prop` but
-      eliminates into any sort)
-- [x] `Bool := Unit + Unit` — derived, not kernel (`examples/bool.mtt`);
-      dependent elimination on it works via Unit-η
-- [x] `Nat` (hand-rolled inductive: `0`/`succ`/`natrec` with the induction
-      hypothesis, numeral literals, recursion + induction in `examples/nat.mtt`)
-- [x] Identity type (`Eq A x y` / `refl` / `J`) — explicit type arg for now
-      (`=` infix awaits an elaborator); `sym`/`trans`/`cong`/`subst` and UIP
-      in `examples/eq.mtt`
-- [x] A prelude: a standard library (`std/prelude.mtt`, embedded at build
-      time) — id/comp/not, the Eq toolkit, Nat arithmetic + lemmas — loaded
-      automatically; `prelude` opts out (bare env, à la Lean). `eq.mtt`/`nat.mtt`
-      use it for free; the `church_*`/`logic` encodings opt out
-- [x] Parameterized inductive types: `inductive T params : sort := | c : ty`,
-      a dependent recursor `T.rec`, strict positivity, the Prop
-      large-elimination restriction, qualified `T.c`/`T.rec`
-      (`inductive.ml`/`signature.ml`, `examples/inductive.mtt`; design notes and
-      deferred work in `inductive-plan.md`)
 - [ ] Indexed inductive families: the motive abstracts over indices and the
       target, ι matches index instances, and the recursor generalizes `J`.
       Unlocks `Vec`/`Fin` and an indexed `Eq`
