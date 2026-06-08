@@ -16,6 +16,8 @@ type t =
   | Sum of t * t
   | Inl of t
   | Inr of t
+  | Eq of t * t * t
+  | Refl
   | Neutral of neutral
 
 (** a stuck term: a variable applied to a spine of eliminations *)
@@ -27,6 +29,8 @@ and neutral =
   | Snd of neutral  (** a stuck second projection *)
   | Case of t * neutral * t * t
       (** a stuck case: motive, stuck scrutinee, both branches *)
+  | J of t * t * neutral
+      (** a stuck J: motive, diagonal case, stuck equality proof *)
 
 (** a suspended binder body: syntax waiting for the bound variable's value *)
 and closure =

@@ -132,6 +132,23 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
         j = 0 — proof irrelevance makes inl h ≡ inr h', so a Type-valued
         case could distinguish equal proofs
 
+      Γ ⊢ A : Sort i    Γ ⊢ x : A    Γ ⊢ y : A
+      ─────────────────────────────────────────── (Eq)
+                  Γ ⊢ Eq A x y : Prop
+
+              x ≡ y
+      ────────────────────── (Refl, checking only)
+        Γ ⊢ refl ⇐ Eq A x y
+
+      Γ ⊢ p : Eq A x y    Γ ⊢ P : Π (y : A) ⇒ Eq A x y → Sort j
+      Γ ⊢ d ⇐ P x refl
+      ─────────────────────────────────────────────────────────── (J)
+                       Γ ⊢ J P d p : P y p
+
+        no large-elimination restriction: Eq is a single-constructor
+        subsingleton (like Empty), so eliminating into any sort is sound —
+        this is what lets subst transport between types
+
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Pi)
           Γ ⊢ (x : A) -> B : Sort (imax i j)
