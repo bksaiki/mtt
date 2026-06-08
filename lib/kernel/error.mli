@@ -3,8 +3,8 @@
 
     A message is a list of fragments: literal [Text], or a core [Term] paired
     with the binder names it is read against. The kernel formats no notation
-    itself — it carries the offending terms (built with {!Check.tm}/{!Check.vl})
-    and the frontend, which owns the notation registry, renders them. *)
+    itself — it carries the offending terms ({!Check.vl} builds a [Term] from a
+    value) and the frontend, which owns the notation registry, renders them. *)
 
 type frag =
   | Text of string

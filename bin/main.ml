@@ -36,7 +36,8 @@ let print_env (sess : Stmt.session) =
   | binds ->
       List.iter
         (fun (x, ty) ->
-          Printf.printf "%s : %s\n" x (Notation.show sess.notation ctx ty))
+          Printf.printf "%s : %s\n" x
+            (Notation.show sess.notation ctx.names ctx.lvl ty))
         binds
 
 (* REPL: run one statement, printing its message or error, returning the

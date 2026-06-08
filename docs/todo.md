@@ -103,14 +103,18 @@ the notation registry under Surface syntax; the two share that registry.
         (not pre-rendered strings) so the driver can delaborate them — the latter
         is what lets the kernel stay entirely notation-ignorant. Pairs naturally
         with the elaborator (forward) since they share the registry.
-      - [x] **rendering decision: option 3, done.** `Check.Type_error` carries
-        message *fragments* (`Text` | `Term of names * term`) with raw terms, not
-        strings; the kernel quotes the offending values and formats no notation.
-        `notation` is gone from `Check.ctx` — the registry lives in the frontend
+      - [x] **rendering decision: option 3, done.** `Error.Type_error` (in the
+        small kernel `Error` module) carries message *fragments* (`Text` |
+        `Term of names * term`) with raw terms, not strings; the kernel quotes
+        the offending values and formats no notation. The notation registry is
+        gone from the kernel entirely — no `notation` type, no `Check.ctx` field;
+        the printer (`Type.pp_in`) takes only a generic `sugar : t -> string
+        option` hook. The registry (`Notation.t`) lives in the frontend
         (`Notation` module), threaded alongside the kernel context in a
-        `Stmt.session`. Output (`Notation.show`) and errors
-        (`Notation.render_error`) are both rendered there; `Check.show` stays as
-        the kernel's plain faithful view. The kernel is fully notation-ignorant.
+        `Stmt.session`; output (`Notation.show`), errors
+        (`Notation.render_error`), and the forward `()`/numeral parse all run
+        there. `Check.show` stays as the kernel's plain faithful view. The kernel
+        is fully notation-ignorant.
 - [x] Print `Unit.unit` as `()` — now via the notation registry above (the
       `@[notation unit]` ctor, folded by the printer's notation config); the
       hardcoded `Unit.unit` printer case and `to_term` lookup are gone.

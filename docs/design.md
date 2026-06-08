@@ -20,11 +20,12 @@ string ─parse─▶ Ast.t ─to_term─▶ Type.t ─eval─▶ Value.t ─quo
 Type checking (`check.ml`) sits on `Type.t` and decides equality on
 `Value.t`.
 
-The trusted core — `type`/`value`/`check`/`inductive`/`signature` — is an
-isolated library under `lib/kernel/` (`mtt_kernel`, left unwrapped so its
-modules stay top-level). It is location-free and self-contained; the frontend
-in `lib/` (lexer, parser, `ast`, `stmt`, `prelude`) depends on it, never the
-reverse — so the dependency arrow enforces the layering.
+The trusted core — `type`/`value`/`check`/`inductive`/`signature`/`error` — is
+an isolated library under `lib/kernel/` (`mtt_kernel`, left unwrapped so its
+modules stay top-level). It is location-free, notation-free, and
+self-contained; the frontend in `lib/` (lexer, parser, `ast`, `notation`,
+`stmt`, `prelude`) depends on it, never the reverse — so the dependency arrow
+enforces the layering.
 
 ## Representations
 
@@ -182,23 +183,25 @@ and the printer folds them back). Registration is **one-shot** and
 **shape-checked**: the role demands a particular constructor shape, and a
 malformed or duplicate binding is a type error.
 
-The registry is a `Type.notation` config consulted in both directions: forward
-in `to_term` (`()` → `Unit.unit`, `5` → succ-chain of the registered `Nat`),
-reverse in the printer (those same constructors fold back to `()`/decimals).
+**The kernel is notation-ignorant** — it never names `Unit`/`Nat` and holds no
+notation type at all. The registry lives entirely in the frontend (the
+`Notation` module): a `Notation.t` mapping each role to the constructors that
+fill it, threaded alongside the kernel context in a `Stmt.session`. It drives
+both directions:
+- **forward** — `Ast.to_term` reads it to resolve `()` → the unit constructor
+  and `5` → a succ-chain of the registered `Nat`;
+- **reverse** — `Notation.sugar` turns it into a `Type.t → string option` hook
+  that the kernel printer (`Type.pp_in`) consults to fold a subterm into a
+  surface atom (`()`, a decimal). The kernel prints only core syntax; it knows
+  nothing of what the hook folds.
 
-**The kernel is notation-ignorant.** It never names `Unit`/`Nat` and holds no
-display config: the printer (`Type.pp_in`) is a *generic* utility that applies
-whatever config it is handed (default: none), and the checking context carries
-nothing about notation. Everything user-facing is rendered in the frontend (the
-`Notation` module), which owns the registry — threaded, alongside the kernel
-context, in a `Stmt.session`. So:
-- **output** (`#check`/`#eval`/`:env`) is rendered by `Notation.show`, with the
-  session's notation;
-- **errors** are structured: `Check.Type_error` carries message *fragments*
-  (`Text` | `Term of names × term`) with raw terms, never pre-rendered strings;
-  the kernel quotes the offending values and formats no notation, and
-  `Notation.render_error` applies notation when displaying. (`Check.show` remains
-  as the kernel's *plain* faithful view, used internally and in debugging.)
+Everything user-facing is rendered in the frontend: `#check`/`#eval`/`:env`
+output via `Notation.show`, error messages via `Notation.render_error`. The
+kernel emits no notation — it raises `Error.Type_error` carrying message
+*fragments* (`Text` | `Term of names × term`) with the offending terms quoted
+but unrendered, and the frontend delaborates them. (`Check.show` remains the
+kernel's *plain* faithful view, for internal use and debugging; the error
+vocabulary itself lives in the small `Error` module.)
 
 This is the "faithful core printer + frontend delaborator" split: the kernel
 emits terms, the frontend delaborates. The longer arc — a full **delaborator**
@@ -224,7 +227,7 @@ declaration just extends the checking context (`stmt.ml`, which holds both
 the statement type and its processor, per the module-per-concept convention):
 
 - `axiom x : A` — `bind`: a fresh neutral, stuck forever
-- `def x [: A] = t` — `define`: bound to `t`'s value, unfolds (δ)
+- `def x [: A] = t` — `extend`: bound to `t`'s value, unfolds (δ)
 - `theorem x : A = t` — proof checked, then `bind`: opaque (Qed-style);
   a theorem behaves exactly like an axiom whose obligation was discharged
 - `inductive T params : sort := | c : ty | ...` — declares an inductive type;

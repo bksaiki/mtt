@@ -27,12 +27,13 @@ val register : string -> Inductive.spec -> t -> t
     matches a registered role, else [None] — the hook {!Type.pp_in} expects. *)
 val sugar : t -> Type.t -> string option
 
-(** [show n ctx v] / [show_term n ctx t] render a value / term against the
-    context's binder names with notation applied — for [#check]/[#eval]/[:env]
-    output. *)
-val show : t -> Check.ctx -> Value.t -> string
+(** [show n names lvl v] / [show_term n names t] render a value / term against
+    the binder [names] (with de Bruijn level [lvl] to quote a value) with
+    notation applied — for [#check]/[#eval]/[:env] output. Taking [names]/[lvl]
+    rather than a {!Check.ctx} keeps this module independent of the checker. *)
+val show : t -> string list -> int -> Value.t -> string
 
-val show_term : t -> Check.ctx -> Type.t -> string
+val show_term : t -> string list -> Type.t -> string
 
 (** [render_error n frags] renders a kernel error message ({!Error.Type_error}),
     applying notation to each embedded term *)

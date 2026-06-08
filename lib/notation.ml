@@ -33,11 +33,10 @@ let render_error n frags =
          | Error.Term (names, t) -> Type.to_string_in ~sugar:(sugar n) names t)
        frags)
 
-let show n ctx v =
-  Type.to_string_in ~sugar:(sugar n) ctx.Check.names
-    (Value.quote ctx.Check.lvl v)
+let show n names lvl v =
+  Type.to_string_in ~sugar:(sugar n) names (Value.quote lvl v)
 
-let show_term n ctx t = Type.to_string_in ~sugar:(sugar n) ctx.Check.names t
+let show_term n names t = Type.to_string_in ~sugar:(sugar n) names t
 
 let register role spec n =
   match role with

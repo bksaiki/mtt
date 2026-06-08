@@ -10,7 +10,9 @@ let infer s =
       (Parse.term_of_string_in prelude.ctx.signature ~notation:prelude.notation
          s)
   with
-  | ty -> print_endline (Notation.show prelude.notation prelude.ctx ty)
+  | ty ->
+      print_endline
+        (Notation.show prelude.notation prelude.ctx.names prelude.ctx.lvl ty)
   | exception Error.Type_error frags ->
       Printf.printf "type error: %s\n"
         (Notation.render_error prelude.notation frags)

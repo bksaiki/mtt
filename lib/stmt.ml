@@ -117,15 +117,15 @@ let run (sess : session) stmt =
       ( sess
       , Some
           (Printf.sprintf "%s : %s"
-             (Notation.show_term notation ctx nf)
-             (Notation.show notation ctx ty)) )
+             (Notation.show_term notation ctx.names nf)
+             (Notation.show notation ctx.names ctx.lvl ty)) )
   | Eval s ->
       let t = to_term s in
       (* still type-checked first: evaluation of ill-typed terms can get stuck
          on a non-function *)
       let _ = Check.infer ctx t in
       let nf = Value.quote ctx.lvl (Value.eval ctx.env t) in
-      (sess, Some (Notation.show_term notation ctx nf))
+      (sess, Some (Notation.show_term notation ctx.names nf))
   | Axiom (x, sa) ->
       let va = eval_ann sa in
       ({ sess with ctx = Check.bind x va ctx }, None)
