@@ -1,3 +1,23 @@
+(* The computational skeleton of an inductive constructor, baked into the syntax
+   node so that the NbE core can fire ι without consulting the global signature
+   (which holds the full types, for the checker only). *)
+type ctor_head =
+  { ind : string (* the inductive this constructs *)
+  ; cname : string (* the constructor's (globally unique) name *)
+  ; cindex : int (* its position in the inductive's constructor list *)
+  ; carity : int (* total arguments: leading parameters + fields *)
+  }
+
+(* The skeleton of a recursor, enough to drive ι. [recs] has one entry per
+   constructor (in order); each entry flags, for that constructor's *fields*
+   (its non-parameter arguments), which are recursive (of the inductive's own
+   type). Parameters are shared and never recursive, so they are excluded. *)
+type rec_head =
+  { rind : string (* the inductive being eliminated; prints as "rind.rec" *)
+  ; nparams : int (* leading parameter arguments, shared and fixed *)
+  ; recs : bool list list
+  }
+
 type t =
   | Unit (* the unit type *)
   | MkUnit (* the element of Unit *)
@@ -24,6 +44,9 @@ type t =
   | Zero
   | Succ of t
   | NatRec of t * t * t * t (* natrec P pz ps n: recursion on n : Nat *)
+  | Ind of string (* an inductive type former, applied to params via App *)
+  | Ctor of ctor_head (* a constructor, applied to args via App *)
+  | Rec of rec_head (* an inductive's recursor, applied to args via App *)
 
 let rec occurs k = function
   | Unit
@@ -55,6 +78,12 @@ let rec occurs k = function
       false
   | Succ t -> occurs k t
   | NatRec (p, z, s, n) -> occurs k p || occurs k z || occurs k s || occurs k n
+  (* inductive heads are closed: they carry no de Bruijn indices, only the
+     skeleton; any arguments ride along as App nodes *)
+  | Ind _
+  | Ctor _
+  | Rec _ ->
+      false
 
 let pp_in names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
@@ -191,6 +220,13 @@ let pp_in names fmt t =
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[natrec@ %a@ %a@ %a@ %a@]" (go 11 names) p
               (go 11 names) z (go 11 names) s (go 11 names) n)
+    (* inductive heads are atoms; their arguments print via the enclosing App
+       nodes (so [Nat.rec P z s n] renders through application) *)
+    | Ind name -> Format.pp_print_string fmt name
+    (* constructors and the recursor print qualified by their type, matching how
+       they are written *)
+    | Ctor h -> Format.fprintf fmt "%s.%s" h.ind h.cname
+    | Rec h -> Format.fprintf fmt "%s.rec" h.rind
   in
   go 0 names fmt t
 

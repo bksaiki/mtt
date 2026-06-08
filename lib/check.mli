@@ -145,12 +145,14 @@ exception Type_error of string
 (** [type_error fmt ...] raises {!Type_error} with a formatted message *)
 val type_error : ('a, Format.formatter, unit, 'b) format4 -> 'a
 
-(** the typing context: one entry per binder in scope, all index-aligned *)
+(** the typing context: the local binders (index-aligned), plus the global
+    inductive signature *)
 type ctx =
   { env : Value.env  (** values of bound variables, for evaluation *)
   ; types : Value.t list  (** their types *)
   ; names : string list  (** binder names, for error messages *)
   ; lvl : int  (** binders in scope = next fresh de Bruijn level *)
+  ; signature : Signature.t  (** the inductive types declared so far *)
   }
 
 val empty : ctx
@@ -192,3 +194,14 @@ val infer_univ : ctx -> Type.t -> int
     against a Pi checks the annotation and descends into the body; anything else
     is inferred and compared up to cumulativity (subsumption) *)
 val check : ctx -> Type.t -> Value.t -> unit
+
+(** [add_ind spec ctx] registers an inductive declaration in the context's
+    signature, so its former, constructors and recursor can be referenced *)
+val add_ind : Inductive.spec -> ctx -> ctx
+
+(** [check_inductive ctx spec] validates an inductive declaration: kind-checks
+    the parameter telescope and each constructor's field types, and enforces
+    strict positivity (the inductive may appear only as a direct recursive
+    field) and predicativity. Raises {!Type_error} on an ill-formed declaration.
+    Does not modify [ctx] — register the spec with {!add_ind}. *)
+val check_inductive : ctx -> Inductive.spec -> unit

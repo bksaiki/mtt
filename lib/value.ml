@@ -15,6 +15,15 @@ type t =
   | Nat
   | Zero
   | Succ of t
+  (* an inductive type former applied to its parameters (a type once the
+     parameters are complete; a type-returning function while partial) *)
+  | VInd of string * t list
+  (* a constructor applied to a spine of arguments (canonical data once
+     saturated; a constructor function while partial) *)
+  | VCtor of Type.ctor_head * t list
+  (* a recursor accumulating its arguments [params @ motive :: minors @ [major]]
+     until saturated, when it fires ι (see [vrec]) *)
+  | VRec of Type.rec_head * t list
   | Neutral of neutral
 
 and neutral =
@@ -27,6 +36,9 @@ and neutral =
   | J of t * t * neutral (* a stuck J: motive, diagonal, stuck proof *)
   | NatRec of
       t * t * t * neutral (* a stuck recursion: motive, base, step, scrutinee *)
+  | Rec of Type.rec_head * t list * neutral
+(* a stuck inductive recursion: the recursor skeleton, the arguments before the
+   major ([params @ motive :: minors]), and the stuck major *)
 
 and closure =
   { env : env
@@ -70,6 +82,10 @@ let rec eval env t =
   | Type.Succ n -> Succ (eval env n)
   | Type.NatRec (p, z, s, n) ->
       vnatrec (eval env p) (eval env z) (eval env s) (eval env n)
+  (* inductive heads start empty and accumulate their arguments via [apply] *)
+  | Type.Ind name -> VInd (name, [])
+  | Type.Ctor h -> VCtor (h, [])
+  | Type.Rec h -> VRec (h, [])
 
 (* β-reduction: (fun (x : A) => b) a ≡ b[a/x]. The substitution is just
    evaluating the closure body in an extended environment: no term-level
@@ -79,9 +95,77 @@ and apply f a =
   match f with
   | Lam (_, _, c) -> apply_closure c a
   | Neutral n -> Neutral (App (n, a))
+  (* inductive heads accumulate arguments; a saturated recursor fires ι *)
+  | VInd (name, args) -> VInd (name, args @ [ a ])
+  | VCtor (h, args) -> VCtor (h, args @ [ a ])
+  | VRec (h, args) ->
+      let args = args @ [ a ] in
+      (* params, then the motive, one minor premise per constructor, the
+         major *)
+      let needed = h.Type.nparams + 1 + List.length h.Type.recs + 1 in
+      if List.length args < needed then
+        VRec (h, args)
+      else
+        vrec h args
   | _ -> raise Not_a_function
 
 and apply_closure { env; body } a = eval (a :: env) body
+
+(* split [l] into its first [n] elements and the rest *)
+and split_at n l =
+  if n = 0 then
+    ([], l)
+  else
+    match l with
+    | x :: xs ->
+        let hd, tl = split_at (n - 1) xs in
+        (x :: hd, tl)
+    | [] -> assert false
+
+(* ι-reduction for the generic recursor, on the saturated argument list [params
+   @ motive :: minors @ [major]]. On a constructor it applies that constructor's
+   minor premise to the constructor's fields, inserting after each recursive
+   field its induction hypothesis (the recursor called on that field); a stuck
+   major freezes the whole recursion as a neutral frame. Terminates by
+   descending on the structurally smaller recursive fields. *)
+and vrec h args =
+  let params, rest = split_at h.Type.nparams args in
+  let motive, rest =
+    match rest with
+    | m :: r -> (m, r)
+    | [] -> assert false
+  in
+  let minors, rest = split_at (List.length h.Type.recs) rest in
+  let major =
+    match rest with
+    | [ m ] -> m
+    | _ -> assert false
+  in
+  match major with
+  | VCtor (ch, cargs) ->
+      let minor = List.nth minors ch.Type.cindex in
+      let recs = List.nth h.Type.recs ch.Type.cindex in
+      (* drop the leading parameters: the minor premise abstracts only fields *)
+      let _, fields = split_at h.Type.nparams cargs in
+      let rec go acc fields recs =
+        match (fields, recs) with
+        | [], [] -> acc
+        | f :: fs, r :: rs ->
+            let acc = apply acc f in
+            let acc =
+              if r then
+                (* the induction hypothesis: the recursor on the recursive
+                   field *)
+                apply acc (vrec h (params @ (motive :: minors) @ [ f ]))
+              else
+                acc
+            in
+            go acc fs rs
+        | _ -> assert false
+      in
+      go minor fields recs
+  | Neutral n -> Neutral (Rec (h, params @ (motive :: minors), n))
+  | _ -> assert false
 
 (* projections: reduce on a pair, get stuck on a neutral. Anything else is
    ill-typed (unreachable for checked terms). *)
@@ -140,10 +224,17 @@ let rec quote l v =
   | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
   | Sigma (x, a, c) -> Type.Sigma (x, quote l a, quote_closure l c)
   | Pair (a, b) -> Type.Pair (quote l a, quote l b)
+  | VInd (name, args) -> quote_spine l (Type.Ind name) args
+  | VCtor (h, args) -> quote_spine l (Type.Ctor h) args
+  | VRec (h, args) -> quote_spine l (Type.Rec h) args
   | Neutral n -> quote_neutral l n
 
 (* to go under a binder, apply the closure to a fresh stuck variable *)
 and quote_closure l c = quote (l + 1) (apply_closure c (Neutral (Var l)))
+
+(* read back a head applied to a spine of value arguments *)
+and quote_spine l head args =
+  List.fold_left (fun t a -> Type.App (t, quote l a)) head args
 
 and quote_neutral l = function
   (* level → index: the variable bound under k other binders, seen from under l
@@ -158,5 +249,8 @@ and quote_neutral l = function
   | J (p, d, n) -> Type.J (quote l p, quote l d, quote_neutral l n)
   | NatRec (p, z, s, n) ->
       Type.NatRec (quote l p, quote l z, quote l s, quote_neutral l n)
+  | Rec (h, pre, n) ->
+      (* pre = params @ motive :: minors; the stuck major closes the spine *)
+      Type.App (quote_spine l (Type.Rec h) pre, quote_neutral l n)
 
 let normalize t = quote 0 (eval [] t)

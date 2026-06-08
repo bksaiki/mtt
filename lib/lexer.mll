@@ -49,6 +49,7 @@ rule token = parse
   | "def" { DEF }
   | "theorem" { THEOREM }
   | "lemma" { THEOREM }
+  | "inductive" { INDUCTIVE }
   | "->" { ARROW }
   | "→" { ARROW }
   | "=>" { DARROW }
@@ -59,6 +60,7 @@ rule token = parse
   | "×" { TIMES }
   | "*" { TIMES }
   | "," { COMMA }
+  | "|" { BAR }
   | ".1" { FST }
   | ".2" { SND }
   | "." digits as s
@@ -68,6 +70,8 @@ rule token = parse
               "no projection %s: tuples are right-nested pairs, so e.g. the \
                third component of a triple is .2.2"
               s)) }
+  (* a named projection, currently only [.rec] (an inductive's recursor) *)
+  | "." (ident as f) { DOTID f }
   | "(" { LPAREN }
   | ")" { RPAREN }
   | ":" { COLON }

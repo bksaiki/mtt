@@ -1,0 +1,62 @@
+-- Bool and the natural numbers built with the `inductive` machinery. The
+-- kernel still ships a hardcoded Nat (these are the from-scratch versions the
+-- general mechanism produces; the builtin will be replaced later). Constructors
+-- and the recursor are qualified by their type: `Bool.true`, `Nat'.S`,
+-- `Nat'.rec` (the printer shows them qualified too; an `open`-style form to
+-- drop the qualifier comes later).
+--
+-- `Nat`/`succ`/`natrec` are reserved for the builtin, so the inductive copy is
+-- `Nat'` with constructors `O`/`S`. The standard prelude is auto-loaded, so the
+-- Eq toolkit (`cong`) is in scope for the induction proof at the end.
+
+-- Booleans: two nullary constructors, eliminated by a case analysis (Bool.rec
+-- with a non-dependent motive).
+inductive Bool : Type :=
+| true : Bool
+| false : Bool
+
+def negb (b : Bool) : Bool :=
+  Bool.rec (fun (_ : Bool) => Bool) Bool.false Bool.true b
+
+def andb (a b : Bool) : Bool :=
+  Bool.rec (fun (_ : Bool) => Bool) b Bool.false a
+
+#eval negb Bool.true
+#eval andb Bool.true Bool.false
+
+-- the recursor computes, so these equalities hold definitionally:
+#check_equal (negb (negb Bool.true)) Bool.true
+#check_equal (andb Bool.true Bool.true) Bool.true
+
+-- Natural numbers: `S` is a recursive constructor, so `Nat'.rec` hands each
+-- step an induction hypothesis (the result on the predecessor).
+inductive Nat' : Type :=
+| O : Nat'
+| S : Nat' -> Nat'
+
+def double (n : Nat') : Nat' :=
+  Nat'.rec (fun (_ : Nat') => Nat') Nat'.O
+    (fun (k ih : Nat') => Nat'.S (Nat'.S ih)) n
+
+-- addition by recursion on the first argument:
+-- add O m ≡ m, add (S k) m ≡ S (add k m)
+def add (n m : Nat') : Nat' :=
+  Nat'.rec (fun (_ : Nat') => Nat') m (fun (k ih : Nat') => Nat'.S ih) n
+
+#eval double (Nat'.S (Nat'.S Nat'.O)) -- Nat'.S (Nat'.S (Nat'.S (Nat'.S Nat'.O)))
+#eval add (Nat'.S (Nat'.S Nat'.O)) (Nat'.S Nat'.O) -- Nat'.S (Nat'.S (Nat'.S Nat'.O))
+
+-- the base case of `add` holds by computation, so refl proves it:
+theorem add_O (m : Nat') : Eq Nat' (add Nat'.O m) m := refl
+
+-- `add n O = n` is not definitional — it needs induction. The dependent motive
+-- is `fun n => Eq Nat' (add n O) n`; the base is refl (add O O ≡ O), and the
+-- step turns the induction hypothesis `ih : Eq Nat' (add k O) k` into a proof
+-- for `S k` with the prelude's `cong`.
+theorem add_O_right (n : Nat') : Eq Nat' (add n Nat'.O) n :=
+  Nat'.rec
+    (fun (n : Nat') => Eq Nat' (add n Nat'.O) n)
+    refl
+    (fun (k : Nat') (ih : Eq Nat' (add k Nat'.O) k) =>
+      cong Nat' Nat' Nat'.S (add k Nat'.O) k ih)
+    n
