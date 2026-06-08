@@ -406,40 +406,42 @@ and conv_neutral ctx n1 n2 : Value.t option =
      [params @ motive :: minors], and each minor is compared at its derived
      minor-premise type *)
   | Value.Rec (h, pre1, n1), Value.Rec (h2, pre2, n2)
-    when String.equal h.Type.rind h2.Type.rind -> (
-      match conv_neutral ctx n1 n2 with
-      | Some _ ->
-          let spec = lookup_ind ctx h.Type.rind in
-          let m = h.Type.nparams in
-          let params1 = List.filteri (fun i _ -> i < m) pre1 in
-          let params2 = List.filteri (fun i _ -> i < m) pre2 in
-          let motive1 = List.nth pre1 m and motive2 = List.nth pre2 m in
-          let minors1 = List.filteri (fun i _ -> i > m) pre1 in
-          let minors2 = List.filteri (fun i _ -> i > m) pre2 in
-          let ind_ty =
-            List.fold_left Value.apply (Value.VInd (h.Type.rind, [])) params1
-          in
-          let motives_ok =
-            conv_ty ~cumul:false (bind "x" ind_ty ctx)
-              (Value.apply motive1 (fresh ctx))
-              (Value.apply motive2 (fresh ctx))
-          in
-          let minors_ok =
-            List.for_all2
-              (fun (i, mn1) mn2 ->
-                conv ctx (minor_type ctx spec params1 motive1 i) mn1 mn2)
-              (List.mapi (fun i mn -> (i, mn)) minors1)
-              minors2
-          in
-          if
-            conv_params ctx [] spec.Inductive.params params1 params2
-            && motives_ok
-            && minors_ok
-          then
-            Some (Value.apply motive1 (Value.Neutral n1))
-          else
-            None
-      | None -> None)
+    when String.equal h.Type.rind h2.Type.rind ->
+      let spec = lookup_ind ctx h.Type.rind in
+      let m = h.Type.nparams in
+      let params1 = List.filteri (fun i _ -> i < m) pre1 in
+      let params2 = List.filteri (fun i _ -> i < m) pre2 in
+      let motive1 = List.nth pre1 m and motive2 = List.nth pre2 m in
+      let minors1 = List.filteri (fun i _ -> i > m) pre1 in
+      let minors2 = List.filteri (fun i _ -> i > m) pre2 in
+      let ind_ty =
+        List.fold_left Value.apply (Value.VInd (h.Type.rind, [])) params1
+      in
+      (* the major is compared *at the inductive type*, not structurally: a Prop
+         scrutinee is a proof, so by irrelevance two stuck recursions on
+         different proofs are equal (this is what subsumes [absurd]) *)
+      let majors_ok = conv ctx ind_ty (Value.Neutral n1) (Value.Neutral n2) in
+      let motives_ok =
+        conv_ty ~cumul:false (bind "x" ind_ty ctx)
+          (Value.apply motive1 (fresh ctx))
+          (Value.apply motive2 (fresh ctx))
+      in
+      let minors_ok =
+        List.for_all2
+          (fun (i, mn1) mn2 ->
+            conv ctx (minor_type ctx spec params1 motive1 i) mn1 mn2)
+          (List.mapi (fun i mn -> (i, mn)) minors1)
+          minors2
+      in
+      if
+        conv_params ctx [] spec.Inductive.params params1 params2
+        && majors_ok
+        && motives_ok
+        && minors_ok
+      then
+        Some (Value.apply motive1 (Value.Neutral n1))
+      else
+        None
   (* stuck ex falso: the motives must agree; the proofs are of type Empty, a
      Prop, so by irrelevance they need not be compared at all *)
   | Value.Absurd (a1, _), Value.Absurd (a2, _) ->
