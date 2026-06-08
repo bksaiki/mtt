@@ -17,6 +17,7 @@ type t =
 
 and neutral =
   | Var of int (* de Bruijn level *)
+  | Meta of int (* a metavariable head, by id; flexible until solved *)
   | App of neutral * t
   | Proj of int * neutral (* a stuck record field projection *)
   | J of t * t * neutral (* a stuck J: motive, diagonal, stuck proof *)
@@ -33,9 +34,44 @@ and env = t list
 
 exception Not_a_function
 
+(* The metacontext: metavariables the elaborator creates, each with its (closed)
+   type and an optional solution. This is the kernel's one piece of mutable
+   global state, isolated here; the frontend [reset_metas] before each top-level
+   elaboration, [fresh_meta]s and [solve_meta]s during it, and zonks the result
+   so no metavariable survives to a final [Check]. The kernel only ever reads a
+   solution — to [force] a solved meta during reduction. *)
+type meta_entry =
+  { mty : t (* the metavariable's (closed) type *)
+  ; mutable soln : t option
+  }
+
+let metas : (int, meta_entry) Hashtbl.t = Hashtbl.create 64
+
+let meta_counter = ref 0
+
+let fresh_meta mty =
+  let i = !meta_counter in
+  incr meta_counter;
+  Hashtbl.replace metas i { mty; soln = None };
+  i
+
+let meta_type i = (Hashtbl.find metas i).mty
+
+let meta_soln i = (Hashtbl.find metas i).soln
+
+let solve_meta i v = (Hashtbl.find metas i).soln <- Some v
+
+let reset_metas () =
+  Hashtbl.clear metas;
+  meta_counter := 0
+
 let rec eval env t =
   match t with
   | Type.Var i -> List.nth env i
+  | Type.Meta i -> (
+      match meta_soln i with
+      | Some s -> s
+      | None -> Neutral (Meta i))
   | Type.Sort i -> Sort i
   | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
   | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
@@ -137,8 +173,28 @@ and vj p d pr =
   | Neutral n -> Neutral (J (p, d, n))
   | _ -> assert false
 
-let rec quote l v =
+(* unfold a solved metavariable at the head of a value: peel the neutral's
+   argument spine, and if its head is a solved meta, re-apply the solution to
+   that spine and force again. A meta-free value is returned unchanged, so this
+   is a no-op outside elaboration. *)
+and force v =
   match v with
+  | Neutral n -> (
+      let rec peel n acc =
+        match n with
+        | App (m, a) -> peel m (a :: acc)
+        | _ -> (n, acc)
+      in
+      match peel n [] with
+      | Meta i, args -> (
+          match meta_soln i with
+          | Some s -> force (List.fold_left apply s args)
+          | None -> v)
+      | _ -> v)
+  | _ -> v
+
+let rec quote l v =
+  match force v with
   | Sort i -> Type.Sort i
   | Eq (a, x, y) -> Type.Eq (quote l a, quote l x, quote l y)
   | Refl -> Type.Refl
@@ -160,6 +216,8 @@ and quote_neutral l = function
   (* level → index: the variable bound under k other binders, seen from under l
      binders, is index l - k - 1 *)
   | Var k -> Type.Var (l - k - 1)
+  (* an unsolved meta (a solved one is unfolded by [force] in [quote]) *)
+  | Meta i -> Type.Meta i
   | App (n, a) -> Type.App (quote_neutral l n, quote l a)
   | Proj (i, n) -> Type.Proj (i, quote_neutral l n)
   | J (p, d, n) -> Type.J (quote l p, quote l d, quote_neutral l n)

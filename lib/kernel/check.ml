@@ -124,6 +124,9 @@ let field_type spec params v i =
 let rec infer_neutral ctx (n : Value.neutral) : Value.t =
   match n with
   | Value.Var k -> List.nth ctx.types (ctx.lvl - k - 1)
+  (* a metavariable carries its own (closed) type; its spine is typed by the
+     [App] rule below, exactly as for a variable head *)
+  | Value.Meta i -> Value.meta_type i
   | Value.App (m, a) -> (
       match infer_neutral ctx m with
       | Value.Pi (_, _, c) -> Value.apply_closure c a
@@ -272,6 +275,13 @@ and conv_neutral ctx n1 n2 : Value.t option =
         Some (List.nth ctx.types (ctx.lvl - k1 - 1))
       else
         None
+  (* two unsolved metavariables: equal iff the same one. Solved metas are
+     unfolded by [Value.force] before conversion ever reaches here. *)
+  | Value.Meta i, Value.Meta j ->
+      if i = j then
+        Some (Value.meta_type i)
+      else
+        None
   | Value.App (m1, a1), Value.App (m2, a2) -> (
       match conv_neutral ctx m1 m2 with
       | Some (Value.Pi (_, dom, c)) ->
@@ -390,6 +400,10 @@ let subsingleton ctx spec =
 let rec infer ctx t =
   match t with
   | Type.Var i -> List.nth ctx.types i (* (Var) *)
+  (* a metavariable has its recorded type; the elaborator calls [infer] on
+     part-elaborated core, so metas are tolerated here. Final core is zonked
+     meta-free, so a real check never relies on this. *)
+  | Type.Meta i -> Value.meta_type i
   | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
   (* (Pi) *)
   | Type.Pi (x, a, b) ->

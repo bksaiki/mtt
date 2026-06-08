@@ -92,6 +92,7 @@ let rec occurs name (t : Type.t) =
   | Rec h -> String.equal h.rind name
   | Var _
   | Sort _
+  | Meta _
   | Refl ->
       false
   | Proj (_, a) -> occurs name a

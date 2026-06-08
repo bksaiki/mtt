@@ -70,13 +70,48 @@ recursor, large elimination) now lives in `test_ind.ml`. Details in `design.md`.
 
 ### Phase 3 — Metavariables, unification, holes
 
-The inference engine. **Has the one architectural decision (below).**
+The inference engine. **Representation decided: Option A — metavariables live in
+the kernel's NbE** (a `Meta` form in `Type.t`/`Value.t`), reusing eval/quote/conv
+rather than duplicating them. The kernel becomes meta-aware; the frontend owns
+the solving (the metacontext + unifier) and zonks to meta-free core before the
+trusted `Check` re-verifies, so soundness is unchanged.
 
-- A metacontext (store of solved/unsolved metas), Miller-pattern unification,
-  and zonking; a surface hole `_` that elaborates to a fresh meta solved against
-  its expected type.
-- Self-contained and testable via `_`.
-- **Size:** medium–large (unification is fiddly).
+Representation:
+
+- **`Type.t`** gains `Meta of int` (a metavariable by id). A meta applied to its
+  local dependencies rides the existing `App` spine, so `?m a b` is
+  `App (App (Meta m, a), b)` — the Miller-pattern setup.
+- **`Value.t`** neutral gains `Meta of int` (a flexible head).
+- **Metacontext** (in `value.ml`, where solutions are `Value.t` — keeps the
+  module graph acyclic): per-meta `{ ty : Value.t; mutable soln : Value.t option }`
+  by id, with `fresh`/`solve`/`force`/`reset`. The one piece of mutable state,
+  isolated to one module; the frontend `reset`s it per top-level elaboration.
+- **Contextual metas:** a fresh meta in a context of `n` binders is created as
+  `?m $0 … $(n-1)` (the bound vars as a spine), so solving yields a closed
+  `λ. t` — the standard way to keep metas closed.
+
+Kernel changes (all small, since metas reuse the neutral machinery):
+
+- `force` follows a solved meta at the head; `eval`/`quote`/`conv`/`infer_neutral`
+  force before matching. Two unsolved metas are convertible iff same id + spine.
+- The printer renders `?n`. `Check` tolerates metas as neutrals (the elaborator
+  reuses it mid-elaboration); the final re-check runs on **zonked**, meta-free
+  core, and zonking errors on any unsolved meta ("cannot infer; annotate").
+
+Frontend (`Elab`):
+
+- `unify ctx v1 v2` — Miller-pattern unification on values (force; on `?m sp =?= t`
+  with `sp` distinct bound vars, occurs/scope-check then `solve ?m := λ sp. t`;
+  rigid-rigid recurses; reuses `Value.apply`/`quote`).
+- a surface hole `_` (`Ast.Hole`) → a fresh meta (of the expected type when
+  checking, else a meta at a fresh type-meta).
+- `zonk` the elaborated core, then `Stmt.run` hands the meta-free result to
+  `Check`.
+
+- **Self-contained and testable via `_`** (a hole solvable from its expected
+  type or surrounding constraints). **Size:** medium–large (unification is
+  fiddly); likely lands as one PR, with implicit arguments (Phase 4) building on
+  it directly.
 
 ### Phase 4 — Implicit arguments
 
@@ -96,12 +131,10 @@ Several smaller PRs, built on Phases 3–4.
 
 ## Open decisions
 
-- **Metavariable representation (Phase 3).** Either a `Meta` node in the kernel
-  `Type.t`/`Value.t`, used only during elaboration and rejected by `Check`
-  (reuses all of NbE — the standard approach), or a separate elaborator
-  representation that keeps the kernel pristine at the cost of duplicating
-  NbE-with-metas. Given how hard we have pushed on kernel minimalism this is a
-  real discussion; it does not block Phases 1–2.
+- **Metavariable representation (Phase 3).** *Decided: Option A* — a `Meta` form
+  in the kernel `Type.t`/`Value.t`, reusing NbE (see Phase 3). Chosen over a
+  separate elaborator NbE because duplicating the reduction engine is a larger,
+  more error-prone cost than one meta-aware (and, post-zonk, meta-free) kernel.
 - **Implicit-argument surface.** `{x : A}` binders (Agda/Lean-ish) is the
   expected choice; confirm at Phase 4.
 - **`to_term`'s fate.** `Parse.term_of_string*` already routes through `Elab`;

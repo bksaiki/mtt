@@ -33,6 +33,11 @@ type t =
   | Proj of int * t
       (** [x.(i+1)]: the [i]-th (0-based) field projection of a record (a
           single-constructor inductive) *)
+  | Meta of int
+      (** a metavariable, referenced by id; produced by the elaborator and
+          resolved by unification, then zonked away — it never reaches the
+          trusted check of final core. Its local dependencies ride the enclosing
+          [App] spine ([?m a b] is [App (App (Meta m, a), b)]). *)
   | Eq of t * t * t  (** [Eq A x y]: propositional equality of [x y : A] *)
   | Refl  (** the reflexivity proof [refl : Eq A x x]; check-only *)
   | J of t * t * t
