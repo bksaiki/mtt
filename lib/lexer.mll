@@ -29,9 +29,6 @@ rule token = parse
   | "Type" [' ' '\t']+ (digits as n) { TYPELEVEL (int_of_string n) }
   | "Type" { TYPE }
   | "Prop" { PROP }
-  | "inl" { INL }
-  | "inr" { INR }
-  | "case" { CASE }
   | "Eq" { EQ }
   | "refl" { REFL }
   | "J" { J }

@@ -26,10 +26,6 @@ type t =
   | Lam of string * t * t (* λ (x : A). b *)
   | App of t * t
   | Proj of int * t (* x.(i+1): the i-th field projection of a record *)
-  | Sum of t * t (* A + B *)
-  | Inl of t (* left injection *)
-  | Inr of t (* right injection *)
-  | Case of t * t * t * t (* case P s u v: eliminates s : A + B at motive P *)
   | Eq of t * t * t (* Eq A x y: propositional equality of x, y : A *)
   | Refl (* the reflexivity proof; check-only *)
   | J of t * t * t (* J P d p: eliminates p : Eq A x y at motive P *)
@@ -45,11 +41,6 @@ let rec occurs k = function
       occurs k a || occurs (k + 1) b
   | App (f, a) -> occurs k f || occurs k a
   | Proj (_, t) -> occurs k t
-  | Sum (a, b) -> occurs k a || occurs k b
-  | Inl t
-  | Inr t ->
-      occurs k t
-  | Case (p, s, u, v) -> occurs k p || occurs k s || occurs k u || occurs k v
   | Eq (a, x, y) -> occurs k a || occurs k x || occurs k y
   | Refl -> false
   | J (p, d, pr) -> occurs k p || occurs k d || occurs k pr
@@ -140,20 +131,6 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
         paren_if fmt (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[%a@ %a@]" (go 10 names) f (go 11 names) a)
     | Proj (i, t) -> Format.fprintf fmt "%a.%d" (go 11 names) t (i + 1)
-    (* + is right-associative, between arrows and products *)
-    | Sum (a, b) ->
-        paren_if fmt (prec > 2) (fun fmt ->
-            Format.fprintf fmt "@[%a +@ %a@]" (go 3 names) a (go 2 names) b)
-    | Inl t ->
-        paren_if fmt (prec > 10) (fun fmt ->
-            Format.fprintf fmt "@[inl@ %a@]" (go 11 names) t)
-    | Inr t ->
-        paren_if fmt (prec > 10) (fun fmt ->
-            Format.fprintf fmt "@[inr@ %a@]" (go 11 names) t)
-    | Case (p, s, u, v) ->
-        paren_if fmt (prec > 10) (fun fmt ->
-            Format.fprintf fmt "@[case@ %a@ %a@ %a@ %a@]" (go 11 names) p
-              (go 11 names) s (go 11 names) u (go 11 names) v)
     | Eq (a, x, y) ->
         paren_if fmt (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[Eq@ %a@ %a@ %a@]" (go 11 names) a

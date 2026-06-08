@@ -140,9 +140,10 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                   (Type.Ctor mk)
                   [ Value.quote ctx.Check.lvl ta; bfun; a'; b' ]))
     (* the remaining builtin formers and their intro/elim forms (and the
-       [()]/numeral/Σ/× sugar) carry no constructor inference yet; translate
+       [()]/numeral/Σ/×/+ sugar) carry no constructor inference yet; translate
        them syntactically, exactly as {!Ast.to_term} does, against the binder
-       names *)
+       names. [Sum]'s constructors and recursor are ordinary qualified names
+       ([Sum.inl], [Sum.rec]), so they ride the application spine above. *)
     | _ -> Ast.to_term sg ~notation ctx.Check.names s
   (* an application spine [head arg…] *)
   and elab_app ctx mode s : Type.t =

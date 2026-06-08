@@ -19,9 +19,6 @@ and desc =
   | Fst of t (* p.1 *)
   | Snd of t (* p.2 *)
   | Sum of t * t (* A + B *)
-  | Inl of t (* inl a *)
-  | Inr of t (* inr b *)
-  | Case of t * t * t * t (* case P s u v *)
   | Eq of t * t * t (* Eq A x y *)
   | Refl (* refl *)
   | J of t * t * t (* J P d p *)
@@ -65,6 +62,12 @@ let to_term sg ?(notation = Notation.empty) names s =
   in
   let sigma_app loc a bfun =
     Type.App (Type.App (Type.Ind (sigma_former loc), a), bfun)
+  in
+  (* the inductive registered for the [sum] role, that [+] desugars to *)
+  let sum_former loc =
+    match notation.Notation.sum with
+    | Some name -> name
+    | None -> raise (Unbound_variable (loc, "+ (no sum notation registered)"))
   in
   let rec go env s =
     match s.desc with
@@ -128,10 +131,9 @@ let to_term sg ?(notation = Notation.empty) names s =
     | Pair _ ->
         Error.type_error
           [ Error.txt "a pair requires a known type (elaborate it in context)" ]
-    | Sum (a, b) -> Type.Sum (go env a, go env b)
-    | Inl t -> Type.Inl (go env t)
-    | Inr t -> Type.Inr (go env t)
-    | Case (p, s, u, v) -> Type.Case (go env p, go env s, go env u, go env v)
+    (* + desugars to the registered sum former applied to its two sides *)
+    | Sum (a, b) ->
+        Type.App (Type.App (Type.Ind (sum_former s.loc), go env a), go env b)
     | Eq (a, x, y) -> Type.Eq (go env a, go env x, go env y)
     | Refl -> Type.Refl
     | J (p, d, pr) -> Type.J (go env p, go env d, go env pr)

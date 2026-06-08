@@ -1,14 +1,16 @@
 -- Booleans, derived: a Bool is a tag with no payload, so it is a sum of
 -- units. Compare church_bool.mtt — same interface, but these booleans are
--- data: case analysis computes by ι-reduction instead of by application.
+-- data: recursion computes by ι-reduction instead of by application.
 
 def Bool := Unit + Unit
-def true : Bool := inl ()
-def false : Bool := inr ()
+def true : Bool := Sum.inl ()
+def false : Bool := Sum.inr ()
 
--- if-then-else: the non-dependent case, motive written once
+-- if-then-else: the non-dependent eliminator, motive written once. Sum.rec
+-- takes its type parameters explicitly; the constructors above drop theirs
+-- (recovered from the expected Bool).
 def ife (C : Type) (b : Bool) (t f : C) : C :=
-  case (λ x : Bool ⇒ C) b (λ x : Unit ⇒ t) (λ x : Unit ⇒ f)
+  Sum.rec Unit Unit (λ x : Bool ⇒ C) (λ x : Unit ⇒ t) (λ x : Unit ⇒ f) b
 
 def not (b : Bool) : Bool := ife Bool b false true
 def and (a b : Bool) : Bool := ife Bool a b false
@@ -35,21 +37,21 @@ def xor (a b : Bool) : Bool := ife Bool a (not b) b
 #check_equal (xor true true) false
 
 -- dependent elimination: to prove P b for every b, prove it for true and
--- false. The branches have types Π (x : Unit) ⇒ P (inl x) — so this
--- type-checks precisely because Unit's η makes inl x ≡ inl () ≡ true:
--- three features interlocking.
-theorem bool_cases (P : Bool → Prop) (ht : P true) (hf : P false) (b : Bool)
+-- false. The branches have types Π (x : Unit) ⇒ P (Sum.inl x) — so this
+-- type-checks precisely because Unit's η makes Sum.inl x ≡ Sum.inl () ≡ true:
+-- three features interlocking. (P lands in Type, since the sum below is data.)
+theorem bool_cases (P : Bool → Type) (ht : P true) (hf : P false) (b : Bool)
     : P b :=
-  case (λ x : Bool ⇒ P x) b (λ x : Unit ⇒ ht) (λ x : Unit ⇒ hf)
+  Sum.rec Unit Unit (λ x : Bool ⇒ P x) (λ x : Unit ⇒ ht) (λ x : Unit ⇒ hf) b
 
--- e.g.: every boolean satisfies "is true or is false" — a Prop-sum
--- motive, proved by bool_cases; the injections check against the branch
--- types with no ascriptions, since application arguments are checked
-axiom IsTrue : Bool → Prop
-axiom IsFalse : Bool → Prop
+-- e.g.: every boolean satisfies "is true or is false", proved by bool_cases;
+-- the injections check against the branch types with no ascriptions, since
+-- application arguments are checked
+axiom IsTrue : Bool → Type
+axiom IsFalse : Bool → Type
 axiom is_true : IsTrue true
 axiom is_false : IsFalse false
 
 theorem true_or_false (b : Bool) : IsTrue b + IsFalse b :=
-  bool_cases (λ x : Bool ⇒ IsTrue x + IsFalse x) (inl is_true)
-    (inr is_false) b
+  bool_cases (λ x : Bool ⇒ IsTrue x + IsFalse x) (Sum.inl is_true)
+    (Sum.inr is_false) b

@@ -237,20 +237,22 @@ let%expect_test "sigma: beta, eta, dependent pairs" =
     ];
   [%expect {| refl : Eq Nat 0 0 |}]
 
-let%expect_test "sums: iota, stuck cases, irrelevance" =
+(* the binary sum is the prelude inductive [Sum]: [+] is notation, the
+   injections and eliminator are the qualified [Sum.inl]/[Sum.inr]/[Sum.rec].
+   Fixed at Type, so the old proof-irrelevant disjunction of Props is gone. *)
+let%expect_test "sums: iota, stuck recursions" =
   session
     [ "axiom A : Type"
     ; "axiom B : Type"
     ; "axiom a : A"
     ; "axiom b : B"
     ; "def swap (s : A + B) : B + A :="
-      ^ " case (λ x : A + B ⇒ B + A) s (λ x : A ⇒ (inr x : B + A)) (λ y : B ⇒ \
-         (inl y : B + A))"
-    ; (* ι-reduction picks each branch; injections in argument and checked
-         positions need no ascription *)
-      "#check_equal (swap (inl a)) (inr a)"
-    ; "#check_equal (swap (inr b)) (inl b)"
-    ; (* a stuck case is equal to itself, and not to a sibling with other
+      ^ " Sum.rec A B (λ x : A + B ⇒ B + A) (λ x : A ⇒ (Sum.inr x : B + A)) (λ \
+         y : B ⇒ (Sum.inl y : B + A)) s"
+    ; (* ι-reduction picks each branch *)
+      "#check_equal (swap (Sum.inl a)) (Sum.inr a)"
+    ; "#check_equal (swap (Sum.inr b)) (Sum.inl b)"
+    ; (* a stuck recursion is equal to itself, and not to a sibling with other
          branches *)
       "axiom s : A + B"
     ; "#check swap s"
@@ -258,32 +260,25 @@ let%expect_test "sums: iota, stuck cases, irrelevance" =
     ; (* same type, different branches: conv compares the stuck branches *)
       "axiom t : A + A"
     ; "def same (s : A + A) : A + A :="
-      ^ " case (λ x : A + A ⇒ A + A) s (λ x : A ⇒ (inl x : A + A)) (λ y : A ⇒ \
-         (inr y : A + A))"
+      ^ " Sum.rec A A (λ x : A + A ⇒ A + A) (λ x : A ⇒ (Sum.inl x : A + A)) (λ \
+         y : A ⇒ (Sum.inr y : A + A)) s"
     ; "def cross (s : A + A) : A + A :="
-      ^ " case (λ x : A + A ⇒ A + A) s (λ x : A ⇒ (inr x : A + A)) (λ y : A ⇒ \
-         (inl y : A + A))"
+      ^ " Sum.rec A A (λ x : A + A ⇒ A + A) (λ x : A ⇒ (Sum.inr x : A + A)) (λ \
+         y : A ⇒ (Sum.inl y : A + A)) s"
     ; "#check_equal (same t) (same t)"
     ; "#check_equal (same t) (cross t)"
-    ; (* no η for sums: a stuck value is not its case-rebuilt self *)
+    ; (* no η for sums: a stuck value is not its recursion-rebuilt self *)
       "#check_equal (same t) t"
-    ; (* proofs of a disjunction are irrelevant: even different injections are
-         equal *)
-      "axiom p : Prop"
-    ; "axiom q : Prop"
-    ; "axiom hp : p"
-    ; "axiom hq : q"
-    ; "#check_equal (inl hp : p + q) (inr hq : p + q)"
     ];
   [%expect
     {|
-    case (fun (x : A + B) => B + A) s (fun (x : A) => inr x)
-    (fun (y : B) => inl y) : B + A
-    type error: #check_equal failed: case (fun (x : A + A) => A + A) t (fun (x : A) => inl x)
-    (fun (y : A) => inr y) is not convertible with case (fun (x : A + A) => A + A) t (fun (x : A) => inr x)
-    (fun (y : A) => inl y)
-    type error: #check_equal failed: case (fun (x : A + A) => A + A) t (fun (x : A) => inl x)
-    (fun (y : A) => inr y) is not convertible with t
+    Sum.rec A B (fun (x : A + B) => B + A) (fun (x : A) => Sum.inr B A x)
+    (fun (y : B) => Sum.inl B A y) s : B + A
+    type error: #check_equal failed: Sum.rec A A (fun (x : A + A) => A + A) (fun (x : A) => Sum.inl A A x)
+    (fun (y : A) => Sum.inr A A y) t is not convertible with Sum.rec A A (fun (x : A + A) => A + A) (fun (x : A) => Sum.inr A A x)
+    (fun (y : A) => Sum.inl A A y) t
+    type error: #check_equal failed: Sum.rec A A (fun (x : A + A) => A + A) (fun (x : A) => Sum.inl A A x)
+    (fun (y : A) => Sum.inr A A y) t is not convertible with t
     |}]
 
 let%expect_test "equality: J lemmas, iota, stuck J, UIP" =

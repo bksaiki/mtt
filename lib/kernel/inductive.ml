@@ -94,17 +94,11 @@ let rec occurs name (t : Type.t) =
   | Sort _
   | Refl ->
       false
-  | Proj (_, a)
-  | Inl a
-  | Inr a ->
-      occurs name a
+  | Proj (_, a) -> occurs name a
   | Pi (_, a, b)
   | Lam (_, a, b)
-  | App (a, b)
-  | Sum (a, b) ->
+  | App (a, b) ->
       occurs name a || occurs name b
   | Eq (a, b, c)
   | J (a, b, c) ->
       occurs name a || occurs name b || occurs name c
-  | Case (a, b, c, d) ->
-      occurs name a || occurs name b || occurs name c || occurs name d

@@ -13,6 +13,10 @@ type t =
   ; sigma : Type.ctor_head option
         (** the [mk] constructor of the dependent-pair record: an applied former
             renders as [Σ (x : A) ⇒ B] / [A × B], an applied [mk] as a tuple *)
+  ; sum : string option
+        (** the binary sum's type former, by name: an applied former renders as
+            [A + B]. The injections and eliminator are ordinary qualified names
+            ([Sum.inl], [Sum.rec]), so they need no sugar. *)
   }
 
 (** the empty registry: no role bound, so nothing is sugared *)
@@ -20,10 +24,11 @@ val empty : t
 
 (** [register role spec n] records that the inductive [spec] fills the notation
     [role] (["unit"] for [()], ["nat"] for decimal literals, ["sigma"] for
-    [Σ]/[×]/tuples), returning the updated registry. Shape-checks that [spec]
-    can play the role (e.g. ["nat"] demands a nullary then a
-    single-recursive-field constructor; ["sigma"] a two-parameter record with a
-    two-field constructor) and rejects re-registering an already-bound role.
+    [Σ]/[×]/tuples, ["sum"] for the [+] former), returning the updated registry.
+    Shape-checks that [spec] can play the role (e.g. ["nat"] demands a nullary
+    then a single-recursive-field constructor; ["sigma"] a two-parameter record
+    with a two-field constructor; ["sum"] a two-parameter inductive with two
+    single-field constructors) and rejects re-registering an already-bound role.
     Raises {!Error.Type_error} otherwise. *)
 val register : string -> Inductive.spec -> t -> t
 

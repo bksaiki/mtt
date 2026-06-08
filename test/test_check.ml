@@ -158,50 +158,26 @@ let%expect_test "pair inference defaults to the constant family (Lean-style)" =
   infer "λ u : Unit ⇒ u.1";
   [%expect {| type error: Unit has no field .1 |}]
 
-let%expect_test "sum formation sorts" =
+(* Sum is now the prelude inductive [Sum], fixed at Type (with [+] as notation);
+   its constructors and recursor are the qualified
+   [Sum.inl]/[Sum.inr]/[Sum.rec]. A proof-irrelevant disjunction of Props awaits
+   universe polymorphism, and the generic recursor typing / large-elimination
+   behaviour lives in test_ind.ml. *)
+let%expect_test "sum formation and injections (Type-fixed inductive)" =
   infer "Unit + Unit";
   [%expect {| Type |}];
   infer "Unit + Nat";
   [%expect {| Type |}];
-  (* plain max: a sum of props is a prop (native disjunction) *)
-  infer "(p : Prop) -> (q : Prop) -> (p + q : Prop) -> Unit";
-  [%expect {| Type |}]
-
-let%expect_test "injections are check-only" =
-  infer "inl ()";
-  [%expect
-    {| type error: cannot infer the type of an injection: ascribe it, e.g. (inl a : A + B) |}];
-  infer "(inl () : Unit + Nat)";
-  [%expect {| Unit + Nat |}]
-
-let%expect_test "case: typing, dependent motive, errors" =
+  (* the injection's derived type; checking against the sum recovers the
+     parameters, so an injection may drop them *)
+  infer "Sum.inl";
+  [%expect {| (A : Type) -> (B : Type) -> A -> A + B |}];
+  infer "(Sum.inl () : Unit + Nat)";
+  [%expect {| Unit + Nat |}];
+  (* the recursor eliminating a data sum into Type (no restriction) *)
   infer
-    {|λ s : Unit + Unit ⇒ case (λ x : Unit + Unit ⇒ Unit) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
-  [%expect {| Unit + Unit -> Unit |}];
-  (* a Type-valued motive: large elimination of a data sum is fine *)
-  infer
-    {|λ s : Unit + Nat ⇒ case (λ x : Unit + Nat ⇒ Type) s (λ x : Unit ⇒ Unit) (λ h : Nat ⇒ Nat)|};
-  [%expect {| Unit + Nat -> Type |}];
-  (* the motive must consume the scrutinee's type *)
-  infer
-    {|λ s : Unit + Unit ⇒ case (λ x : Unit ⇒ Unit) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
-  [%expect
-    {| type error: the motive's domain Unit does not match the scrutinee's type Unit + Unit |}];
-  (* and must land in a sort *)
-  infer
-    {|λ s : Unit + Unit ⇒ case (λ x : Unit + Unit ⇒ x) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
-  [%expect {| type error: the motive must land in a sort, not Unit + Unit |}]
-
-let%expect_test "the large-elimination restriction" =
-  (* a proof of a disjunction cannot be eliminated into Type... *)
-  infer
-    {|λ (p q : Prop) (s : p + q) ⇒ case (λ x : p + q ⇒ Unit) s (λ x : p ⇒ ()) (λ y : q ⇒ ())|};
-  [%expect
-    {| type error: cannot eliminate a proof of p + q into Type: a case on a proposition must target Prop |}];
-  (* ...but eliminating into Prop is fine: Or-swap by elimination *)
-  infer
-    {|λ (p q : Prop) (s : p + q) ⇒ case (λ x : p + q ⇒ q + p) s (λ x : p ⇒ (inr x : q + p)) (λ y : q ⇒ (inl y : q + p))|};
-  [%expect {| (p : Prop) -> (q : Prop) -> p + q -> q + p |}]
+    {|λ s : Unit + Nat ⇒ Sum.rec Unit Nat (λ x : Unit + Nat ⇒ Type) (λ x : Unit ⇒ Unit) (λ h : Nat ⇒ Nat) s|};
+  [%expect {| Unit + Nat -> Type |}]
 
 let%expect_test "equality formation and refl" =
   infer "Eq Unit () ()";

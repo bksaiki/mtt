@@ -33,13 +33,6 @@ type t =
   | Proj of int * t
       (** [x.(i+1)]: the [i]-th (0-based) field projection of a record (a
           single-constructor inductive) *)
-  | Sum of t * t  (** A + B *)
-  | Inl of t  (** left injection *)
-  | Inr of t  (** right injection *)
-  | Case of t * t * t * t
-      (** [Case (P, s, u, v)]: the recursor — eliminates [s : A + B] at motive
-          [P : A + B → Sort j], with branches [u : Π (x : A) ⇒ P (inl x)] and
-          [v : Π (y : B) ⇒ P (inr y)] *)
   | Eq of t * t * t  (** [Eq A x y]: propositional equality of [x y : A] *)
   | Refl  (** the reflexivity proof [refl : Eq A x x]; check-only *)
   | J of t * t * t

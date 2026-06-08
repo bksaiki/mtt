@@ -1,10 +1,10 @@
 # Design
 
 A small dependent type theory in the Calculus of Constructions family: Π types
-and parameterized inductive types — with binary sums and propositional equality
-still built in, and `Σ`/`Unit`/`Empty`/`Nat` now ordinary inductive declarations
-in the prelude — under an impredicative `Prop` and a predicative cumulative
-`Type` tower, checked bidirectionally with normalization by evaluation (NbE),
+and parameterized inductive types — with propositional equality still built in,
+and `Σ`/`Sum`/`Unit`/`Empty`/`Nat` now ordinary inductive declarations in the
+prelude — under an impredicative `Prop` and a predicative cumulative `Type`
+tower, checked bidirectionally with normalization by evaluation (NbE),
 type-directed conversion, and definitional proof irrelevance.
 
 This file records *settled* decisions; open questions live in
@@ -112,12 +112,11 @@ irrelevance in `conv`. `Empty` (now a prelude inductive with no constructors,
 not a kernel primitive — see Inductive types) eliminates into any sort via its
 recursor `Empty.rec`, which the prelude wraps as `absurd` — subsingleton
 elimination, the degenerate (zero-constructor) case of the generic
-large-elimination rule. For
-sums the general large-elimination restriction is enforced: `+` forms at
-plain `max` (so `p + q : Prop` is native disjunction), proof irrelevance
-makes `inl h ≡ inr h'` at a `Prop`-sum, and therefore `case` on a
-proposition must target `Prop` — a `Type`-valued motive could distinguish
-definitionally equal proofs. `Eq A x y : Prop` is the other side of that
+large-elimination rule. That rule is general: a `Prop` inductive may eliminate
+into a larger sort only when it is a subsingleton (≤ 1 constructor, all fields
+proofs), so a `Type`-valued motive can never distinguish definitionally equal
+proofs (`examples/` has an `Or : Prop` that is rejected at large elimination).
+`Eq A x y : Prop` is the other side of that
 coin: a single-constructor subsingleton, so — like `Empty`/`absurd` — its
 eliminator `J` carries *no* restriction and may land in any sort (this is
 what lets `subst` transport between types). UIP holds definitionally for
@@ -168,18 +167,23 @@ name, beside the de Bruijn context.
   `Nat`/`Zero`/`Succ`/`NatRec` nodes and their eval/quote/conv/infer cases), and
   `Σ` (a prelude record `Sigma (A : Type) (B : A → Type)` with `@[notation
   sigma]`; `Σ`/`×`/`(a,b)` retarget to it, `.1`/`.2` become `Proj 0`/`Proj 1`,
-  and the `Sigma`/`Pair`/`Fst`/`Snd` nodes and `vfst`/`vsnd` are deleted —
-  **fixed at `Type`**, so a Σ over the universe or a proof-irrelevant pair of
-  Props no longer forms, pending universe polymorphism). The remaining
-  inductively-describable builtins (`Sum`/`Eq`) follow; `todo.md` tracks the
-  sequence and prerequisites (their introductions are gated on the elaborator).
+  and the `Sigma`/`Pair`/`Fst`/`Snd` nodes and `vfst`/`vsnd` are deleted), and
+  `Sum` (a prelude inductive `Sum (A B : Type)` with `@[notation sum]` for the
+  infix `+`; its injections and eliminator are the *qualified* `Sum.inl`/
+  `Sum.inr`/`Sum.rec` like any other inductive — the `inl`/`inr`/`case` keywords
+  are gone — deleting the `Sum`/`Inl`/`Inr`/`Case` nodes, `vcase`, and their
+  machinery). Both `Σ` and `Sum` are **fixed at `Type`**: a Σ/sum over the
+  universe, or a proof-irrelevant pair/disjunction of Props, no longer forms,
+  pending universe polymorphism. The one remaining inductively-describable
+  builtin (`Eq`) follows; `todo.md` tracks the sequence and prerequisites (its
+  introduction is gated on the elaborator and indexed families).
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
   only as a *direct* recursive field `T params`, never under an arrow or nested
   (more conservative than full strict positivity, a later extension);
   predicativity — a field's sort fits the inductive's, except for an
   impredicative `Prop`; and the large-elimination restriction — a `Prop`
   inductive eliminates into a larger sort only when it is a subsingleton (≤ 1
-  constructor, all fields proofs), generalizing the rule on `case`.
+  constructor, all fields proofs).
 
 See `examples/inductive.mtt`; deferred work (indices, mutual/nested, `open`,
 replacing the builtins) is tracked in `todo.md`.
@@ -191,11 +195,14 @@ it touches only parse and print, never checking or evaluation. A declaration
 opts an inductive into a notation **role** with an attribute,
 `@[notation <role>] inductive …` — `unit` (its sole nullary constructor abbreviates
 `()`), `nat` (a `zero`/`succ` pair, so decimal literals expand to succ-chains
-and the printer folds them back), and `sigma` (a two-parameter record, so
+and the printer folds them back), `sigma` (a two-parameter record, so
 `Σ (x : A) ⇒ B` / `A × B` abbreviate the applied former and `(a, b)` its
-constructor). Registration is **one-shot** and **shape-checked**: the role
-demands a particular constructor shape, and a malformed or duplicate binding is
-a type error.
+constructor), and `sum` (a two-parameter inductive, so `A + B` abbreviates the
+applied former). Only *symbolic* sugar lives here: a constructor that wants a
+short name keeps its qualified spelling instead (`Sum.inl`, `Sum.rec`, like
+`Nat.succ`), so `sum` registers only the `+` former. Registration is
+**one-shot** and **shape-checked**: the role demands a particular constructor
+shape, and a malformed or duplicate binding is a type error.
 
 **The kernel is notation-ignorant** — it never names `Unit`/`Nat` and holds no
 notation type at all. The registry lives entirely in the frontend (the
@@ -204,14 +211,16 @@ fill it, threaded alongside the kernel context in a `Stmt.session`. It drives
 both directions:
 - **forward** — the parse pass (`Ast.to_term`, and `Elab` for the type-directed
   cases) reads it to resolve `()` → the unit constructor, `5` → a succ-chain of
-  the registered `Nat`, and `Σ`/`×`/`(a,b)` → the registered `Sigma` former and
-  constructor (the pair's parameters recovered by the elaborator);
+  the registered `Nat`, `Σ`/`×`/`(a,b)` → the registered `Sigma` former and
+  constructor (the pair's parameters recovered by the elaborator), and `A + B` →
+  the registered `Sum` former;
 - **reverse** — `Notation.sugar` is the hook the kernel printer (`Type.pp_in`)
   consults to fold a subterm into surface notation. Atomic sugar (`()`, a
-  decimal) needs only the subterm, but infix/mixfix forms (`A × B`, a tuple)
-  need to render their pieces, so the hook takes a `recurse` callback (and the
-  binders in scope) and returns `(precedence, text)` — the kernel supplies the
-  recursion and parenthesizes the result, but knows nothing of what is folded.
+  decimal) needs only the subterm, but infix/mixfix forms (`A × B`, `A + B`, a
+  tuple) need to render their pieces, so the hook takes a `recurse` callback (and
+  the binders in scope) and returns `(precedence, text)` — the kernel supplies
+  the recursion and parenthesizes the result, but knows nothing of what is
+  folded.
 
 Everything user-facing is rendered in the frontend: `#check`/`#eval`/`:env`
 output via `Notation.show`, error messages via `Notation.render_error`. The

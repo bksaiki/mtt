@@ -44,7 +44,15 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
             the `Nat`/`Zero`/`Succ`/`NatRec` core nodes, `vnatrec`, `step_ty`,
             and their eval/quote/conv/infer cases — the generic recursor
             subsumes them
-      - [ ] `Sum` (surfaces the implicit-argument question for `inl`/`inr`)
+      - [x] `Sum`: a prelude `inductive Sum (A B : Type)` with `@[notation sum]`
+            for the infix `+`. The injections and eliminator are the *qualified*
+            `Sum.inl`/`Sum.inr`/`Sum.rec` (the `inl`/`inr`/`case` keywords are
+            gone — every inductive's constructors are qualified, like
+            `Nat.succ`); a checked injection drops its parameters via the
+            elaborator. Deleted the `Sum`/`Inl`/`Inr`/`Case` core+value nodes,
+            `vcase`, and their eval/quote/conv/infer cases. **Fixed at `Type`**,
+            like `Σ`: a proof-irrelevant disjunction `Or : Prop` awaits universe
+            polymorphism
       - [x] `Σ`: a prelude record `inductive Sigma (A : Type) (B : A → Type)`
             with `@[notation sigma]`; `(a,b)`/`×`/`Σ` retarget to it (the
             elaborator recovers the parameters), `.1`/`.2` become the generic

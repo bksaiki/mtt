@@ -115,17 +115,28 @@ Rides on Phase 1; resumes the kernel-shrink program. Two PRs.
   `p × q : Prop` no longer form. Restoring them (and a Prop-level `And`) waits on
   universe polymorphism. The sigma tests were rewritten accordingly.
 - **Known transient gap:** a *bare pair literal* directly inside a still-builtin
-  form that delegates to `to_term` (`Eq`/`inl`/`case`/`J` endpoints) raises
-  "a pair requires a known type"; those forms become elaborator-native as Sum
-  (next) and Eq (Phase 5) are removed. Not hit by the prelude or tests.
+  form that delegates to `to_term` (the `Eq`/`J` endpoints) raises "a pair
+  requires a known type"; those become elaborator-native when `Eq` is removed
+  (Phase 5). Not hit by the prelude or tests.
 
-#### Sum — todo
+#### Sum — **done**
 
-- Declare `Sum` as a prelude inductive; retarget `+`/`inl`/`inr`/`case` to it;
-  delete the builtin `Sum`/`Inl`/`Inr`/`Case` core nodes and their machinery.
-  `case` desugars to `Sum.rec` (recovering the parameters, reordering the
-  scrutinee to the recursor's major position). Same `Type`-fixed universe
-  tradeoff as Σ (a proof-irrelevant `Or` awaits universe polymorphism).
+- `Sum (A B : Type)` is now a prelude inductive with `@[notation sum]` for the
+  infix `+`. The kernel's `Sum`/`Inl`/`Inr`/`Case` core+value nodes, `vcase`, and
+  their eval/quote/conv/infer cases are gone.
+- **Design choice:** the `inl`/`inr`/`case` keywords were *dropped*, not
+  retargeted. Every other inductive's constructors are qualified (`Nat.succ`,
+  with no bare `succ`/`natrec` keyword), so `Sum`'s are too: `Sum.inl`/`Sum.inr`
+  ride the ordinary constructor-application path (a checked injection drops its
+  parameters via Phase-1 omission), and `Sum.rec` the recursor path — no
+  sum-specific elaborator code at all. Only the symbolic `+` is notation. This
+  shrinks the lexer/parser/`Ast` (three tokens, three `Ast` nodes) and aligns
+  `Sum` with the other inductives; `examples/sum.mtt` and `bool.mtt` were
+  rewritten to the qualified form.
+- Same `Type`-fixed universe tradeoff as Σ: a proof-irrelevant disjunction
+  `Or : Prop` awaits universe polymorphism. The generic recursor typing and
+  large-elimination restriction are exercised in `test_ind.ml` rather than the
+  old builtin-sum tests.
 
 ### Phase 3 — Metavariables, unification, holes
 

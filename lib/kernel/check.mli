@@ -29,10 +29,11 @@
     codomains. {!infer} still returns principal types: Sort i : Sort (i+1)
     exactly.
 
-    The typing rules ({!infer} synthesizes; (Refl), (Inl), (Inr) are checking
-    rules). The dependent pair Σ/(a,b)/.1/.2 is no longer primitive — it is the
-    prelude record [Sigma], reached through the generic inductive rules below
-    and the record projection (Proj); only (Proj) is shown here:
+    The typing rules ({!infer} synthesizes; (Refl) is the one checking rule
+    shown). The dependent pair (Σ/(a,b)/.1/.2) and the binary sum (+/inl/inr/
+    case) are no longer primitive — they are the prelude inductives [Sigma] and
+    [Sum], reached through the generic inductive rules (former/constructor/
+    recursor) and, for records, the projection (Proj) shown here:
 
     {v
       (x : A) ∈ Γ
@@ -45,25 +46,6 @@
       Γ ⊢ e : T p̄    T a single-constructor inductive with fields F₀ … Fₙ
       ──────────────────────────────────────────────────────────────────── (Proj)
         Γ ⊢ e.(i+1) : Fᵢ[p̄, e.1 … e.i]   (earlier projections substituted)
-
-      Γ ⊢ A : Sort i    Γ ⊢ B : Sort j
-      ───────────────────────────────── (Sum)
-          Γ ⊢ A + B : Sort (max i j)
-
-       Γ ⊢ a ⇐ A                  Γ ⊢ b ⇐ B
-      ────────────────── (Inl)   ────────────────── (Inr)
-      Γ ⊢ inl a ⇐ A + B          Γ ⊢ inr b ⇐ A + B
-
-        checking only: an injection does not determine the other side
-
-      Γ ⊢ s : A + B    Γ ⊢ P : A + B → Sort j
-      Γ ⊢ u ⇐ Π (x : A) ⇒ P (inl x)    Γ ⊢ v ⇐ Π (y : B) ⇒ P (inr y)
-      ─────────────────────────────────────────────────────────────── (Case)
-                        Γ ⊢ case P s u v : P s
-
-        with the large-elimination restriction: if A + B is a Prop, then
-        j = 0 — proof irrelevance makes inl h ≡ inr h', so a Type-valued
-        case could distinguish equal proofs
 
       Γ ⊢ A : Sort i    Γ ⊢ x : A    Γ ⊢ y : A
       ─────────────────────────────────────────── (Eq)
@@ -140,9 +122,10 @@ val vl : ctx -> Value.t -> Error.frag
     variable (η, so lambda annotations are never compared); at a record
     (single-constructor) inductive by comparing field projections (η, surjective
     pairing — the dependent pair is one such record, and the 0-field case makes
-    any two values equal); at a sum or other positive inductive, constructors
-    compare componentwise and there is no η; at a sort, the values are types and
-    are compared structurally. *)
+    any two values equal); at a positive inductive (multi-constructor or
+    recursive, like the sum or [Nat]), constructors compare componentwise and
+    there is no η; at a sort, the values are types and are compared
+    structurally. *)
 val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
 
 (** [infer ctx t] synthesizes the type of [t] as a value, by the typing rules in

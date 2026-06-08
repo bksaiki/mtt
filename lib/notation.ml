@@ -2,9 +2,10 @@ type t =
   { unit_ctor : Type.ctor_head option
   ; nat : (Type.ctor_head * Type.ctor_head) option
   ; sigma : Type.ctor_head option
+  ; sum : string option
   }
 
-let empty = { unit_ctor = None; nat = None; sigma = None }
+let empty = { unit_ctor = None; nat = None; sigma = None; sum = None }
 
 (* renders a subterm as surface notation if it matches a registered role: the
    unit constructor as [()], a closed succ-chain as a decimal; otherwise None,
@@ -24,48 +25,55 @@ let sugar n ~recurse names term =
         in
         count 0 term
   in
+  let peel term =
+    let rec go acc = function
+      | Type.App (f, a) -> go (a :: acc) f
+      | h -> (h, acc)
+    in
+    go [] term
+  in
   (* a saturated [Sigma.mk A B a b] peeled into its two components [(a, b)] *)
   let pair_components term =
-    match n.sigma with
-    | None -> None
-    | Some mk -> (
-        let rec peel acc = function
-          | Type.App (f, a) -> peel (a :: acc) f
-          | h -> (h, acc)
-        in
-        match peel [] term with
-        | Type.Ctor h, [ _A; _B; a; b ] when h = mk -> Some (a, b)
-        | _ -> None)
+    match (n.sigma, peel term) with
+    | Some mk, (Type.Ctor h, [ _A; _B; a; b ]) when h = mk -> Some (a, b)
+    | _ -> None
   in
   match term with
   | Type.Ctor h when n.unit_ctor = Some h -> Some (11, "()")
-  (* an applied [Sigma] former: dependent → [Σ (x : A) ⇒ B], else → [A × B] *)
-  | Type.App (Type.App (Type.Ind name, a), Type.Lam (x, _, b))
-    when match n.sigma with
-         | Some mk -> String.equal name mk.Type.ind
-         | None -> false ->
-      if Type.occurs 0 b then
-        let x = Type.freshen names x in
-        Some
-          ( 0
-          , Printf.sprintf "Σ (%s : %s) ⇒ %s" x (recurse 0 names a)
-              (recurse 0 (x :: names) b) )
-      else
-        Some
-          ( 3
-          , Printf.sprintf "%s × %s" (recurse 4 names a)
-              (recurse 3 ("" :: names) b) )
   | _ -> (
-      match pair_components term with
-      (* tuples right-nest: flatten the right spine to [(a, b, c)] *)
-      | Some _ ->
-          let rec comps t =
-            match pair_components t with
-            | Some (a, b) -> recurse 0 names a :: comps b
-            | None -> [ recurse 0 names t ]
-          in
-          Some (11, "(" ^ String.concat ", " (comps term) ^ ")")
-      | None -> Option.map (fun k -> (11, string_of_int k)) (nat_lit term))
+      match peel term with
+      (* an applied [Sigma] former: dependent → [Σ (x : A) ⇒ B], else → [A ×
+         B] *)
+      | Type.Ind name, [ a; Type.Lam (x, _, b) ]
+        when match n.sigma with
+             | Some mk -> String.equal name mk.Type.ind
+             | None -> false ->
+          if Type.occurs 0 b then
+            let x = Type.freshen names x in
+            Some
+              ( 0
+              , Printf.sprintf "Σ (%s : %s) ⇒ %s" x (recurse 0 names a)
+                  (recurse 0 (x :: names) b) )
+          else
+            Some
+              ( 3
+              , Printf.sprintf "%s × %s" (recurse 4 names a)
+                  (recurse 3 ("" :: names) b) )
+      (* an applied [Sum] former → [A + B] (right-associative) *)
+      | Type.Ind name, [ a; b ] when n.sum = Some name ->
+          Some
+            (2, Printf.sprintf "%s + %s" (recurse 3 names a) (recurse 2 names b))
+      | _ -> (
+          match pair_components term with
+          (* tuples right-nest: flatten the right spine to [(a, b, c)] *)
+          | Some _ ->
+              let rec comps t =
+                match pair_components t with
+                | Some (a, b) -> recurse 0 names a :: comps b
+                | None -> [ recurse 0 names t ]
+              in
+              Some (11, "(" ^ String.concat ", " (comps term) ^ ")")
+          | None -> Option.map (fun k -> (11, string_of_int k)) (nat_lit term)))
 
 let render_error n frags =
   String.concat ""
@@ -125,8 +133,22 @@ let register role spec n =
                  two-field constructor"
             ]);
       { n with sigma = Some (Inductive.ctor_head spec 0) }
+  | "sum" ->
+      if n.sum <> None then
+        Error.type_error [ Error.txt "the sum notation is already registered" ];
+      (match spec.Inductive.ctors with
+      | [ { Inductive.fields = [ _ ]; _ }; { Inductive.fields = [ _ ]; _ } ]
+        when Inductive.nparams spec = 2 ->
+          ()
+      | _ ->
+          Error.type_error
+            [ Error.txt
+                "@[notation sum] needs a two-parameter inductive with two \
+                 single-field constructors"
+            ]);
+      { n with sum = Some spec.Inductive.name }
   | _ ->
       Error.type_error
-        [ Error.txtf "unknown notation role %s (expected: unit, nat, sigma)"
-            role
+        [ Error.txtf
+            "unknown notation role %s (expected: unit, nat, sigma, sum)" role
         ]

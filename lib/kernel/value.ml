@@ -2,9 +2,6 @@ type t =
   | Sort of int
   | Pi of string * t * closure
   | Lam of string * t * closure
-  | Sum of t * t
-  | Inl of t
-  | Inr of t
   | Eq of t * t * t
   | Refl
   (* an inductive type former applied to its parameters (a type once the
@@ -22,7 +19,6 @@ and neutral =
   | Var of int (* de Bruijn level *)
   | App of neutral * t
   | Proj of int * neutral (* a stuck record field projection *)
-  | Case of t * neutral * t * t (* a stuck case: motive, scrutinee, branches *)
   | J of t * t * neutral (* a stuck J: motive, diagonal, stuck proof *)
   | Rec of Type.rec_head * t list * neutral
 (* a stuck inductive recursion: the recursor skeleton, the arguments before the
@@ -45,11 +41,6 @@ let rec eval env t =
   | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
   | Type.Proj (i, t) -> vproj i (eval env t)
-  | Type.Sum (a, b) -> Sum (eval env a, eval env b)
-  | Type.Inl t -> Inl (eval env t)
-  | Type.Inr t -> Inr (eval env t)
-  | Type.Case (p, s, u, v) ->
-      vcase (eval env p) (eval env s) (eval env u) (eval env v)
   | Type.Eq (a, x, y) -> Eq (eval env a, eval env x, eval env y)
   | Type.Refl -> Refl
   | Type.J (p, d, pr) -> vj (eval env p) (eval env d) (eval env pr)
@@ -138,15 +129,6 @@ and vproj i = function
   | Neutral n -> Neutral (Proj (i, n))
   | _ -> assert false
 
-(* ι-reduction: a case on an injection picks the matching branch; a stuck
-   scrutinee freezes the whole case as a neutral frame *)
-and vcase p s u v =
-  match s with
-  | Inl a -> apply u a
-  | Inr b -> apply v b
-  | Neutral n -> Neutral (Case (p, n, u, v))
-  | _ -> assert false
-
 (* ι-reduction: J on refl picks the diagonal case; a stuck proof freezes the
    whole elimination as a neutral frame *)
 and vj p d pr =
@@ -158,9 +140,6 @@ and vj p d pr =
 let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
-  | Sum (a, b) -> Type.Sum (quote l a, quote l b)
-  | Inl t -> Type.Inl (quote l t)
-  | Inr t -> Type.Inr (quote l t)
   | Eq (a, x, y) -> Type.Eq (quote l a, quote l x, quote l y)
   | Refl -> Type.Refl
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
@@ -183,8 +162,6 @@ and quote_neutral l = function
   | Var k -> Type.Var (l - k - 1)
   | App (n, a) -> Type.App (quote_neutral l n, quote l a)
   | Proj (i, n) -> Type.Proj (i, quote_neutral l n)
-  | Case (p, n, u, v) ->
-      Type.Case (quote l p, quote_neutral l n, quote l u, quote l v)
   | J (p, d, n) -> Type.J (quote l p, quote l d, quote_neutral l n)
   | Rec (h, pre, n) ->
       (* pre = params @ motive :: minors; the stuck major closes the spine *)

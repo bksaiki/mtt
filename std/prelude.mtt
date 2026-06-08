@@ -33,6 +33,16 @@ def comp (A B C : Type) (g : B → C) (f : A → B) (x : A) : C := g (f x)
 inductive Sigma (A : Type) (B : A → Type) : Type :=
 | mk : (a : A) → B a → Sigma A B
 
+-- the binary sum (coproduct). `@[notation sum]` registers it for the infix `+`
+-- former; its injections and eliminator are the ordinary qualified names
+-- `Sum.inl`/`Sum.inr`/`Sum.rec` (like every other inductive). Like `Sigma`,
+-- fixed at `Type`; a proof-irrelevant disjunction `Or : Prop` awaits universe
+-- polymorphism.
+@[notation sum]
+inductive Sum (A B : Type) : Type :=
+| inl : A → Sum A B
+| inr : B → Sum A B
+
 -- === Logic ===
 
 -- falsity: an inductive with no constructors. Empty.rec is ex falso — with no
