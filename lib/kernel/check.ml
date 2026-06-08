@@ -177,7 +177,6 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.Pi (x, a, c) ->
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
       imax (sort_of ctx a) j
-  | Value.Unit -> 1 (* Unit : Type *)
   (* plain max, no imax: a Σ is a proposition only when both components are, so
      data can never hide inside a Prop *)
   | Value.Sigma (x, a, c) ->
@@ -197,7 +196,6 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.VCtor _
   | Value.VRec _
   | Value.Lam _
-  | Value.MkUnit
   | Value.Pair _
   | Value.Inl _
   | Value.Inr _
@@ -222,8 +220,6 @@ let rec conv ctx ty v1 v2 =
         (Value.apply v2 v)
   (* at a sort, the values are types: compare strictly *)
   | Value.Sort _ -> conv_ty ~cumul:false ctx v1 v2
-  (* η for Unit: every element is (), so any two are equal *)
-  | Value.Unit -> true
   (* η for pairs (surjective pairing): compare the projections, the second at
      the instantiated component type *)
   | Value.Sigma (_, a, c) ->
@@ -294,7 +290,6 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
       let v = fresh ctx in
       conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
         (Value.apply_closure c2 v)
-  | Value.Unit, Value.Unit -> true
   (* sigma: unlike pi there is no contravariant position, so both components are
      covariant under cumulativity *)
   | Value.Sigma (x, a1, c1), Value.Sigma (_, a2, c2) ->
@@ -513,8 +508,6 @@ let subsingleton ctx spec =
 (* the rule markers below refer to the typing rules in check.mli's header *)
 let rec infer ctx t =
   match t with
-  | Type.Unit -> Value.Sort 1 (* (Unit): Unit : Type *)
-  | Type.MkUnit -> Value.Unit (* (MkUnit) *)
   | Type.Var i -> List.nth ctx.types i (* (Var) *)
   | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
   (* (Pi) *)

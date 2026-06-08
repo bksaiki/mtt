@@ -2,8 +2,6 @@ type t =
   | Sort of int
   | Pi of string * t * closure
   | Lam of string * t * closure
-  | Unit
-  | MkUnit
   | Sigma of string * t * closure
   | Pair of t * t
   | Sum of t * t
@@ -50,8 +48,6 @@ exception Not_a_function
 
 let rec eval env t =
   match t with
-  | Type.Unit -> Unit
-  | Type.MkUnit -> MkUnit
   | Type.Var i -> List.nth env i
   | Type.Sort i -> Sort i
   | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
@@ -202,8 +198,6 @@ and vnatrec p z s n =
 let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
-  | Unit -> Type.Unit
-  | MkUnit -> Type.MkUnit
   | Sum (a, b) -> Type.Sum (quote l a, quote l b)
   | Inl t -> Type.Inl (quote l t)
   | Inr t -> Type.Inr (quote l t)

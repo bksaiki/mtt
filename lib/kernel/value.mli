@@ -8,8 +8,6 @@ type t =
   | Sort of int
   | Pi of string * t * closure
   | Lam of string * t * closure
-  | Unit
-  | MkUnit
   | Sigma of string * t * closure
   | Pair of t * t
   | Sum of t * t

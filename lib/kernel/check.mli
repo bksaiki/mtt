@@ -40,9 +40,6 @@
       ──────────────────────── (Sort)
       Γ ⊢ Sort i : Sort (i+1)
 
-      ─────────────── (Unit)      ───────────── (MkUnit)
-      Γ ⊢ Unit : Type             Γ ⊢ () : Unit
-
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Sigma)
          Γ ⊢ Σ (x : A) ⇒ B : Sort (max i j)
@@ -166,10 +163,12 @@ val show_term : ctx -> Type.t -> string
 (** [conv ctx ty v1 v2] decides definitional equality of the values [v1] and
     [v2] at the type [ty], which both must inhabit. Type-directed: at a Prop,
     true by proof irrelevance; at a Pi, both sides are applied to a fresh
-    variable (η, so lambda annotations are never compared); at [Unit], true (η:
-    every element is [()]); at a Σ, by comparing projections (surjective
-    pairing); at a sum, injections compare componentwise and there is no η; at a
-    sort, the values are types and are compared structurally. *)
+    variable (η, so lambda annotations are never compared); at a Σ, by comparing
+    projections (surjective pairing); at a record (single-constructor) inductive
+    likewise by its projections (η — the 0-field case makes any two values
+    equal); at a sum or other positive inductive, constructors compare
+    componentwise and there is no η; at a sort, the values are types and are
+    compared structurally. *)
 val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
 
 (** [infer ctx t] synthesizes the type of [t] as a value, by the typing rules in

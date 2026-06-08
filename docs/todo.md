@@ -13,10 +13,10 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 - [ ] Full strict positivity: accept strictly-positive function-typed recursive
       arguments (`(Nat -> T) -> T`); currently only direct recursive fields
       `T params` are allowed
-- [ ] Definitional η for single-constructor inductives ("records"): an η case in
-      `conv` (eta-expand to `mk (proj₁ x) ...`) plus positional projections — the
-      self-contained step that lets `Unit` and `Σ` be replaced without losing
-      their definitional η. Plan in `record-eta-plan.md`
+- [x] Definitional η for single-constructor inductives ("records"): an η case in
+      `conv` comparing field projections, plus the positional `Proj` node — lets
+      `Unit`/`Σ` be replaced without losing their η (`record-eta-plan.md`). The
+      surface `.i` projection syntax lands with the `Σ` removal.
 - [ ] Universe polymorphism (level-polymorphic defs; see questions.md); also
       needed for inductive `Sum`/`Σ`/`Eq` to form at the max of their
       components' levels rather than one fixed level
@@ -35,9 +35,12 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
                   forms the contradiction itself; switching would leave raw ex
                   falso as just `Empty.rec`. Wants implicit args + universe
                   polymorphism for full parity (`b : Sort v`)
+      - [x] `Unit`: a prelude record `inductive Unit : Type := unit`, `()`
+            sugar for `Unit.unit`, η from the record rule
       - [ ] `Sum` (surfaces the implicit-argument question for `inl`/`inr`)
       - [ ] `Nat` (needs numeral/printer "blessed inductive" support)
-      - [ ] `Unit`, `Σ` (need record-η, above)
+      - [ ] `Σ` (needs the surface `.i` projections + the `(a,b)`/`×`/`Σ`
+            notation retargeted to the record)
       - [ ] `Eq` (needs indexed families, above)
 
 ## Elaborator (type-directed surface → core)

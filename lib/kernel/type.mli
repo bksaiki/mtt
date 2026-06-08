@@ -25,8 +25,6 @@ type rec_head =
   }
 
 type t =
-  | Unit  (** the unit type, with definitional η: every element is [MkUnit] *)
-  | MkUnit  (** the element of [Unit] *)
   | Var of int  (** de Bruijn index *)
   | Sort of int  (** the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of string * t * t  (** Π (x : A). B, where B binds index 0 *)

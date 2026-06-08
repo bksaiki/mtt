@@ -20,8 +20,6 @@ type rec_head =
   }
 
 type t =
-  | Unit (* the unit type *)
-  | MkUnit (* the element of Unit *)
   | Var of int (* de Bruijn index *)
   | Sort of int (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of string * t * t (* Π (x : A). B, B binds index 0 *)
@@ -48,9 +46,6 @@ type t =
   | Rec of rec_head (* an inductive's recursor, applied to args via App *)
 
 let rec occurs k = function
-  | Unit
-  | MkUnit ->
-      false
   | Var i -> i = k
   | Sort _ -> false
   | Pi (_, a, b)
@@ -109,8 +104,6 @@ let pp_in names fmt t =
      11 = atom *)
   let rec go prec names fmt t =
     match t with
-    | Unit -> Format.pp_print_string fmt "Unit"
-    | MkUnit -> Format.pp_print_string fmt "()"
     | Var i -> (
         match List.nth_opt names i with
         | Some x -> Format.pp_print_string fmt x

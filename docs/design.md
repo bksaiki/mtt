@@ -68,11 +68,13 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **δ** — `def`s unfold eagerly: a defined name is bound in the env to its
   value, so evaluation replaces it (no `Const` constructor, no kernel
   lookup). Upgrade path if unfolded output hurts: glued evaluation.
-- **η for `Unit`** — at type `Unit`, any two values are equal (every
-  element is `()`); the same one-line pattern as proof irrelevance.
 - **η for pairs** (surjective pairing) — at a Σ type, values are compared
   by their projections, the second at the family instantiated by the
   first; `p ≡ (p.1, p.2)` holds for neutral `p`.
+- **η for records** — the same, generalized to any single-constructor,
+  non-recursive inductive: two values are equal iff their field projections
+  are. The 0-field case makes any two values equal — this is now how `Unit`
+  (a prelude record, `()` = `Unit.unit`) gets its η.
 - **ι** — `case` on an injection picks the branch (`vcase`), `J` on `refl`
   picks the diagonal (`vj`), and `natrec` recurses on `succ` (`vnatrec`,
   feeding the step its result on the predecessor — the induction
@@ -136,13 +138,17 @@ signature `Σ` (`signature.ml`) keyed by name, beside the de Bruijn context.
   type as a constant; `infer` types a saturated application as a bespoke rule.
 - **Surface.** Parameters are explicit; constructors and the recursor are
   qualified by their type (`Bool.true`, `Nat'.rec`), so constructor names need
-  only be unique within a type. (`Nat`/`succ`/`Eq`/`Unit` are still reserved for
-  the remaining builtins.)
-- **Replacing the builtins.** `Empty` is the first hardcoded type retired this
-  way: it is now `inductive Empty : Prop` in `std/prelude.mtt`, with `absurd`
-  a prelude `def` over `Empty.rec`. The remaining inductively-describable
-  builtins (`Sum`/`Nat`/`Unit`/`Σ`/`Eq`) follow; `builtin-removal-plan.md`
-  tracks the sequence and prerequisites.
+  only be unique within a type. (`Nat`/`succ`/`Eq` are still reserved for the
+  remaining builtins.)
+- **Records.** A single-constructor, non-recursive inductive is a record: it
+  has positional field projections (`x.i`, generalizing `Fst`/`Snd`) and
+  definitional η (see "η for records" above). This is what lets `Unit`/`Σ`
+  become ordinary inductives.
+- **Replacing the builtins.** Retired so far: `Empty` (`inductive Empty : Prop`,
+  with `absurd` a prelude `def` over `Empty.rec`) and `Unit` (a prelude record,
+  `()` sugar for `Unit.unit`, η from the record rule). The remaining
+  inductively-describable builtins (`Sum`/`Nat`/`Σ`/`Eq`) follow;
+  `builtin-removal-plan.md` tracks the sequence and prerequisites.
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
   only as a *direct* recursive field `T params`, never under an arrow or nested
   (more conservative than full strict positivity, a later extension);

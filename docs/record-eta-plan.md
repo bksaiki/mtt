@@ -68,7 +68,7 @@ existing `Fst`/`Snd`:
    - Prelude: `inductive Unit : Type := tt` and a dependent
      `inductive Sigma (A : Type) (B : A → Type) : Type := mk : (a : A) → B a → …`.
    - Notation, reusing the existing `Pair`/`Σ`/`×` rules retargeted to the
-     record: `()` → `Unit.tt`; `A × B`/`Σ (x:A) ⇒ B` → the former applied to
+     record: `()` → `Unit.unit`; `A × B`/`Σ (x:A) ⇒ B` → the former applied to
      explicit args; `(a, b)` → `Sigma.mk` with the constant-family default
      inferred (the current Pair-infer rule, no general implicits needed).
    - Delete `Sigma`/`Pair`/`Fst`/`Snd`/`Unit`/`MkUnit` from the kernel and their
