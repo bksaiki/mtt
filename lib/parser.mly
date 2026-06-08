@@ -9,17 +9,18 @@
 
 %%
 
+(* a standalone term (not a statement): backs Parse.term_of_string, used by
+   the term-level tests/tooling that need a term with faithful locations *)
 main:
   | t = term; EOF { t }
 
-(* a single REPL line: a declaration, or a bare term *)
+(* a single REPL line is one declaration *)
 stmt:
   | s = decl; EOF { s }
-  | t = term; EOF { { Stmt.loc = $loc; desc = Stmt.Expr t } }
 
-(* a file is a sequence of declarations; bare terms are REPL-only, since
-   without a statement terminator adjacent terms would parse as one
-   application *)
+(* a file is a sequence of declarations. There are no bare-term statements:
+   use #check / #eval to evaluate a term — and without a statement terminator
+   adjacent terms would parse as one application anyway *)
 file:
   | ss = list(decl); EOF { ss }
 
@@ -41,7 +42,8 @@ decl_desc:
   | THEOREM; x = ID; bs = list(binder_group); COLON; a = term; EQUALS; t = term
     { Stmt.Theorem (x, Ast.pis $loc bs a, Ast.lams $loc bs t) }
   | CHECK_EQUAL; t = atom; u = atom { Stmt.CheckEqual (t, u) }
-  (* a directive that brings the standard prelude into scope *)
+  (* a directive (first statement only) that opts out of the auto-loaded
+     standard prelude *)
   | PRELUDE { Stmt.Prelude }
 
 (* a binder group: one annotation shared by one or more names *)

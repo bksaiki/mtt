@@ -1,5 +1,4 @@
 type desc =
-  | Expr of Ast.t (* a bare term: type-checked, no output *)
   | Check of Ast.t (* #check t: reports the normal form and type *)
   | Eval of Ast.t (* #eval t: reports the normal form *)
   | Axiom of string * Ast.t (* axiom x : A *)
@@ -21,10 +20,6 @@ let run (ctx : Check.ctx) stmt =
     Value.eval ctx.env a
   in
   match stmt.desc with
-  | Expr s ->
-      let t = Ast.to_term ctx.names s in
-      let _ = Check.infer ctx t in
-      (ctx, None)
   | Check s ->
       let t = Ast.to_term ctx.names s in
       let ty = Check.infer ctx t in

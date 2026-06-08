@@ -14,6 +14,6 @@ val term_of_string : string -> Type.t
 val stmt_of_string : string -> Stmt.t
 
 (** [file_of_string ?fname s] parses [s] as a whole file: a sequence of
-    declarations (bare terms are REPL-only). [fname] is recorded in locations
-    for error reporting. Raises {!Error}. *)
+    declarations. [fname] is recorded in locations for error reporting. Raises
+    {!Error}. *)
 val file_of_string : ?fname:string -> string -> Stmt.t list
