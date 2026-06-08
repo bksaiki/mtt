@@ -29,16 +29,12 @@ and desc =
   | Eq of t * t * t  (** Eq A x y *)
   | Refl  (** refl *)
   | J of t * t * t  (** J P d p *)
-  | Nat  (** Nat *)
-  | Zero  (** 0 *)
-  | Succ of t  (** succ n *)
-  | NatRec of t * t * t * t  (** natrec P pz ps n *)
+  | Numeral of int
+      (** a decimal literal, e.g. [0], [5]; expands to succ-applications of the
+          [nat] notation's zero/succ *)
 
 (** [mk loc desc] is the node [desc] located at [loc] *)
 val mk : Loc.t -> desc -> t
-
-(** [numeral loc n] is the decimal literal [n] as [succ (... zero)] *)
-val numeral : Loc.t -> int -> t
 
 (** [lams loc groups body] wraps [body] in a lambda for every name of every
     binder group, e.g. [λ (x y : A) (z : B) ⇒ body]; the synthetic binder nodes
@@ -58,11 +54,13 @@ val var_spine : t -> string list option
 
 exception Unbound_variable of Loc.t * string
 
-(** [to_term sg names s] scope-checks [s], converting named binders to de Bruijn
-    indices; [names] binds local variables (innermost first), e.g. top-level
-    declarations. A bare name not bound locally resolves to an inductive former
-    in the signature [sg]; qualified [T.c] / [T.rec] resolve to a constructor or
-    the recursor of [T]. Ascriptions [(t : A)] elaborate to the typed identity
+(** [to_term sg ?notation names s] scope-checks [s], converting named binders to
+    de Bruijn indices; [names] binds local variables (innermost first), e.g.
+    top-level declarations. A bare name not bound locally resolves to an
+    inductive former in the signature [sg]; qualified [T.c] / [T.rec] resolve to
+    a constructor or the recursor of [T]. [()] resolves to the constructor
+    registered for the [unit] notation (default {!Notation.empty}, under which
+    [()] is unbound). Ascriptions [(t : A)] elaborate to the typed identity
     [(fun (x : A) => x) t]. Raises {!Unbound_variable}, with the offending
     location, if a name is not in scope. *)
-val to_term : Signature.t -> string list -> t -> Type.t
+val to_term : Signature.t -> ?notation:Notation.t -> string list -> t -> Type.t

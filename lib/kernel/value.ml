@@ -9,9 +9,6 @@ type t =
   | Inr of t
   | Eq of t * t * t
   | Refl
-  | Nat
-  | Zero
-  | Succ of t
   (* an inductive type former applied to its parameters (a type once the
      parameters are complete; a type-returning function while partial) *)
   | VInd of string * t list
@@ -31,8 +28,6 @@ and neutral =
   | Proj of int * neutral (* a stuck record field projection *)
   | Case of t * neutral * t * t (* a stuck case: motive, scrutinee, branches *)
   | J of t * t * neutral (* a stuck J: motive, diagonal, stuck proof *)
-  | NatRec of
-      t * t * t * neutral (* a stuck recursion: motive, base, step, scrutinee *)
   | Rec of Type.rec_head * t list * neutral
 (* a stuck inductive recursion: the recursor skeleton, the arguments before the
    major ([params @ motive :: minors]), and the stuck major *)
@@ -66,11 +61,6 @@ let rec eval env t =
   | Type.Eq (a, x, y) -> Eq (eval env a, eval env x, eval env y)
   | Type.Refl -> Refl
   | Type.J (p, d, pr) -> vj (eval env p) (eval env d) (eval env pr)
-  | Type.Nat -> Nat
-  | Type.Zero -> Zero
-  | Type.Succ n -> Succ (eval env n)
-  | Type.NatRec (p, z, s, n) ->
-      vnatrec (eval env p) (eval env z) (eval env s) (eval env n)
   (* inductive heads start empty and accumulate their arguments via [apply] *)
   | Type.Ind name -> VInd (name, [])
   | Type.Ctor h -> VCtor (h, [])
@@ -185,16 +175,6 @@ and vj p d pr =
   | Neutral n -> Neutral (J (p, d, n))
   | _ -> assert false
 
-(* recursion: the step receives the predecessor and the recursive result on it
-   (the induction hypothesis); a stuck scrutinee freezes the whole recursion.
-   Terminates by descending on the structurally smaller predecessor. *)
-and vnatrec p z s n =
-  match n with
-  | Zero -> z
-  | Succ m -> apply (apply s m) (vnatrec p z s m)
-  | Neutral ne -> Neutral (NatRec (p, z, s, ne))
-  | _ -> assert false
-
 let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
@@ -203,9 +183,6 @@ let rec quote l v =
   | Inr t -> Type.Inr (quote l t)
   | Eq (a, x, y) -> Type.Eq (quote l a, quote l x, quote l y)
   | Refl -> Type.Refl
-  | Nat -> Type.Nat
-  | Zero -> Type.Zero
-  | Succ n -> Type.Succ (quote l n)
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
   | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
   | Sigma (x, a, c) -> Type.Sigma (x, quote l a, quote_closure l c)
@@ -233,8 +210,6 @@ and quote_neutral l = function
   | Case (p, n, u, v) ->
       Type.Case (quote l p, quote_neutral l n, quote l u, quote l v)
   | J (p, d, n) -> Type.J (quote l p, quote l d, quote_neutral l n)
-  | NatRec (p, z, s, n) ->
-      Type.NatRec (quote l p, quote l z, quote l s, quote_neutral l n)
   | Rec (h, pre, n) ->
       (* pre = params @ motive :: minors; the stuck major closes the spine *)
       Type.App (quote_spine l (Type.Rec h) pre, quote_neutral l n)

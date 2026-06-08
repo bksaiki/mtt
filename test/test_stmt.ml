@@ -2,21 +2,22 @@ open Mtt
 
 (* the standard prelude, loaded once: sessions start from it, as the REPL and
    file runner do, so the standard types (Unit, Empty, ...) are in scope *)
-let prelude = Prelude.load Check.empty
+let prelude = Prelude.load Stmt.initial
 
 (* feed lines through a toplevel session, printing each response *)
 let session lines =
-  let step ctx line =
-    match Stmt.run ctx (Parse.stmt_of_string line) with
-    | ctx, message ->
+  let step sess line =
+    match Stmt.run sess (Parse.stmt_of_string line) with
+    | sess, message ->
         Option.iter print_endline message;
-        ctx
+        sess
     | exception Ast.Unbound_variable (loc, x) ->
         Printf.printf "%s: unbound variable: %s\n" (Loc.to_string loc) x;
-        ctx
-    | exception Check.Type_error msg ->
-        Printf.printf "type error: %s\n" msg;
-        ctx
+        sess
+    | exception Error.Type_error frags ->
+        Printf.printf "type error: %s\n"
+          (Notation.render_error sess.notation frags);
+        sess
   in
   ignore (List.fold_left step prelude lines)
 
@@ -332,9 +333,9 @@ let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
 let%expect_test "Nat: computation by recursion, and induction" =
   session
     [ "def add (m n : Nat) : Nat :="
-      ^ " natrec (λ x : Nat ⇒ Nat) n (λ k : Nat ⇒ λ ih : Nat ⇒ succ ih) m"
+      ^ " Nat.rec (λ x : Nat ⇒ Nat) n (λ k : Nat ⇒ λ ih : Nat ⇒ Nat.succ ih) m"
     ; "def mul (m n : Nat) : Nat :="
-      ^ " natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ add n ih) m"
+      ^ " Nat.rec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ add n ih) m"
     ; (* ι-reduction computes closed numerals *)
       "#eval add 2 3"
     ; "#eval mul 2 3"
@@ -345,9 +346,9 @@ let%expect_test "Nat: computation by recursion, and induction" =
       ^ " : Eq B (f x) (f y) :="
       ^ " J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl p"
     ; "theorem add_zero (n : Nat) : Eq Nat (add n 0) n :="
-      ^ " natrec (λ m : Nat ⇒ Eq Nat (add m 0) m) refl"
+      ^ " Nat.rec (λ m : Nat ⇒ Eq Nat (add m 0) m) refl"
       ^ " (λ k : Nat ⇒ λ ih : Eq Nat (add k 0) k ⇒"
-      ^ " cong Nat Nat (λ m : Nat ⇒ succ m) (add k 0) k ih) n"
+      ^ " cong Nat Nat (λ m : Nat ⇒ Nat.succ m) (add k 0) k ih) n"
     ; "#check add_zero"
     ];
   [%expect
@@ -356,7 +357,7 @@ let%expect_test "Nat: computation by recursion, and induction" =
     6
     add_zero : (n : Nat) ->
     Eq Nat
-    (natrec (fun (x : Nat) => Nat) 0 (fun (k : Nat) => fun (ih : Nat) => succ ih)
-     n)
+    (Nat.rec (fun (x : Nat) => Nat) 0
+     (fun (k : Nat) => fun (ih : Nat) => Nat.succ ih) n)
     n
     |}]

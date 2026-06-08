@@ -20,11 +20,12 @@ string ─parse─▶ Ast.t ─to_term─▶ Type.t ─eval─▶ Value.t ─quo
 Type checking (`check.ml`) sits on `Type.t` and decides equality on
 `Value.t`.
 
-The trusted core — `type`/`value`/`check`/`inductive`/`signature` — is an
-isolated library under `lib/kernel/` (`mtt_kernel`, left unwrapped so its
-modules stay top-level). It is location-free and self-contained; the frontend
-in `lib/` (lexer, parser, `ast`, `stmt`, `prelude`) depends on it, never the
-reverse — so the dependency arrow enforces the layering.
+The trusted core — `type`/`value`/`check`/`inductive`/`signature`/`error` — is
+an isolated library under `lib/kernel/` (`mtt_kernel`, left unwrapped so its
+modules stay top-level). It is location-free, notation-free, and
+self-contained; the frontend in `lib/` (lexer, parser, `ast`, `notation`,
+`stmt`, `prelude`) depends on it, never the reverse — so the dependency arrow
+enforces the layering.
 
 ## Representations
 
@@ -76,10 +77,10 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
   are. The 0-field case makes any two values equal — this is now how `Unit`
   (a prelude record, `()` = `Unit.unit`) gets its η.
 - **ι** — `case` on an injection picks the branch (`vcase`), `J` on `refl`
-  picks the diagonal (`vj`), and `natrec` recurses on `succ` (`vnatrec`,
-  feeding the step its result on the predecessor — the induction
-  hypothesis). These positive types have **no η**, so a stuck eliminator
-  equals only another with convertible parts.
+  picks the diagonal (`vj`), and a recursor on a constructor picks the matching
+  minor premise (`vrec`), feeding each recursive field its induction hypothesis
+  (the recursor called on that field). These positive types have **no η**, so a
+  stuck eliminator equals only another with convertible parts.
 - **proof irrelevance** — at a type in `Prop`, any two values are equal
   (a one-line guard in `conv`, made possible by type direction); applies
   inside neutral spines, so `P h1 ≡ P h2` for any proofs `h1`, `h2`.
@@ -119,11 +120,12 @@ proofs.
 ## Inductive types
 
 `inductive T (params) : sort := | c : ty | ...` declares a parameterized
-inductive type (no indices yet). It generalizes the hardcoded
-`Nat`/`zero`/`succ`/`natrec` quadruple: a declaration introduces a type former
-(`Ind`), constructors (`Ctor`), and a recursor (`Rec`), all driven by the
-constructor signatures. These are mtt's first **global named constants** — a
-signature `Σ` (`signature.ml`) keyed by name, beside the de Bruijn context.
+inductive type (no indices yet). It generalizes what used to be the hardcoded
+`Nat`/`zero`/`succ`/`natrec` quadruple (now itself a prelude inductive): a
+declaration introduces a type former (`Ind`), constructors (`Ctor`), and a
+recursor (`Rec`), all driven by the constructor signatures. These are mtt's
+first **global named constants** — a signature `Σ` (`signature.ml`) keyed by
+name, beside the de Bruijn context.
 
 - **Representation.** The NbE core stays signature-free: the *computational
   skeleton* (constructor index/arity and a per-constructor flag list marking
@@ -134,12 +136,12 @@ signature `Σ` (`signature.ml`) keyed by name, beside the de Bruijn context.
 - **Recursor.** Fully dependent: the motive is `P : T params → Sort`, with one
   minor premise per constructor — a Π over the constructor's fields, an
   induction hypothesis `P fⱼ` after each recursive field, concluding in
-  `P (c …)`. A recursor is motive-polymorphic, so (like `natrec`/`J`) it has no
-  type as a constant; `infer` types a saturated application as a bespoke rule.
+  `P (c …)`. A recursor is motive-polymorphic, so (like `J`) it has no type as a
+  constant; `infer` types a saturated application as a bespoke rule.
 - **Surface.** Parameters are explicit; constructors and the recursor are
-  qualified by their type (`Bool.true`, `Nat'.rec`), so constructor names need
-  only be unique within a type. (`Nat`/`succ`/`Eq` are still reserved for the
-  remaining builtins.)
+  qualified by their type (`Bool.true`, `Nat.succ`, `Nat.rec`), so constructor
+  names need only be unique within a type. (`Eq` is still reserved for the
+  remaining builtin.)
 - **Records.** A single-constructor, non-recursive inductive is a record: it
   has positional field projections (`x.i`, generalizing `Fst`/`Snd`) and
   definitional η (see "η for records" above). Projections are a *primitive*
@@ -151,11 +153,14 @@ signature `Σ` (`signature.ml`) keyed by name, beside the de Bruijn context.
   (`x.1`); named projection (`x.field`) awaits the elaborator. This is what lets
   `Unit`/`Σ` become ordinary inductives.
 - **Replacing the builtins.** Retired so far: `Empty` (`inductive Empty : Prop`,
-  with `absurd` a prelude `def` over `Empty.rec`) and `Unit` (a prelude record,
-  `()` sugar for `Unit.unit`, η from the record rule). The remaining
-  inductively-describable builtins (`Sum`/`Nat`/`Σ`/`Eq`) follow; `todo.md`
-  tracks the sequence and prerequisites (`Sum`/`Σ`/`Eq` introductions are gated
-  on the elaborator).
+  with `absurd` a prelude `def` over `Empty.rec`), `Unit` (a prelude record,
+  `()` sugar for `Unit.unit`, η from the record rule), and `Nat` (a prelude
+  inductive; decimal literals and succ-chain printing go through the notation
+  registry below, and `Nat.rec` replaces the bespoke `natrec` — deleting the
+  `Nat`/`Zero`/`Succ`/`NatRec` nodes and their eval/quote/conv/infer cases). The
+  remaining inductively-describable builtins (`Sum`/`Σ`/`Eq`) follow; `todo.md`
+  tracks the sequence and prerequisites (their introductions are gated on the
+  elaborator).
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
   only as a *direct* recursive field `T params`, never under an arrow or nested
   (more conservative than full strict positivity, a later extension);
@@ -166,6 +171,42 @@ signature `Σ` (`signature.ml`) keyed by name, beside the de Bruijn context.
 
 See `examples/inductive.mtt`; deferred work (indices, mutual/nested, `open`,
 replacing the builtins) is tracked in `todo.md`.
+
+## Notation
+
+Surface sugar like `()` and decimal literals is *notation*, not kernel concern:
+it touches only parse and print, never checking or evaluation. A declaration
+opts an inductive into a notation **role** with an attribute,
+`@[notation <role>] inductive …` — `unit` (its sole nullary constructor abbreviates
+`()`) and `nat` (a `zero`/`succ` pair, so decimal literals expand to succ-chains
+and the printer folds them back). Registration is **one-shot** and
+**shape-checked**: the role demands a particular constructor shape, and a
+malformed or duplicate binding is a type error.
+
+**The kernel is notation-ignorant** — it never names `Unit`/`Nat` and holds no
+notation type at all. The registry lives entirely in the frontend (the
+`Notation` module): a `Notation.t` mapping each role to the constructors that
+fill it, threaded alongside the kernel context in a `Stmt.session`. It drives
+both directions:
+- **forward** — `Ast.to_term` reads it to resolve `()` → the unit constructor
+  and `5` → a succ-chain of the registered `Nat`;
+- **reverse** — `Notation.sugar` turns it into a `Type.t → string option` hook
+  that the kernel printer (`Type.pp_in`) consults to fold a subterm into a
+  surface atom (`()`, a decimal). The kernel prints only core syntax; it knows
+  nothing of what the hook folds.
+
+Everything user-facing is rendered in the frontend: `#check`/`#eval`/`:env`
+output via `Notation.show`, error messages via `Notation.render_error`. The
+kernel emits no notation — it raises `Error.Type_error` carrying message
+*fragments* (`Text` | `Term of names × term`) with the offending terms quoted
+but unrendered, and the frontend delaborates them. (`Check.show` remains the
+kernel's *plain* faithful view, for internal use and debugging; the error
+vocabulary itself lives in the small `Error` module.)
+
+This is the "faithful core printer + frontend delaborator" split: the kernel
+emits terms, the frontend delaborates. The longer arc — a full **delaborator**
+(core → surface, the elaborator's mirror) sharing this registry, plus `×`/`+`/`=`
+notation — is tracked in `todo.md`.
 
 ## Errors and locations
 
@@ -186,7 +227,7 @@ declaration just extends the checking context (`stmt.ml`, which holds both
 the statement type and its processor, per the module-per-concept convention):
 
 - `axiom x : A` — `bind`: a fresh neutral, stuck forever
-- `def x [: A] = t` — `define`: bound to `t`'s value, unfolds (δ)
+- `def x [: A] = t` — `extend`: bound to `t`'s value, unfolds (δ)
 - `theorem x : A = t` — proof checked, then `bind`: opaque (Qed-style);
   a theorem behaves exactly like an axiom whose obligation was discharged
 - `inductive T params : sort := | c : ty | ...` — declares an inductive type;
@@ -210,12 +251,13 @@ a `prelude` anywhere but first is an error. (`Stmt` sits below
 `Parse`/`Prelude`, so it cannot load — hence the driver owns this, and
 `Stmt.run` treats the `Prelude` marker as a no-op.)
 
-Builtins retired into inductives (`Empty`, `Unit`, …) live here, in the
-auto-loaded prelude — so they are *not* in scope for a file that opts out. That
-is fine while no opted-out file needs them (today none do; `church_*`/`logic`
-use their own encodings). When one eventually does — or once notation needs a
-designated `Nat` etc. — the escalation is a small always-loaded set of primitive
-inductives that `prelude` does not opt out of (a two-tier prelude).
+Builtins retired into inductives (`Empty`, `Unit`, `Nat`, …) live here, in the
+auto-loaded prelude — so they, and the notation roles they register (`()`,
+numerals), are *not* in scope for a file that opts out. That is fine while no
+opted-out file needs them (today none do; `church_*`/`logic` use their own
+encodings, and the prelude declares `Nat` before its own numeral-using lemmas).
+When one eventually does, the escalation is a small always-loaded set of
+primitive inductives that `prelude` does not opt out of (a two-tier prelude).
 
 ## Conventions
 

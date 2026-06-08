@@ -1,11 +1,16 @@
 open Mtt
 
 (* parse, convert to de Bruijn, then pretty-print back. Resolves names against
-   the prelude so the standard types (Unit, ...) and [()] are in scope. *)
-let prelude_sig = (Prelude.load Check.empty).Check.signature
+   the prelude so the standard types (Unit, ...) and [()] are in scope, and uses
+   its notation in both directions so [()] parses and prints. *)
+let prelude = Prelude.load Stmt.initial
+
+let notation = prelude.notation
 
 let roundtrip s =
-  print_endline (Type.to_string (Parse.term_of_string_in prelude_sig s))
+  print_endline
+    (Type.to_string_in ~sugar:(Notation.sugar notation) []
+       (Parse.term_of_string_in prelude.ctx.signature ~notation s))
 
 let%expect_test "universes" =
   roundtrip "Type";
@@ -185,7 +190,7 @@ let%expect_test "equality: Eq, refl, J" =
     J (fun (y : A) => fun (q : Eq A x y) => Eq A x x) refl p
     |}]
 
-let%expect_test "Nat: numerals, succ, natrec" =
+let%expect_test "Nat: numerals, succ-chains, the recursor" =
   roundtrip "Nat";
   [%expect {| Nat |}];
   (* decimal literals are succ-chains; the printer folds them back *)
@@ -193,19 +198,19 @@ let%expect_test "Nat: numerals, succ, natrec" =
   [%expect {| 0 |}];
   roundtrip "3";
   [%expect {| 3 |}];
-  roundtrip "succ (succ 0)";
+  roundtrip "Nat.succ (Nat.succ 0)";
   [%expect {| 2 |}];
   (* succ on a neutral stays a prefix form (no numeral folding) *)
-  roundtrip {|λ n : Nat ⇒ succ n|};
-  [%expect {| fun (n : Nat) => succ n |}];
-  (* natrec is a four-atom prefix form like case *)
+  roundtrip {|λ n : Nat ⇒ Nat.succ n|};
+  [%expect {| fun (n : Nat) => Nat.succ n |}];
+  (* Nat.rec is the generic recursor, applied through ordinary application *)
   roundtrip
-    {|λ n : Nat ⇒ natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ succ ih) n|};
+    {|λ n : Nat ⇒ Nat.rec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ Nat.succ ih) n|};
   [%expect
     {|
     fun (n : Nat) =>
-    natrec (fun (x : Nat) => Nat) 0 (fun (k : Nat) => fun (ih : Nat) => succ ih)
-    n
+    Nat.rec (fun (x : Nat) => Nat) 0
+    (fun (k : Nat) => fun (ih : Nat) => Nat.succ ih) n
     |}];
   (* a universe literal is one lexeme; numerals are ordinary atoms *)
   roundtrip "Type 3";

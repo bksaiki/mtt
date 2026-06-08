@@ -6,6 +6,7 @@ type ind_decl =
   ; isort : Ast.t (* the result sort *)
   ; ictors :
       (string * Ast.t) list (* each constructor's name and declared type *)
+  ; iattr : (string * string) option (* an attribute, e.g. @[notation unit] *)
   }
 
 type desc =
@@ -23,6 +24,15 @@ type t =
   ; desc : desc
   }
 
+(* the evolving frontend state as statements are processed: the kernel checking
+   context plus the notation registry (which the kernel no longer holds) *)
+type session =
+  { ctx : Check.ctx
+  ; notation : Notation.t
+  }
+
+let initial = { ctx = Check.empty; notation = Notation.empty }
+
 (* Elaborates a surface inductive declaration into an {!Inductive.spec}:
    scope-checks the parameter telescope and the result sort, then each
    constructor's declared type. A constructor type is decomposed as a Π-spine
@@ -31,21 +41,25 @@ type t =
    and the result must be the inductive applied to its parameters (no indices).
    The former is registered provisionally so constructor types can mention
    it. *)
-let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
-  let sg = ctx.Check.signature in
+let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
+  let sg = sess.ctx.Check.signature in
+  let notation = sess.notation in
   (* parameter telescope: each type is scope-checked under the earlier params *)
   let params, param_names =
     List.fold_left
       (fun (params, names) (x, aty) ->
-        (params @ [ (x, Ast.to_term sg names aty) ], x :: names))
+        (params @ [ (x, Ast.to_term sg ~notation names aty) ], x :: names))
       ([], []) d.iparams
   in
   let sort =
-    match Ast.to_term sg param_names d.isort with
+    match Ast.to_term sg ~notation param_names d.isort with
     | Type.Sort k -> k
     | _ ->
-        Check.type_error
-          "the result of an inductive must be a sort (Type, Prop, or Type n)"
+        Error.type_error
+          [ Error.txt
+              "the result of an inductive must be a sort (Type, Prop, or Type \
+               n)"
+          ]
   in
   let provisional = { Inductive.name = d.iname; params; sort; ctors = [] } in
   let sg = Signature.add provisional sg in
@@ -57,9 +71,11 @@ let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
     List.map
       (fun (cname, cty) ->
         if String.equal cname "rec" then
-          Check.type_error
-            "a constructor may not be named 'rec' (reserved for the recursor \
-             T.rec)";
+          Error.type_error
+            [ Error.txt
+                "a constructor may not be named 'rec' (reserved for the \
+                 recursor T.rec)"
+            ];
         let rec decompose j ty =
           match (ty : Type.t) with
           | Pi (x, a, b) ->
@@ -69,18 +85,24 @@ let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
               , result )
           | result -> ([], result)
         in
-        let fields, result = decompose 0 (Ast.to_term sg param_names cty) in
+        let fields, result =
+          decompose 0 (Ast.to_term sg ~notation param_names cty)
+        in
         if not (is_self (m + List.length fields) result) then
-          Check.type_error
-            "constructor %s must construct %s applied to its parameters" cname
-            d.iname;
+          Error.type_error
+            [ Error.txtf
+                "constructor %s must construct %s applied to its parameters"
+                cname d.iname
+            ];
         { Inductive.cname; fields })
       d.ictors
   in
   { Inductive.name = d.iname; params; sort; ctors }
 
-let run (ctx : Check.ctx) stmt =
-  let to_term = Ast.to_term ctx.signature ctx.names in
+let run (sess : session) stmt =
+  let ctx = sess.ctx in
+  let notation = sess.notation in
+  let to_term = Ast.to_term ctx.signature ~notation ctx.names in
   (* scope-check and evaluate an annotation, requiring it to be a type *)
   let eval_ann sa =
     let a = to_term sa in
@@ -92,20 +114,21 @@ let run (ctx : Check.ctx) stmt =
       let t = to_term s in
       let ty = Check.infer ctx t in
       let nf = Value.quote ctx.lvl (Value.eval ctx.env t) in
-      ( ctx
+      ( sess
       , Some
-          (Printf.sprintf "%s : %s" (Check.show_term ctx nf) (Check.show ctx ty))
-      )
+          (Printf.sprintf "%s : %s"
+             (Notation.show_term notation ctx.names nf)
+             (Notation.show notation ctx.names ctx.lvl ty)) )
   | Eval s ->
       let t = to_term s in
       (* still type-checked first: evaluation of ill-typed terms can get stuck
          on a non-function *)
       let _ = Check.infer ctx t in
       let nf = Value.quote ctx.lvl (Value.eval ctx.env t) in
-      (ctx, Some (Check.show_term ctx nf))
+      (sess, Some (Notation.show_term notation ctx.names nf))
   | Axiom (x, sa) ->
       let va = eval_ann sa in
-      (Check.bind x va ctx, None)
+      ({ sess with ctx = Check.bind x va ctx }, None)
   | Def (x, sa, st) ->
       let t = to_term st in
       let va =
@@ -117,12 +140,12 @@ let run (ctx : Check.ctx) stmt =
         | None -> Check.infer ctx t
       in
       let v = Value.eval ctx.env t in
-      (Check.define x v va ctx, None)
+      ({ sess with ctx = Check.extend x v va ctx }, None)
   | Theorem (x, sa, st) ->
       let va = eval_ann sa in
       Check.check ctx (to_term st) va;
       (* opaque: the proof is checked, then forgotten *)
-      (Check.bind x va ctx, None)
+      ({ sess with ctx = Check.bind x va ctx }, None)
   | CheckEqual (st, su) ->
       let t = to_term st in
       let u = to_term su in
@@ -132,14 +155,26 @@ let run (ctx : Check.ctx) stmt =
       let vt = Value.eval ctx.env t in
       let vu = Value.eval ctx.env u in
       if not (Check.conv ctx ty vt vu) then
-        Check.type_error "#check_equal failed: %s is not convertible with %s"
-          (Check.show ctx vt) (Check.show ctx vu);
-      (ctx, None)
+        Error.type_error
+          [ Error.txt "#check_equal failed: "
+          ; Check.vl ctx vt
+          ; Error.txt " is not convertible with "
+          ; Check.vl ctx vu
+          ];
+      (sess, None)
   | Inductive d ->
-      let spec = elaborate_inductive ctx d in
+      let spec = elaborate_inductive sess d in
       Check.check_inductive ctx spec;
-      (Check.add_ind spec ctx, None)
+      let ctx = Check.add_ind spec ctx in
+      let notation =
+        match d.iattr with
+        | None -> notation
+        | Some ("notation", role) -> Notation.register role spec notation
+        | Some (name, _) ->
+            Error.type_error [ Error.txtf "unknown attribute @@[%s ...]" name ]
+      in
+      ({ ctx; notation }, None)
   (* the prelude directive only controls the driver's choice of starting context
      (auto-load vs. bare); it is handled there, so by the time a statement
      reaches [run] it is a no-op *)
-  | Prelude -> (ctx, None)
+  | Prelude -> (sess, None)

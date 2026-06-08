@@ -5,7 +5,7 @@ the prelude (with Nat, add, ...) is available by default.
   > def twice (f : Nat → Nat) (n : Nat) : Nat :=
   >   f (f n)
   > #check twice
-  > #eval twice (λ n : Nat ⇒ succ n) 0
+  > #eval twice (λ n : Nat ⇒ Nat.succ n) 0
   > EOF
   $ mtt demo.mtt
   fun (f : Nat -> Nat) => fun (n : Nat) => f (f n) : (Nat -> Nat) -> Nat -> Nat

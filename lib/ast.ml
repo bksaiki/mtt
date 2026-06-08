@@ -25,23 +25,9 @@ and desc =
   | Eq of t * t * t (* Eq A x y *)
   | Refl (* refl *)
   | J of t * t * t (* J P d p *)
-  | Nat (* Nat *)
-  | Zero (* 0 *)
-  | Succ of t (* succ n *)
-  | NatRec of t * t * t * t (* natrec P pz ps n *)
+  | Numeral of int (* a decimal literal, e.g. 0, 5; sugar for succ … zero *)
 
 let mk loc desc = { loc; desc }
-
-(* a decimal literal [n] is sugar for [succ (succ ... zero)] with [n] succs,
-   every node sharing the literal's location *)
-let numeral loc n =
-  let rec go acc i =
-    if i = 0 then
-      acc
-    else
-      go (mk loc (Succ acc)) (i - 1)
-  in
-  go (mk loc Zero) n
 
 (* telescopes: a binder group [(x y : A)] is a name list and an annotation;
    [telescope] folds groups into nested binders built by [node], stamping each
@@ -69,7 +55,7 @@ let var_spine t =
 
 exception Unbound_variable of Loc.t * string
 
-let to_term sg names s =
+let to_term sg ?(notation = Notation.empty) names s =
   let rec go env s =
     match s.desc with
     (* a bare name is a local binder (de Bruijn) first, otherwise a global
@@ -106,12 +92,15 @@ let to_term sg names s =
     | Arrow (a, b) -> Type.Pi ("", go env a, go ("" :: env) b)
     | Lam (x, a, b) -> Type.Lam (x, go env a, go (x :: env) b)
     | App (f, a) -> Type.App (go env f, go env a)
-    (* () is sugar for the unit constructor; the unit type itself is the
-       ordinary prelude inductive [Unit] (resolved as a [Var] above) *)
+    (* () is sugar for whichever constructor is registered for the [unit]
+       notation (the prelude's [Unit.unit]); the unit type itself is an ordinary
+       inductive, resolved as a [Var] above *)
     | MkUnit -> (
-        match Signature.find sg "Unit" with
-        | Some spec -> Type.Ctor (Inductive.ctor_head spec 0)
-        | None -> raise (Unbound_variable (s.loc, "() (Unit is not in scope)")))
+        match notation.Notation.unit_ctor with
+        | Some h -> Type.Ctor h
+        | None ->
+            raise (Unbound_variable (s.loc, "() (no unit notation registered)"))
+        )
     | Sigma (x, a, b) -> Type.Sigma (x, go env a, go (x :: env) b)
     (* non-dependent product: same dummy-binder trick as Arrow *)
     | Prod (a, b) -> Type.Sigma ("", go env a, go ("" :: env) b)
@@ -125,10 +114,21 @@ let to_term sg names s =
     | Eq (a, x, y) -> Type.Eq (go env a, go env x, go env y)
     | Refl -> Type.Refl
     | J (p, d, pr) -> Type.J (go env p, go env d, go env pr)
-    | Nat -> Type.Nat
-    | Zero -> Type.Zero
-    | Succ n -> Type.Succ (go env n)
-    | NatRec (p, z, s, n) -> Type.NatRec (go env p, go env z, go env s, go env n)
+    (* a numeral expands to succ-applications of the registered nat zero/succ *)
+    | Numeral n -> (
+        match notation.Notation.nat with
+        | Some (zero, succ) ->
+            let rec build k =
+              if k = 0 then
+                Type.Ctor zero
+              else
+                Type.App (Type.Ctor succ, build (k - 1))
+            in
+            build n
+        | None ->
+            raise
+              (Unbound_variable (s.loc, "numeral (no nat notation registered)"))
+        )
     (* ascription is the typed identity: applying (fun (x : A) => x) to [t]
        forces the checking judgment t ⇐ A, and the redex evaporates under
        evaluation. No core constructor needed. *)

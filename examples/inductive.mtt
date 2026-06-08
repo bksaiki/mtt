@@ -1,13 +1,12 @@
--- Bool and the natural numbers built with the `inductive` machinery. The
--- kernel still ships a hardcoded Nat (these are the from-scratch versions the
--- general mechanism produces; the builtin will be replaced later). Constructors
--- and the recursor are qualified by their type: `Bool.true`, `Nat'.S`,
--- `Nat'.rec` (the printer shows them qualified too; an `open`-style form to
--- drop the qualifier comes later).
+-- Bool and the natural numbers built with the `inductive` machinery.
+-- Constructors and the recursor are qualified by their type: `Bool.true`,
+-- `Nat'.S`, `Nat'.rec` (the printer shows them qualified too; an `open`-style
+-- form to drop the qualifier comes later).
 --
--- `Nat`/`succ`/`natrec` are reserved for the builtin, so the inductive copy is
--- `Nat'` with constructors `O`/`S`. The standard prelude is auto-loaded, so the
--- Eq toolkit (`cong`) is in scope for the induction proof at the end.
+-- The prelude already defines `Nat` (it is itself an `inductive` now — see
+-- prelude.mtt), so this from-scratch copy is named `Nat'` with constructors
+-- `O`/`S` to avoid the clash. The standard prelude is auto-loaded, so the Eq
+-- toolkit (`cong`) is in scope for the induction proof at the end.
 
 -- Booleans: two nullary constructors, eliminated by a case analysis (Bool.rec
 -- with a non-dependent motive).

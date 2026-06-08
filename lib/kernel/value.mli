@@ -15,9 +15,6 @@ type t =
   | Inr of t
   | Eq of t * t * t
   | Refl
-  | Nat
-  | Zero
-  | Succ of t
   | VInd of string * t list
       (** an inductive type former applied to its parameters: a type once
           complete, a type-returning function while partial *)
@@ -40,8 +37,6 @@ and neutral =
       (** a stuck case: motive, stuck scrutinee, both branches *)
   | J of t * t * neutral
       (** a stuck J: motive, diagonal case, stuck equality proof *)
-  | NatRec of t * t * t * neutral
-      (** a stuck recursion: motive, base, step, stuck scrutinee *)
   | Rec of Type.rec_head * t list * neutral
       (** a stuck inductive recursion: the recursor skeleton, the arguments
           before the major ([params @ motive :: minors]), and the stuck major *)

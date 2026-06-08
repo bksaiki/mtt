@@ -52,14 +52,6 @@ type t =
       (** [J (P, d, p)]: the eliminator (based path induction) — eliminates
           [p : Eq A x y] at motive [P : Π (y : A) ⇒ Eq A x y → Sort j], given
           the diagonal case [d : P x refl]; yields [P y p] *)
-  | Nat  (** the natural numbers *)
-  | Zero
-  | Succ of t
-  | NatRec of t * t * t * t
-      (** [NatRec (P, pz, ps, n)]: the recursor — eliminates [n : Nat] at motive
-          [P : Nat → Sort j], given [pz : P zero] and the step
-          [ps : Π (k : Nat) ⇒ P k → P (succ k)] (whose [P k] argument is the
-          induction hypothesis); yields [P n] *)
   | Ind of string
       (** an inductive type former, applied to its parameters via [App] *)
   | Ctor of ctor_head
@@ -71,17 +63,23 @@ type t =
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool
 
-(** [pp_in names fmt t] pretty-prints [t] using binder name hints, priming names
-    that would shadow an enclosing binder; [names] supplies the names of
-    enclosing binders for [t]'s free indices, innermost first. Unbound indices
-    print as [!i]. *)
-val pp_in : string list -> Format.formatter -> t -> unit
+(** [pp_in ?sugar names fmt t] pretty-prints [t] using binder name hints,
+    priming names that would shadow an enclosing binder; [names] supplies the
+    names of enclosing binders for [t]'s free indices, innermost first. Unbound
+    indices print as [!i].
 
-(** [pp fmt t] pretty-prints the closed term [t] *)
+    [sugar] (default: never fires) is a hook to render a subterm as a complete
+    surface atom — the kernel knows no notation itself, so the frontend supplies
+    this to fold e.g. the unit constructor to [()] or a succ-chain to a decimal.
+    The kernel prints only core syntax. *)
+val pp_in :
+  ?sugar:(t -> string option) -> string list -> Format.formatter -> t -> unit
+
+(** [pp fmt t] pretty-prints the closed term [t] (core syntax only, no sugar) *)
 val pp : Format.formatter -> t -> unit
 
-(** [to_string_in names t] is [t] rendered via {!pp_in} *)
-val to_string_in : string list -> t -> string
+(** [to_string_in ?sugar names t] is [t] rendered via {!pp_in} *)
+val to_string_in : ?sugar:(t -> string option) -> string list -> t -> string
 
 (** [to_string t] is the closed term [t] rendered via {!pp} *)
 val to_string : t -> string

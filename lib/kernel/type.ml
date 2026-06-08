@@ -37,10 +37,6 @@ type t =
   | Eq of t * t * t (* Eq A x y: propositional equality of x, y : A *)
   | Refl (* the reflexivity proof; check-only *)
   | J of t * t * t (* J P d p: eliminates p : Eq A x y at motive P *)
-  | Nat (* the natural numbers *)
-  | Zero
-  | Succ of t
-  | NatRec of t * t * t * t (* natrec P pz ps n: recursion on n : Nat *)
   | Ind of string (* an inductive type former, applied to params via App *)
   | Ctor of ctor_head (* a constructor, applied to args via App *)
   | Rec of rec_head (* an inductive's recursor, applied to args via App *)
@@ -66,11 +62,6 @@ let rec occurs k = function
   | Eq (a, x, y) -> occurs k a || occurs k x || occurs k y
   | Refl -> false
   | J (p, d, pr) -> occurs k p || occurs k d || occurs k pr
-  | Nat
-  | Zero ->
-      false
-  | Succ t -> occurs k t
-  | NatRec (p, z, s, n) -> occurs k p || occurs k z || occurs k s || occurs k n
   (* inductive heads are closed: they carry no de Bruijn indices, only the
      skeleton; any arguments ride along as App nodes *)
   | Ind _
@@ -78,7 +69,12 @@ let rec occurs k = function
   | Rec _ ->
       false
 
-let pp_in names fmt t =
+(* [sugar t] optionally renders the subterm [t] as a complete surface atom (a
+   string needing no parentheses), letting a caller fold notation the kernel
+   knows nothing about — e.g. the registered unit constructor as [()], or a
+   succ-chain as a decimal. The kernel only consults the hook; the frontend
+   supplies it (see [Notation.sugar]). *)
+let pp_in ?(sugar = fun _ -> None) names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
   let freshen names x =
     let rec prime x =
@@ -103,6 +99,10 @@ let pp_in names fmt t =
   (* precedence: 0 = binders, 1 = arrow, 2 = sum, 3 = product, 10 = application,
      11 = atom *)
   let rec go prec names fmt t =
+    match sugar t with
+    | Some s -> Format.pp_print_string fmt s
+    | None -> go_struct prec names fmt t
+  and go_struct prec names fmt t =
     match t with
     | Var i -> (
         match List.nth_opt names i with
@@ -188,33 +188,11 @@ let pp_in names fmt t =
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[J@ %a@ %a@ %a@]" (go 11 names) p (go 11 names)
               d (go 11 names) pr)
-    | Nat -> Format.pp_print_string fmt "Nat"
-    | Zero -> Format.pp_print_string fmt "0"
-    | Succ t -> (
-        (* fold a closed succ-chain to a decimal literal; otherwise print the
-           prefix form succ ... *)
-        let rec count acc = function
-          | Zero -> Some acc
-          | Succ u -> count (acc + 1) u
-          | _ -> None
-        in
-        match count 1 t with
-        | Some k -> Format.fprintf fmt "%d" k
-        | None ->
-            paren_if (prec > 10) (fun fmt ->
-                Format.fprintf fmt "@[succ@ %a@]" (go 11 names) t))
-    | NatRec (p, z, s, n) ->
-        paren_if (prec > 10) (fun fmt ->
-            Format.fprintf fmt "@[natrec@ %a@ %a@ %a@ %a@]" (go 11 names) p
-              (go 11 names) z (go 11 names) s (go 11 names) n)
     (* inductive heads are atoms; their arguments print via the enclosing App
-       nodes (so [Nat.rec P z s n] renders through application) *)
+       nodes (so [Nat.rec P z s n] renders through application). Constructors
+       and the recursor print qualified by their type; surface sugar like [()]
+       or decimals is applied by [sugar] above, not here. *)
     | Ind name -> Format.pp_print_string fmt name
-    (* the designated unit element prints as its [()] sugar (mirroring the
-       surface); other constructors and the recursor print qualified by their
-       type, matching how they are written *)
-    | Ctor { ind = "Unit"; cname = "unit"; _ } ->
-        Format.pp_print_string fmt "()"
     | Ctor h -> Format.fprintf fmt "%s.%s" h.ind h.cname
     | Rec h -> Format.fprintf fmt "%s.rec" h.rind
   in
@@ -222,6 +200,7 @@ let pp_in names fmt t =
 
 let pp fmt t = pp_in [] fmt t
 
-let to_string_in names t = Format.asprintf "%a" (pp_in names) t
+let to_string_in ?(sugar = fun _ -> None) names t =
+  Format.asprintf "%a" (pp_in ~sugar names) t
 
 let to_string t = to_string_in [] t

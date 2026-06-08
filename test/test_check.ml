@@ -2,14 +2,20 @@ open Mtt
 
 (* parse and check against the prelude, so the standard types (Unit, Empty, ...)
    are in scope; print the inferred type (or the type error) *)
-let prelude = Prelude.load Check.empty
+let prelude = Prelude.load Stmt.initial
 
 let infer s =
   match
-    Check.infer prelude (Parse.term_of_string_in prelude.Check.signature s)
+    Check.infer prelude.ctx
+      (Parse.term_of_string_in prelude.ctx.signature ~notation:prelude.notation
+         s)
   with
-  | ty -> print_endline (Check.show prelude ty)
-  | exception Check.Type_error msg -> Printf.printf "type error: %s\n" msg
+  | ty ->
+      print_endline
+        (Notation.show prelude.notation prelude.ctx.names prelude.ctx.lvl ty)
+  | exception Error.Type_error frags ->
+      Printf.printf "type error: %s\n"
+        (Notation.render_error prelude.notation frags)
 
 let%expect_test "universe rules" =
   infer "Type";
@@ -214,28 +220,21 @@ let%expect_test "equality formation and refl" =
   infer "Eq Unit () Type";
   [%expect {| type error: this term has type Type 1 but Unit was expected |}]
 
+(* Nat is now an ordinary prelude inductive: the former, its numerals, and the
+   qualified constructor. Its recursor and the generic recursor's error
+   behaviour are exercised directly in test_ind.ml. *)
 let%expect_test "Nat formation and constructors" =
   infer "Nat";
   [%expect {| Type |}];
   infer "0";
   [%expect {| Nat |}];
-  infer "succ (succ 0)";
+  infer "Nat.succ (Nat.succ 0)";
   [%expect {| Nat |}];
-  (* succ infers (its argument is Nat), but the argument must check *)
-  infer "succ Type";
+  (* the constructor's argument must check against Nat *)
+  infer "Nat.succ Type";
   [%expect {| type error: this term has type Type 1 but Nat was expected |}]
 
-let%expect_test "natrec: typing, large elimination, errors" =
-  (* recursion into Type is fine — Nat is not a Prop, no restriction *)
+let%expect_test "Nat.rec at the surface (large elimination into Type)" =
   infer
-    {|λ n : Nat ⇒ natrec (λ x : Nat ⇒ Type) Unit (λ k : Nat ⇒ λ ih : Type ⇒ ih) n|};
-  [%expect {| Nat -> Type |}];
-  (* the motive must take a Nat *)
-  infer {|natrec (λ x : Unit ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ ih) 0|};
-  [%expect {| type error: the motive should take a Nat, but takes Unit |}];
-  (* the base case must prove P zero *)
-  infer {|natrec (λ x : Nat ⇒ Nat) Type (λ k : Nat ⇒ λ ih : Nat ⇒ ih) 0|};
-  [%expect {| type error: this term has type Type 1 but Nat was expected |}];
-  (* the scrutinee must be a Nat *)
-  infer {|natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ ih) Unit|};
-  [%expect {| type error: this term has type Type but Nat was expected |}]
+    {|λ n : Nat ⇒ Nat.rec (λ x : Nat ⇒ Type) Unit (λ k : Nat ⇒ λ ih : Type ⇒ ih) n|};
+  [%expect {| Nat -> Type |}]
