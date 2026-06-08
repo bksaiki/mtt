@@ -1,4 +1,5 @@
-open Mtt
+(* the inductive machinery lives in the kernel, so this suite uses the top-level
+   kernel modules (Type, Value, Check, Inductive) directly *)
 
 (* Phase 1 exercises the kernel's *computation* for inductives (eval/quote and
    the generic ι-rule) by building terms directly, before any surface syntax or

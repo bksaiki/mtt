@@ -1,0 +1,9 @@
+; The trusted core: core syntax, NbE values, the type checker and conversion,
+; and the inductive signature. Location-free and self-contained — it depends on
+; nothing in the frontend (parser/elaborator/driver), only the reverse. Left
+; unwrapped so its modules stay top-level (Type, Value, Check, ...), matching
+; how the rest of the codebase already refers to them.
+
+(library
+ (name mtt_kernel)
+ (wrapped false))

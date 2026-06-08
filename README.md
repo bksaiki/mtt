@@ -28,14 +28,17 @@ mtt> :quit
 ## Layout
 
 The source follows the `string → Ast → Type → Value` pipeline (diagram in
-`docs/design.md`):
+`docs/design.md`). The trusted core is an isolated library under `lib/kernel/`
+(`mtt_kernel`); the frontend in `lib/` depends on it, never the reverse:
 
+- `lib/kernel/type`, `lib/kernel/value` — core syntax and semantic values
+  (NbE: `eval`/`quote`/`normalize`).
+- `lib/kernel/check` — the type checker (`infer`/`check`) and conversion
+  (`conv`); the typing rules live in its module header.
+- `lib/kernel/inductive`, `lib/kernel/signature` — inductive declarations and
+  the global signature of declared types.
 - `lib/lexer.mll`, `lib/parser.mly`, `lib/parse`, `lib/ast` — surface syntax
   and scope-checking to core terms.
-- `lib/type`, `lib/value` — core syntax and semantic values (NbE:
-  `eval`/`quote`/`normalize`).
-- `lib/check` — the type checker (`infer`/`check`) and conversion (`conv`);
-  the typing rules live in its module header.
 - `lib/stmt`, `lib/prelude` — top-level statements and the standard library.
 - `bin/main.ml` — the REPL and file runner.
 

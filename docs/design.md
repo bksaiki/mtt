@@ -20,6 +20,12 @@ string ─parse─▶ Ast.t ─to_term─▶ Type.t ─eval─▶ Value.t ─quo
 Type checking (`check.ml`) sits on `Type.t` and decides equality on
 `Value.t`.
 
+The trusted core — `type`/`value`/`check`/`inductive`/`signature` — is an
+isolated library under `lib/kernel/` (`mtt_kernel`, left unwrapped so its
+modules stay top-level). It is location-free and self-contained; the frontend
+in `lib/` (lexer, parser, `ast`, `stmt`, `prelude`) depends on it, never the
+reverse — so the dependency arrow enforces the layering.
+
 ## Representations
 
 One unified syntax for terms and types (`Type.t`) — in a dependent

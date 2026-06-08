@@ -1,4 +1,4 @@
-open Mtt.Type
+open Type
 
 let p t = print_endline (to_string t)
 

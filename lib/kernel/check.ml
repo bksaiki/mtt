@@ -13,27 +13,21 @@ type ctx =
 let empty =
   { env = []; types = []; names = []; lvl = 0; signature = Signature.empty }
 
-(* extends the context with a variable [x] of type [ty]; the variable is bound
-   to a fresh neutral, so under the binder it blocks reduction instead of
-   disappearing *)
-let bind x ty ctx =
-  { ctx with
-    env = Value.Neutral (Value.Var ctx.lvl) :: ctx.env
-  ; types = ty :: ctx.types
-  ; names = x :: ctx.names
-  ; lvl = ctx.lvl + 1
-  }
-
-(* extends the context with a *defined* variable [x] of type [ty]: bound to its
-   value [v] rather than a neutral, so occurrences unfold during evaluation
-   (δ-reduction) *)
-let define x v ty ctx =
+(* extends the context with [x : ty] whose value is [v] *)
+let extend x v ty ctx =
   { ctx with
     env = v :: ctx.env
   ; types = ty :: ctx.types
   ; names = x :: ctx.names
   ; lvl = ctx.lvl + 1
   }
+
+(* a variable bound to a fresh neutral, so under the binder it blocks reduction
+   instead of disappearing *)
+let bind x ty ctx = extend x (Value.Neutral (Value.Var ctx.lvl)) ty ctx
+
+(* a defined variable bound to its value, so occurrences unfold (δ-reduction) *)
+let define = extend
 
 (* registers an inductive declaration in the context's signature *)
 let add_ind spec ctx = { ctx with signature = Signature.add spec ctx.signature }
@@ -406,11 +400,10 @@ and conv_neutral ctx n1 n2 : Value.t option =
     when String.equal h.Type.rind h2.Type.rind ->
       let spec = lookup_ind ctx h.Type.rind in
       let m = h.Type.nparams in
-      let params1 = List.filteri (fun i _ -> i < m) pre1 in
-      let params2 = List.filteri (fun i _ -> i < m) pre2 in
+      let params1 = List.take m pre1 and params2 = List.take m pre2 in
       let motive1 = List.nth pre1 m and motive2 = List.nth pre2 m in
-      let minors1 = List.filteri (fun i _ -> i > m) pre1 in
-      let minors2 = List.filteri (fun i _ -> i > m) pre2 in
+      let minors1 = List.drop (m + 1) pre1
+      and minors2 = List.drop (m + 1) pre2 in
       let ind_ty =
         List.fold_left Value.apply (Value.VInd (h.Type.rind, [])) params1
       in
@@ -730,9 +723,9 @@ and infer_rec ctx rh args =
   if List.length args <> expected then
     type_error "%s.rec expects %d arguments but got %d" rh.Type.rind expected
       (List.length args);
-  let param_tms = List.filteri (fun i _ -> i < m) args in
+  let param_tms = List.take m args in
   let motive_tm = List.nth args m in
-  let minor_tms = List.filteri (fun i _ -> i > m && i <= m + nctors) args in
+  let minor_tms = List.take nctors (List.drop (m + 1) args) in
   let major_tm = List.nth args (m + 1 + nctors) in
   (* parameters, then the target type they determine *)
   let pvals = check_telescope ctx spec.Inductive.params param_tms in
