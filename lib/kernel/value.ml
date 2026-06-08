@@ -2,11 +2,6 @@ type t =
   | Sort of int
   | Pi of string * t * closure
   | Lam of string * t * closure
-  | Sigma of string * t * closure
-  | Pair of t * t
-  | Sum of t * t
-  | Inl of t
-  | Inr of t
   | Eq of t * t * t
   | Refl
   (* an inductive type former applied to its parameters (a type once the
@@ -23,10 +18,7 @@ type t =
 and neutral =
   | Var of int (* de Bruijn level *)
   | App of neutral * t
-  | Fst of neutral (* a stuck first projection *)
-  | Snd of neutral (* a stuck second projection *)
   | Proj of int * neutral (* a stuck record field projection *)
-  | Case of t * neutral * t * t (* a stuck case: motive, scrutinee, branches *)
   | J of t * t * neutral (* a stuck J: motive, diagonal, stuck proof *)
   | Rec of Type.rec_head * t list * neutral
 (* a stuck inductive recursion: the recursor skeleton, the arguments before the
@@ -48,16 +40,7 @@ let rec eval env t =
   | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
   | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
-  | Type.Sigma (x, a, b) -> Sigma (x, eval env a, { env; body = b })
-  | Type.Pair (a, b) -> Pair (eval env a, eval env b)
-  | Type.Fst t -> vfst (eval env t)
-  | Type.Snd t -> vsnd (eval env t)
   | Type.Proj (i, t) -> vproj i (eval env t)
-  | Type.Sum (a, b) -> Sum (eval env a, eval env b)
-  | Type.Inl t -> Inl (eval env t)
-  | Type.Inr t -> Inr (eval env t)
-  | Type.Case (p, s, u, v) ->
-      vcase (eval env p) (eval env s) (eval env u) (eval env v)
   | Type.Eq (a, x, y) -> Eq (eval env a, eval env x, eval env y)
   | Type.Refl -> Refl
   | Type.J (p, d, pr) -> vj (eval env p) (eval env d) (eval env pr)
@@ -138,33 +121,12 @@ and vrec h args =
   | Neutral n -> Neutral (Rec (h, params @ (motive :: minors), n))
   | _ -> assert false
 
-(* projections: reduce on a pair, get stuck on a neutral. Anything else is
-   ill-typed (unreachable for checked terms). *)
-and vfst = function
-  | Pair (a, _) -> a
-  | Neutral n -> Neutral (Fst n)
-  | _ -> assert false
-
-and vsnd = function
-  | Pair (_, b) -> b
-  | Neutral n -> Neutral (Snd n)
-  | _ -> assert false
-
 (* the [i]-th field projection of a record: on a constructor, the matching
    argument (skipping the [nparams] leading parameters); a stuck frame on a
    neutral *)
 and vproj i = function
   | VCtor (h, args) -> List.nth args (h.nparams + i)
   | Neutral n -> Neutral (Proj (i, n))
-  | _ -> assert false
-
-(* ι-reduction: a case on an injection picks the matching branch; a stuck
-   scrutinee freezes the whole case as a neutral frame *)
-and vcase p s u v =
-  match s with
-  | Inl a -> apply u a
-  | Inr b -> apply v b
-  | Neutral n -> Neutral (Case (p, n, u, v))
   | _ -> assert false
 
 (* ι-reduction: J on refl picks the diagonal case; a stuck proof freezes the
@@ -178,15 +140,10 @@ and vj p d pr =
 let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
-  | Sum (a, b) -> Type.Sum (quote l a, quote l b)
-  | Inl t -> Type.Inl (quote l t)
-  | Inr t -> Type.Inr (quote l t)
   | Eq (a, x, y) -> Type.Eq (quote l a, quote l x, quote l y)
   | Refl -> Type.Refl
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
   | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
-  | Sigma (x, a, c) -> Type.Sigma (x, quote l a, quote_closure l c)
-  | Pair (a, b) -> Type.Pair (quote l a, quote l b)
   | VInd (name, args) -> quote_spine l (Type.Ind name) args
   | VCtor (h, args) -> quote_spine l (Type.Ctor h) args
   | VRec (h, args) -> quote_spine l (Type.Rec h) args
@@ -204,11 +161,7 @@ and quote_neutral l = function
      binders, is index l - k - 1 *)
   | Var k -> Type.Var (l - k - 1)
   | App (n, a) -> Type.App (quote_neutral l n, quote l a)
-  | Fst n -> Type.Fst (quote_neutral l n)
-  | Snd n -> Type.Snd (quote_neutral l n)
   | Proj (i, n) -> Type.Proj (i, quote_neutral l n)
-  | Case (p, n, u, v) ->
-      Type.Case (quote l p, quote_neutral l n, quote l u, quote l v)
   | J (p, d, n) -> Type.J (quote l p, quote l d, quote_neutral l n)
   | Rec (h, pre, n) ->
       (* pre = params @ motive :: minors; the stuck major closes the spine *)

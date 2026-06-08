@@ -213,15 +213,20 @@ let%expect_test "Empty: irrelevance and stuck absurd" =
     ];
   [%expect {| fun (A : Prop) => A -> Empty : Prop -> Prop |}]
 
-let%expect_test "sigma: beta, eta, dependent pairs, irrelevance" =
+(* Σ is the prelude record [Sigma]: pairs check against it (recovering the
+   parameters), projections are the generic record projections, and η comes from
+   the record rule. Fixed at Type, so the old "a pair of props is an irrelevant
+   Prop" no longer holds (it awaits universe polymorphism). *)
+let%expect_test "sigma: beta, eta, dependent pairs" =
   session
     [ "axiom N : Type"
     ; "axiom zero : N"
-    ; (* beta: projections of a literal pair *)
+    ; (* beta: projecting a literal pair *)
       "def p : N × N := (zero, zero)"
     ; "#check_equal p.1 zero"
-    ; (* a dependent pair: the type of the package depends on its head *)
-      "def package : Σ (A : Type) ⇒ A := (Unit, ())"
+    ; (* a dependent pair, recovered by checking against the Σ; its second
+         component's type mentions the first *)
+      "def package : Σ (n : Nat) ⇒ Eq Nat n n := (0, refl)"
     ; "#check package.2"
     ; (* eta (surjective pairing) on a neutral pair *)
       "axiom q : N × N"
@@ -229,28 +234,25 @@ let%expect_test "sigma: beta, eta, dependent pairs, irrelevance" =
     ; (* eta and unit-eta compose: any two pairs of units are equal *)
       "axiom r : Unit × Unit"
     ; "#check_equal r ((), ())"
-    ; (* proof pairs are props, hence irrelevant *)
-      "axiom a : Prop"
-    ; "axiom c1 : a × a"
-    ; "axiom c2 : a × a"
-    ; "#check_equal c1 c2"
     ];
-  [%expect {| () : Unit |}]
+  [%expect {| refl : Eq Nat 0 0 |}]
 
-let%expect_test "sums: iota, stuck cases, irrelevance" =
+(* the binary sum is the prelude inductive [Sum]: [+] is notation, the
+   injections and eliminator are the qualified [Sum.inl]/[Sum.inr]/[Sum.rec].
+   Fixed at Type, so the old proof-irrelevant disjunction of Props is gone. *)
+let%expect_test "sums: iota, stuck recursions" =
   session
     [ "axiom A : Type"
     ; "axiom B : Type"
     ; "axiom a : A"
     ; "axiom b : B"
     ; "def swap (s : A + B) : B + A :="
-      ^ " case (λ x : A + B ⇒ B + A) s (λ x : A ⇒ (inr x : B + A)) (λ y : B ⇒ \
-         (inl y : B + A))"
-    ; (* ι-reduction picks each branch; injections in argument and checked
-         positions need no ascription *)
-      "#check_equal (swap (inl a)) (inr a)"
-    ; "#check_equal (swap (inr b)) (inl b)"
-    ; (* a stuck case is equal to itself, and not to a sibling with other
+      ^ " Sum.rec A B (λ x : A + B ⇒ B + A) (λ x : A ⇒ (Sum.inr x : B + A)) (λ \
+         y : B ⇒ (Sum.inl y : B + A)) s"
+    ; (* ι-reduction picks each branch *)
+      "#check_equal (swap (Sum.inl a)) (Sum.inr a)"
+    ; "#check_equal (swap (Sum.inr b)) (Sum.inl b)"
+    ; (* a stuck recursion is equal to itself, and not to a sibling with other
          branches *)
       "axiom s : A + B"
     ; "#check swap s"
@@ -258,32 +260,25 @@ let%expect_test "sums: iota, stuck cases, irrelevance" =
     ; (* same type, different branches: conv compares the stuck branches *)
       "axiom t : A + A"
     ; "def same (s : A + A) : A + A :="
-      ^ " case (λ x : A + A ⇒ A + A) s (λ x : A ⇒ (inl x : A + A)) (λ y : A ⇒ \
-         (inr y : A + A))"
+      ^ " Sum.rec A A (λ x : A + A ⇒ A + A) (λ x : A ⇒ (Sum.inl x : A + A)) (λ \
+         y : A ⇒ (Sum.inr y : A + A)) s"
     ; "def cross (s : A + A) : A + A :="
-      ^ " case (λ x : A + A ⇒ A + A) s (λ x : A ⇒ (inr x : A + A)) (λ y : A ⇒ \
-         (inl y : A + A))"
+      ^ " Sum.rec A A (λ x : A + A ⇒ A + A) (λ x : A ⇒ (Sum.inr x : A + A)) (λ \
+         y : A ⇒ (Sum.inl y : A + A)) s"
     ; "#check_equal (same t) (same t)"
     ; "#check_equal (same t) (cross t)"
-    ; (* no η for sums: a stuck value is not its case-rebuilt self *)
+    ; (* no η for sums: a stuck value is not its recursion-rebuilt self *)
       "#check_equal (same t) t"
-    ; (* proofs of a disjunction are irrelevant: even different injections are
-         equal *)
-      "axiom p : Prop"
-    ; "axiom q : Prop"
-    ; "axiom hp : p"
-    ; "axiom hq : q"
-    ; "#check_equal (inl hp : p + q) (inr hq : p + q)"
     ];
   [%expect
     {|
-    case (fun (x : A + B) => B + A) s (fun (x : A) => inr x)
-    (fun (y : B) => inl y) : B + A
-    type error: #check_equal failed: case (fun (x : A + A) => A + A) t (fun (x : A) => inl x)
-    (fun (y : A) => inr y) is not convertible with case (fun (x : A + A) => A + A) t (fun (x : A) => inr x)
-    (fun (y : A) => inl y)
-    type error: #check_equal failed: case (fun (x : A + A) => A + A) t (fun (x : A) => inl x)
-    (fun (y : A) => inr y) is not convertible with t
+    Sum.rec A B (fun (x : A + B) => B + A) (fun (x : A) => Sum.inr B A x)
+    (fun (y : B) => Sum.inl B A y) s : B + A
+    type error: #check_equal failed: Sum.rec A A (fun (x : A + A) => A + A) (fun (x : A) => Sum.inl A A x)
+    (fun (y : A) => Sum.inr A A y) t is not convertible with Sum.rec A A (fun (x : A + A) => A + A) (fun (x : A) => Sum.inr A A x)
+    (fun (y : A) => Sum.inl A A y) t
+    type error: #check_equal failed: Sum.rec A A (fun (x : A + A) => A + A) (fun (x : A) => Sum.inl A A x)
+    (fun (y : A) => Sum.inr A A y) t is not convertible with t
     |}]
 
 let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
@@ -328,6 +323,37 @@ let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
     fun (p : Eq A x y) =>
     fun (h : P x) => J (fun (z : A) => fun (q : Eq A x z) => P z) h p : (P : A -> Type) -> (x : A) -> (y : A) -> Eq A x y -> P x -> P y
     J (fun (z : A) => fun (q' : Eq A a z) => Eq A z a) refl q : Eq A b a
+    |}]
+
+let%expect_test "constructor parameters may be omitted in checking position" =
+  session
+    [ "inductive Box (A : Type) : Type := | wrap : A -> Box A"
+    ; (* checked against [Box A], so the parameter [A] is recovered from the
+         expected type and the constructor application drops it *)
+      "def b1 (A : Type) (a : A) : Box A := Box.wrap a"
+    ; "#check b1"
+    ; (* the elaborated core is identical to spelling the parameter out *)
+      "def b2 (A : Type) (a : A) : Box A := Box.wrap A a"
+    ; "#check_equal b1 b2"
+    ; (* omission also reaches into a lambda body checked against a Pi ... *)
+      "def b3 (A : Type) : A -> Box A := fun (a : A) => Box.wrap a"
+    ; (* ... and into a function argument checked against its domain *)
+      "def use (A : Type) (x : Box A) : Box A := x"
+    ; "def b4 (A : Type) (a : A) : Box A := use A (Box.wrap a)"
+    ; "#check_equal b3 (fun (A : Type) => fun (a : A) => b4 A a)"
+    ; (* a second parameter is recovered just the same *)
+      "inductive Prod2 (A B : Type) : Type := | mk : A -> B -> Prod2 A B"
+    ; "def p (A B : Type) (a : A) (b : B) : Prod2 A B := Prod2.mk a b"
+    ; "#check p"
+    ; (* inference position is unchanged: the parameters stay explicit *)
+      "#check Prod2.mk"
+    ];
+  [%expect
+    {|
+    fun (A : Type) => fun (a : A) => Box.wrap A a : (A : Type) -> A -> Box A
+    fun (A : Type) =>
+    fun (B : Type) => fun (a : A) => fun (b : B) => Prod2.mk A B a b : (A : Type) -> (B : Type) -> A -> B -> Prod2 A B
+    Prod2.mk : (A : Type) -> (B : Type) -> A -> B -> Prod2 A B
     |}]
 
 let%expect_test "Nat: computation by recursion, and induction" =

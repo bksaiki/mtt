@@ -8,11 +8,6 @@ type t =
   | Sort of int
   | Pi of string * t * closure
   | Lam of string * t * closure
-  | Sigma of string * t * closure
-  | Pair of t * t
-  | Sum of t * t
-  | Inl of t
-  | Inr of t
   | Eq of t * t * t
   | Refl
   | VInd of string * t list
@@ -30,11 +25,7 @@ type t =
 and neutral =
   | Var of int  (** de Bruijn level *)
   | App of neutral * t
-  | Fst of neutral  (** a stuck first projection *)
-  | Snd of neutral  (** a stuck second projection *)
   | Proj of int * neutral  (** a stuck record field projection *)
-  | Case of t * neutral * t * t
-      (** a stuck case: motive, stuck scrutinee, both branches *)
   | J of t * t * neutral
       (** a stuck J: motive, diagonal case, stuck equality proof *)
   | Rec of Type.rec_head * t list * neutral
@@ -70,20 +61,9 @@ val apply_closure : closure -> t -> t
     applying them to a fresh stuck variable. *)
 val quote : int -> t -> Type.t
 
-(** [vfst v] projects a value's first component: reduction on a pair, a stuck
-    [Fst] frame on a neutral *)
-val vfst : t -> t
-
-(** [vsnd v] is the second-component counterpart of {!vfst} *)
-val vsnd : t -> t
-
 (** [vproj i v] projects the [i]-th field of a record value: the matching
     constructor argument (past the parameters), or a stuck {!neutral.Proj} *)
 val vproj : int -> t -> t
-
-(** [vcase p s u v] eliminates the sum value [s]: ι-reduction on an injection, a
-    stuck {!neutral.Case} frame otherwise *)
-val vcase : t -> t -> t -> t -> t
 
 (** [normalize t] is the βδ-normal form of the closed term [t]:
     [quote 0 (eval [] t)] *)

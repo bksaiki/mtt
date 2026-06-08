@@ -21,6 +21,28 @@ def id (A : Type) (x : A) : A := x
 
 def comp (A B C : Type) (g : B → C) (f : A → B) (x : A) : C := g (f x)
 
+-- === Pairs ===
+
+-- the dependent pair (Σ-type): a record (single constructor, no recursive
+-- fields), so it has definitional η and the positional projections .1/.2. The
+-- `@[notation sigma]` attribute registers it as the type the `Σ`/`×` formers
+-- and `(a, b)` tuples abbreviate; `B` is a family over `A`, and a non-dependent
+-- `A × B` is `Sigma A (fun _ => B)`. Fixed at `Type` (a universe-polymorphic
+-- Σ that lands at the max of its components awaits universe polymorphism).
+@[notation sigma]
+inductive Sigma (A : Type) (B : A → Type) : Type :=
+| mk : (a : A) → B a → Sigma A B
+
+-- the binary sum (coproduct). `@[notation sum]` registers it for the infix `+`
+-- former; its injections and eliminator are the ordinary qualified names
+-- `Sum.inl`/`Sum.inr`/`Sum.rec` (like every other inductive). Like `Sigma`,
+-- fixed at `Type`; a proof-irrelevant disjunction `Or : Prop` awaits universe
+-- polymorphism.
+@[notation sum]
+inductive Sum (A B : Type) : Type :=
+| inl : A → Sum A B
+| inr : B → Sum A B
+
 -- === Logic ===
 
 -- falsity: an inductive with no constructors. Empty.rec is ex falso — with no

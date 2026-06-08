@@ -1,40 +1,32 @@
--- Binary sums: A + B is a tagged union, built with inl/inr and consumed
--- with case — the recursor: a motive saying what to conclude about the
--- scrutinee, then one branch per injection. Sums are positive: there is
--- no η, and a stuck sum is used only by case analysis.
+-- Binary sums: A + B is a tagged union — an ordinary inductive (the prelude's
+-- `Sum`, with `+` as notation). It is built with the qualified constructors
+-- Sum.inl / Sum.inr and consumed with its recursor Sum.rec: a motive saying
+-- what to conclude about the scrutinee, then one branch per injection. Sums are
+-- positive: there is no η, and a stuck sum is used only by recursion.
+--
+-- (Fixed at Type: a proof-irrelevant disjunction `Or : Prop` of two Props
+-- awaits universe polymorphism.)
 
 axiom A : Type
 axiom B : Type
 
--- the non-dependent eliminator as a plain definition (Lean's Sum.elim):
--- the explicit motive is written here once and for all
+-- the non-dependent eliminator (Lean's Sum.elim): the constant motive is
+-- written here once. A checked constructor application may drop the type
+-- parameters (the elaborator recovers them), but a recursor takes them
+-- explicitly.
 def elim (X Y Z : Type) (f : X → Z) (g : Y → Z) (s : X + Y) : Z :=
-  case (λ x : X + Y ⇒ Z) s f g
+  Sum.rec X Y (λ x : X + Y ⇒ Z) f g s
 
 def swap (X Y : Type) (s : X + Y) : Y + X :=
-  elim X Y (Y + X) (λ x : X ⇒ (inr x : Y + X)) (λ y : Y ⇒ (inl y : Y + X)) s
+  elim X Y (Y + X) (λ x : X ⇒ (Sum.inr x : Y + X))
+    (λ y : Y ⇒ (Sum.inl y : Y + X)) s
 
--- ι-reduction: case picks the matching branch
+-- ι-reduction: the recursor picks the matching branch
 axiom a : A
 axiom b : B
-#check_equal (swap A B (inl a)) (inr a)
-#check_equal (swap A B (inr b)) (inl b)
+#check_equal (swap A B (Sum.inl a)) (Sum.inr a)
+#check_equal (swap A B (Sum.inr b)) (Sum.inl b)
 -- double swap is the identity on injections...
-#check_equal (swap B A (swap A B (inl a))) (inl a)
--- ...but NOT definitionally on stuck values (no η for sums); on a stuck
--- s, both sides freeze as distinct neutral cases
-
--- disjunction is a sum of propositions, and may be eliminated only into
--- Prop (the large-elimination restriction); this is f4 from logic.mtt,
--- by genuine case analysis
-axiom p : Prop
-axiom q : Prop
-theorem or_swap (s : p + q) : q + p :=
-  case (λ x : p + q ⇒ q + p) s (λ x : p ⇒ (inr x : q + p))
-    (λ y : q ⇒ (inl y : q + p))
-
--- proofs of a disjunction are irrelevant: even different injections of
--- different proofs are definitionally equal
-axiom hp : p
-axiom hq : q
-#check_equal (inl hp : p + q) (inr hq : p + q)
+#check_equal (swap B A (swap A B (Sum.inl a))) (Sum.inl a)
+-- ...but NOT definitionally on stuck values (no η for sums): on a stuck s, both
+-- sides freeze as distinct neutral recursions.

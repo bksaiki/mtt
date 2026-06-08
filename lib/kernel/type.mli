@@ -30,22 +30,9 @@ type t =
   | Pi of string * t * t  (** Π (x : A). B, where B binds index 0 *)
   | Lam of string * t * t  (** λ (x : A). b, where b binds index 0 *)
   | App of t * t
-  | Sigma of string * t * t
-      (** Σ (x : A) ⇒ B, where B binds index 0; prints as [A × B] when
-          non-dependent *)
-  | Pair of t * t  (** (a, b) *)
-  | Fst of t  (** p.1 *)
-  | Snd of t  (** p.2 *)
   | Proj of int * t
       (** [x.(i+1)]: the [i]-th (0-based) field projection of a record (a
-          single-constructor inductive); generalizes [Fst]/[Snd] *)
-  | Sum of t * t  (** A + B *)
-  | Inl of t  (** left injection *)
-  | Inr of t  (** right injection *)
-  | Case of t * t * t * t
-      (** [Case (P, s, u, v)]: the recursor — eliminates [s : A + B] at motive
-          [P : A + B → Sort j], with branches [u : Π (x : A) ⇒ P (inl x)] and
-          [v : Π (y : B) ⇒ P (inr y)] *)
+          single-constructor inductive) *)
   | Eq of t * t * t  (** [Eq A x y]: propositional equality of [x y : A] *)
   | Refl  (** the reflexivity proof [refl : Eq A x x]; check-only *)
   | J of t * t * t
@@ -63,23 +50,51 @@ type t =
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool
 
+(** [freshen names x] is [x] primed with enough trailing ['] to make it distinct
+    from every name in [names] (and [x]); ["" ] becomes ["x"] first. The printer
+    uses this so binder hints never shadow an enclosing binder; a frontend
+    [sugar] hook that renders its own binders ([Σ (x : A) ⇒ …]) needs it too. *)
+val freshen : string list -> string -> string
+
 (** [pp_in ?sugar names fmt t] pretty-prints [t] using binder name hints,
     priming names that would shadow an enclosing binder; [names] supplies the
     names of enclosing binders for [t]'s free indices, innermost first. Unbound
     indices print as [!i].
 
-    [sugar] (default: never fires) is a hook to render a subterm as a complete
-    surface atom — the kernel knows no notation itself, so the frontend supplies
-    this to fold e.g. the unit constructor to [()] or a succ-chain to a decimal.
-    The kernel prints only core syntax. *)
+    [sugar] (default: never fires) is the notation hook: the kernel knows no
+    notation itself, so the frontend supplies this to fold a subterm into a
+    surface form — the unit constructor to [()], a succ-chain to a decimal, an
+    applied [Sigma] former to [A × B]. It is consulted at every node, before the
+    structural printer, and receives [names] (the binders in scope) and a
+    [recurse] callback rendering a subterm at a given precedence under given
+    names (so it can render the pieces of an infix form). It returns
+    [Some (prec, s)] — [s] being the rendered surface text and [prec] its
+    precedence, so the kernel can parenthesize it in context — or [None] to fall
+    through to plain core printing. *)
 val pp_in :
-  ?sugar:(t -> string option) -> string list -> Format.formatter -> t -> unit
+     ?sugar:
+       (   recurse:(int -> string list -> t -> string)
+        -> string list
+        -> t
+        -> (int * string) option)
+  -> string list
+  -> Format.formatter
+  -> t
+  -> unit
 
 (** [pp fmt t] pretty-prints the closed term [t] (core syntax only, no sugar) *)
 val pp : Format.formatter -> t -> unit
 
 (** [to_string_in ?sugar names t] is [t] rendered via {!pp_in} *)
-val to_string_in : ?sugar:(t -> string option) -> string list -> t -> string
+val to_string_in :
+     ?sugar:
+       (   recurse:(int -> string list -> t -> string)
+        -> string list
+        -> t
+        -> (int * string) option)
+  -> string list
+  -> t
+  -> string
 
 (** [to_string t] is the closed term [t] rendered via {!pp} *)
 val to_string : t -> string

@@ -44,9 +44,24 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
             the `Nat`/`Zero`/`Succ`/`NatRec` core nodes, `vnatrec`, `step_ty`,
             and their eval/quote/conv/infer cases — the generic recursor
             subsumes them
-      - [ ] `Sum` (surfaces the implicit-argument question for `inl`/`inr`)
-      - [ ] `Σ` (needs the surface `.i` projections + the `(a,b)`/`×`/`Σ`
-            notation retargeted to the record)
+      - [x] `Sum`: a prelude `inductive Sum (A B : Type)` with `@[notation sum]`
+            for the infix `+`. The injections and eliminator are the *qualified*
+            `Sum.inl`/`Sum.inr`/`Sum.rec` (the `inl`/`inr`/`case` keywords are
+            gone — every inductive's constructors are qualified, like
+            `Nat.succ`); a checked injection drops its parameters via the
+            elaborator. Deleted the `Sum`/`Inl`/`Inr`/`Case` core+value nodes,
+            `vcase`, and their eval/quote/conv/infer cases. **Fixed at `Type`**,
+            like `Σ`: a proof-irrelevant disjunction `Or : Prop` awaits universe
+            polymorphism
+      - [x] `Σ`: a prelude record `inductive Sigma (A : Type) (B : A → Type)`
+            with `@[notation sigma]`; `(a,b)`/`×`/`Σ` retarget to it (the
+            elaborator recovers the parameters), `.1`/`.2` become the generic
+            `Proj 0`/`Proj 1`, and η comes from the record rule. Deleted the
+            `Sigma`/`Pair`/`Fst`/`Snd` core and value nodes, `vfst`/`vsnd`, and
+            their eval/quote/conv/infer cases. **Fixed at `Type`**: a Σ ranging
+            over the universe (`Σ (A : Type) ⇒ A`) or a proof-irrelevant pair of
+            Props (`p × q : Prop`) no longer forms — that needs universe
+            polymorphism (above), as does a Prop-level `And`
       - [ ] `Eq` (needs indexed families, above)
 
 ## Elaborator (type-directed surface → core)
@@ -55,11 +70,16 @@ Inference that sits above the kernel, turning concise surface terms into fully
 explicit core terms. Its mirror — the delaborator (core → surface) — lives with
 the notation registry under Surface syntax; the two share that registry.
 
+The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
+
+- [x] Constructor-argument inference in *checking* position: a constructor
+      application checked against its inductive omits the leading parameters
+      (`Box.wrap a`, `(a, b)`, `Sum.inl a`), recovered from the expected type —
+      the metavariable-free core of the elaborator (Phase 1)
 - [ ] Implicit arguments: infer the type arguments the kernel demands
       explicitly — gives `x = y` infix over `Eq A x y`, motive inference for
-      `case`/`J`/`T.rec`, and lets `inl a` / `refl` / `(a, b)` and inductive
-      constructors omit their type/parameter arguments (the ergonomic
-      prerequisite for replacing the builtins with inductives)
+      `J`/`T.rec`, and lets `refl` / inference-position intros omit their
+      type/endpoint arguments (the remaining, unification-based half)
 - [ ] Holes / metavariables (the unification engine the above is built on)
 - [ ] `match` expressions — pure surface sugar that compiles to recursor
       (`T.rec`) applications; the kernel never sees it. Needs an equation
@@ -86,16 +106,17 @@ the notation registry under Surface syntax; the two share that registry.
         `nat` demands `zero`/`succ`, …), so a malformed or duplicate binding is
         rejected. *Done for the `unit` and `nat` roles* (`@[notation unit]`/
         `@[notation nat]`, the `@[ ]` attribute surface, one-shot + shape
-        check); `sum`/`sigma`/`eq` roles land with their respective builtin
-        removals.
-      - **forward** (parser/`to_term`): `()`→`Unit.unit` *(done)*,
-        `2`→`succ (succ zero)` *(done)*, `A × B`/`Σ`/`=`/`+` → the registered
-        inductive applied
+        check). *Done for `unit`/`nat`/`sigma`/`sum`*; the `eq` role lands with
+        the `Eq` removal.
+      - **forward** (parser/`to_term`/`Elab`): `()`→`Unit.unit` *(done)*,
+        `2`→`succ (succ zero)` *(done)*, `A × B`/`Σ`/`+` → the registered
+        inductive applied *(done)*; `=` → `Eq` still to come
       - **reverse** (a **delaborator** — the elaborator's mirror, core → surface;
         for now realized as the kernel printer parameterized by a generic
         notation config, not a separate rewriter): the registered unit ctor →
         `()` *(done)*, succ-chains of the registered `Nat` → decimals *(done)*,
-        the relevant inductives → infix `×`/`+`/`=`
+        applied `Sigma`/`Sum` formers → infix `×`/`Σ`/`+` and tuples *(done)*;
+        `Eq` → infix `=` still to come
       - the kernel printer stays **faithful/plain** (`Unit.unit`,
         `Nat.succ (… Nat.zero)`, qualified ctors); the delaborator applies sugar
         in the frontend. This forces a decision on error messages: either accept

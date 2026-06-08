@@ -124,16 +124,22 @@ let%expect_test "Unit and its element" =
   infer "Unit -> Unit";
   [%expect {| Type |}]
 
-let%expect_test "sigma formation sorts" =
-  infer {|Σ (A : Type) ⇒ A|};
-  [%expect {| Type 1 |}];
+(* Σ is now the prelude record [Sigma], fixed at Type (the kernel has no Σ of
+   its own). A universe-polymorphic Σ that forms at the max of its components —
+   in particular one ranging over [Type] itself, or one of two Props landing
+   back in Prop — awaits universe polymorphism. *)
+let%expect_test "sigma formation sorts (Type-fixed inductive)" =
   infer "Unit × Unit";
   [%expect {| Type |}];
-  (* plain max: a pair of props is a prop, data never hides in Prop *)
-  infer "(p : Prop) -> (q : Prop) -> (p × q : Prop) -> Unit";
-  [%expect {| Type |}];
   infer "Unit × Nat";
-  [%expect {| Type |}]
+  [%expect {| Type |}];
+  (* a dependent Σ whose components live in Type (the proof component is a Prop,
+     included into Type by cumulativity) *)
+  infer {|Σ (n : Nat) ⇒ Eq Nat n n|};
+  [%expect {| Type |}];
+  (* fixed at Type: a Σ ranging over the universe itself no longer forms *)
+  infer {|Σ (A : Type) ⇒ A|};
+  [%expect {| type error: this term has type Type 1 but Type was expected |}]
 
 let%expect_test "pair inference defaults to the constant family (Lean-style)" =
   infer "((), ())";
@@ -141,63 +147,37 @@ let%expect_test "pair inference defaults to the constant family (Lean-style)" =
   (* the components' types may mention bound variables *)
   infer {|λ (A : Type) (x : A) ⇒ (x, x)|};
   [%expect {| (A : Type) -> A -> A × A |}];
-  (* the constant family is the default; a dependent type needs checking *)
-  infer "(Unit, ())";
-  [%expect {| Type × Unit |}];
-  infer {|((Unit, ()) : Σ (A : Type) ⇒ A)|};
-  [%expect {| Σ (A : Type) ⇒ A |}];
+  (* a dependent type is recovered by checking against the Σ *)
   infer {|(((), ()) : Unit × Unit)|};
   [%expect {| Unit × Unit |}];
-  (* dependent: the second projection's type mentions the first *)
-  infer {|λ p : (Σ (A : Type) ⇒ A) ⇒ p.2|};
-  [%expect {| (p : Σ (A : Type) ⇒ A) -> p.1 |}];
+  infer {|((0, refl) : Σ (n : Nat) ⇒ Eq Nat n n)|};
+  [%expect {| Σ (n : Nat) ⇒ Eq Nat n n |}];
+  (* the second projection's type mentions the first *)
+  infer {|λ p : (Σ (n : Nat) ⇒ Eq Nat n n) ⇒ p.2|};
+  [%expect {| (p : Σ (n : Nat) ⇒ Eq Nat n n) -> Eq Nat p.1 p.1 |}];
   infer "λ u : Unit ⇒ u.1";
-  [%expect {| type error: expected a pair, but u has type Unit |}]
+  [%expect {| type error: Unit has no field .1 |}]
 
-let%expect_test "sum formation sorts" =
+(* Sum is now the prelude inductive [Sum], fixed at Type (with [+] as notation);
+   its constructors and recursor are the qualified
+   [Sum.inl]/[Sum.inr]/[Sum.rec]. A proof-irrelevant disjunction of Props awaits
+   universe polymorphism, and the generic recursor typing / large-elimination
+   behaviour lives in test_ind.ml. *)
+let%expect_test "sum formation and injections (Type-fixed inductive)" =
   infer "Unit + Unit";
   [%expect {| Type |}];
   infer "Unit + Nat";
   [%expect {| Type |}];
-  (* plain max: a sum of props is a prop (native disjunction) *)
-  infer "(p : Prop) -> (q : Prop) -> (p + q : Prop) -> Unit";
-  [%expect {| Type |}]
-
-let%expect_test "injections are check-only" =
-  infer "inl ()";
-  [%expect
-    {| type error: cannot infer the type of an injection: ascribe it, e.g. (inl a : A + B) |}];
-  infer "(inl () : Unit + Nat)";
-  [%expect {| Unit + Nat |}]
-
-let%expect_test "case: typing, dependent motive, errors" =
+  (* the injection's derived type; checking against the sum recovers the
+     parameters, so an injection may drop them *)
+  infer "Sum.inl";
+  [%expect {| (A : Type) -> (B : Type) -> A -> A + B |}];
+  infer "(Sum.inl () : Unit + Nat)";
+  [%expect {| Unit + Nat |}];
+  (* the recursor eliminating a data sum into Type (no restriction) *)
   infer
-    {|λ s : Unit + Unit ⇒ case (λ x : Unit + Unit ⇒ Unit) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
-  [%expect {| Unit + Unit -> Unit |}];
-  (* a Type-valued motive: large elimination of a data sum is fine *)
-  infer
-    {|λ s : Unit + Nat ⇒ case (λ x : Unit + Nat ⇒ Type) s (λ x : Unit ⇒ Unit) (λ h : Nat ⇒ Nat)|};
-  [%expect {| Unit + Nat -> Type |}];
-  (* the motive must consume the scrutinee's type *)
-  infer
-    {|λ s : Unit + Unit ⇒ case (λ x : Unit ⇒ Unit) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
-  [%expect
-    {| type error: the motive's domain Unit does not match the scrutinee's type Unit + Unit |}];
-  (* and must land in a sort *)
-  infer
-    {|λ s : Unit + Unit ⇒ case (λ x : Unit + Unit ⇒ x) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
-  [%expect {| type error: the motive must land in a sort, not Unit + Unit |}]
-
-let%expect_test "the large-elimination restriction" =
-  (* a proof of a disjunction cannot be eliminated into Type... *)
-  infer
-    {|λ (p q : Prop) (s : p + q) ⇒ case (λ x : p + q ⇒ Unit) s (λ x : p ⇒ ()) (λ y : q ⇒ ())|};
-  [%expect
-    {| type error: cannot eliminate a proof of p + q into Type: a case on a proposition must target Prop |}];
-  (* ...but eliminating into Prop is fine: Or-swap by elimination *)
-  infer
-    {|λ (p q : Prop) (s : p + q) ⇒ case (λ x : p + q ⇒ q + p) s (λ x : p ⇒ (inr x : q + p)) (λ y : q ⇒ (inl y : q + p))|};
-  [%expect {| (p : Prop) -> (q : Prop) -> p + q -> q + p |}]
+    {|λ s : Unit + Nat ⇒ Sum.rec Unit Nat (λ x : Unit + Nat ⇒ Type) (λ x : Unit ⇒ Unit) (λ h : Nat ⇒ Nat) s|};
+  [%expect {| Unit + Nat -> Type |}]
 
 let%expect_test "equality formation and refl" =
   infer "Eq Unit () ()";

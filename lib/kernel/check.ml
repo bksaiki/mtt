@@ -57,12 +57,6 @@ let imax i j =
 (* the fresh variable for going under a binder *)
 let fresh ctx = Value.Neutral (Value.Var ctx.lvl)
 
-(* the type of a case branch, Π (x : comp) ⇒ P (inj x): the motive [p] is
-   weakened by quoting one level up so it can sit under the branch's binder *)
-let branch_ty ctx p x inj comp =
-  let pq = Value.quote (ctx.lvl + 1) p in
-  Value.Pi (x, comp, { env = ctx.env; body = Type.App (pq, inj (Type.Var 0)) })
-
 (* a J motive [p] applied to an endpoint [y] and a proof [pr], i.e. [P y pr] *)
 let motive_at p y pr = Value.apply (Value.apply p y) pr
 
@@ -134,21 +128,11 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       match infer_neutral ctx m with
       | Value.Pi (_, _, c) -> Value.apply_closure c a
       | _ -> assert false (* values are well-typed by invariant *))
-  | Value.Fst n -> (
-      match infer_neutral ctx n with
-      | Value.Sigma (_, a, _) -> a
-      | _ -> assert false)
-  | Value.Snd n -> (
-      match infer_neutral ctx n with
-      | Value.Sigma (_, _, c) ->
-          Value.apply_closure c (Value.Neutral (Value.Fst n))
-      | _ -> assert false)
   | Value.Proj (i, n) -> (
       match infer_neutral ctx n with
       | Value.VInd (name, params) ->
           field_type (lookup_ind ctx name) params (Value.Neutral n) i
       | _ -> assert false)
-  | Value.Case (p, n, _, _) -> Value.apply p (Value.Neutral n)
   (* J P d p : P y p; recover y from the stuck proof's type Eq A x y *)
   | Value.J (p, _, n) -> (
       match infer_neutral ctx n with
@@ -167,13 +151,6 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.Pi (x, a, c) ->
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
       imax (sort_of ctx a) j
-  (* plain max, no imax: a Σ is a proposition only when both components are, so
-     data can never hide inside a Prop *)
-  | Value.Sigma (x, a, c) ->
-      let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
-      max (sort_of ctx a) j
-  (* plain max, like sigma: a sum is a proposition only when both sides are *)
-  | Value.Sum (a, b) -> max (sort_of ctx a) (sort_of ctx b)
   | Value.Eq _ -> 0 (* Eq : Prop *)
   | Value.Neutral n -> (
       match infer_neutral ctx n with
@@ -185,9 +162,6 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.VCtor _
   | Value.VRec _
   | Value.Lam _
-  | Value.Pair _
-  | Value.Inl _
-  | Value.Inr _
   | Value.Refl ->
       assert false
 
@@ -207,21 +181,6 @@ let rec conv ctx ty v1 v2 =
         (Value.apply v2 v)
   (* at a sort, the values are types: compare strictly *)
   | Value.Sort _ -> conv_ty ~cumul:false ctx v1 v2
-  (* η for pairs (surjective pairing): compare the projections, the second at
-     the instantiated component type *)
-  | Value.Sigma (_, a, c) ->
-      let f1 = Value.vfst v1 in
-      conv ctx a f1 (Value.vfst v2)
-      && conv ctx (Value.apply_closure c f1) (Value.vsnd v1) (Value.vsnd v2)
-  (* at a sum type there is no η: injections compare componentwise, and a stuck
-     value equals nothing but another stuck value *)
-  | Value.Sum (a, b) -> (
-      match (v1, v2) with
-      | Value.Inl x1, Value.Inl x2 -> conv ctx a x1 x2
-      | Value.Inr y1, Value.Inr y2 -> conv ctx b y1 y2
-      | Value.Neutral n1, Value.Neutral n2 ->
-          Option.is_some (conv_neutral ctx n1 n2)
-      | _ -> false)
   | Value.VInd (name, params) -> (
       let spec = lookup_ind ctx name in
       if Inductive.is_record spec then
@@ -269,17 +228,6 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
       let v = fresh ctx in
       conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
         (Value.apply_closure c2 v)
-  (* sigma: unlike pi there is no contravariant position, so both components are
-     covariant under cumulativity *)
-  | Value.Sigma (x, a1, c1), Value.Sigma (_, a2, c2) ->
-      conv_ty ~cumul ctx a1 a2
-      &&
-      let v = fresh ctx in
-      conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
-        (Value.apply_closure c2 v)
-  (* sum: covariant in both sides, like sigma *)
-  | Value.Sum (a1, b1), Value.Sum (a2, b2) ->
-      conv_ty ~cumul ctx a1 a2 && conv_ty ~cumul ctx b1 b2
   (* equality: invariant in the type, and the endpoints are compared at it.
      (Both are Prop, so cumulativity adds nothing.) *)
   | Value.Eq (a1, x1, y1), Value.Eq (a2, x2, y2) ->
@@ -332,38 +280,10 @@ and conv_neutral ctx n1 n2 : Value.t option =
           else
             None
       | _ -> None)
-  | Value.Fst n1, Value.Fst n2 -> (
-      match conv_neutral ctx n1 n2 with
-      | Some (Value.Sigma (_, a, _)) -> Some a
-      | _ -> None)
-  | Value.Snd n1, Value.Snd n2 -> (
-      match conv_neutral ctx n1 n2 with
-      | Some (Value.Sigma (_, _, c)) ->
-          Some (Value.apply_closure c (Value.Neutral (Value.Fst n1)))
-      | _ -> None)
   | Value.Proj (i1, m1), Value.Proj (i2, m2) when i1 = i2 -> (
       match conv_neutral ctx m1 m2 with
       | Some (Value.VInd (name, params)) ->
           Some (field_type (lookup_ind ctx name) params (Value.Neutral m1) i1)
-      | _ -> None)
-  (* stuck cases: scrutinees, then motives (as type families at a fresh
-     variable), then both branches at their Pi types built from the motive *)
-  | Value.Case (p1, n1, u1, v1), Value.Case (p2, n2, u2, v2) -> (
-      match conv_neutral ctx n1 n2 with
-      | Some (Value.Sum (a, b) as sty) ->
-          let motives_ok =
-            conv_ty ~cumul:false (bind "s" sty ctx)
-              (Value.apply p1 (fresh ctx))
-              (Value.apply p2 (fresh ctx))
-          in
-          if
-            motives_ok
-            && conv ctx (branch_ty ctx p1 "x" (fun t -> Type.Inl t) a) u1 u2
-            && conv ctx (branch_ty ctx p1 "y" (fun t -> Type.Inr t) b) v1 v2
-          then
-            Some (Value.apply p1 (Value.Neutral n1))
-          else
-            None
       | _ -> None)
   (* stuck J: the proofs are equality proofs (a Prop), so by irrelevance only
      their *types* must agree (giving equal endpoints); then compare motives
@@ -502,111 +422,6 @@ let rec infer ctx t =
                 ; Error.txt " has type "
                 ; vl ctx ty
                 ]))
-  (* (Sum): plain max, like sigma *)
-  | Type.Sum (a, b) ->
-      let i = infer_univ ctx a in
-      let j = infer_univ ctx b in
-      Value.Sort (max i j)
-  (* an injection does not determine the other side of its sum: inl/inr are
-     checked, not inferred *)
-  | Type.Inl _
-  | Type.Inr _ ->
-      Error.type_error
-        [ Error.txt
-            "cannot infer the type of an injection: ascribe it, e.g. (inl a : \
-             A + B)"
-        ]
-  (* (Case): the recursor. The motive is a function from the scrutinee's type
-     into a sort; each branch covers one injection. When the scrutinee is a
-     proposition the motive must land in Prop: by proof irrelevance inl h ≡ inr
-     h', so a Type-valued case could distinguish equal proofs — the
-     large-elimination restriction. *)
-  | Type.Case (p, s, u, v) -> (
-      match infer ctx s with
-      | Value.Sum (va, vb) as sty ->
-          let j =
-            match infer ctx p with
-            | Value.Pi (_, dom, c) -> (
-                if not (conv_ty ~cumul:false ctx dom sty) then
-                  Error.type_error
-                    [ Error.txt "the motive's domain "
-                    ; vl ctx dom
-                    ; Error.txt " does not match the scrutinee's type "
-                    ; vl ctx sty
-                    ];
-                match Value.apply_closure c (fresh ctx) with
-                | Value.Sort j -> j
-                | cod ->
-                    Error.type_error
-                      [ Error.txt "the motive must land in a sort, not "
-                      ; vl (bind "s" sty ctx) cod
-                      ])
-            | ty ->
-                Error.type_error
-                  [ Error.txt "expected a motive from "
-                  ; vl ctx sty
-                  ; Error.txt " into a sort, but "
-                  ; tm ctx p
-                  ; Error.txt " has type "
-                  ; vl ctx ty
-                  ]
-          in
-          if sort_of ctx sty = 0 && j <> 0 then
-            Error.type_error
-              [ Error.txt "cannot eliminate a proof of "
-              ; vl ctx sty
-              ; Error.txt " into "
-              ; tm ctx (Type.Sort j)
-              ; Error.txt ": a case on a proposition must target Prop"
-              ];
-          let vp = Value.eval ctx.env p in
-          check ctx u (branch_ty ctx vp "x" (fun t -> Type.Inl t) va);
-          check ctx v (branch_ty ctx vp "y" (fun t -> Type.Inr t) vb);
-          Value.apply vp (Value.eval ctx.env s)
-      | ty ->
-          Error.type_error
-            [ Error.txt "expected a sum, but "
-            ; tm ctx s
-            ; Error.txt " has type "
-            ; vl ctx ty
-            ])
-  (* (Sigma): plain max — no imax, see sort_of *)
-  | Type.Sigma (x, a, b) ->
-      let i = infer_univ ctx a in
-      let j = infer_univ (bind x (Value.eval ctx.env a) ctx) b in
-      Value.Sort (max i j)
-  (* (Pair-infer): a bare pair infers at the constant family — the components
-     cannot determine a dependent one, so like Lean we default to (type of a) ×
-     (type of b); dependent pairs arrive via checking. Quoting [tb] one level up
-     weakens it across the closure's binder. *)
-  | Type.Pair (a, b) ->
-      let ta = infer ctx a in
-      let tb = infer ctx b in
-      Value.Sigma
-        ("", ta, { env = ctx.env; body = Value.quote (ctx.lvl + 1) tb })
-  (* (Fst) *)
-  | Type.Fst p -> (
-      match infer ctx p with
-      | Value.Sigma (_, a, _) -> a
-      | ty ->
-          Error.type_error
-            [ Error.txt "expected a pair, but "
-            ; tm ctx p
-            ; Error.txt " has type "
-            ; vl ctx ty
-            ])
-  (* (Snd): the result type instantiates the family at the first projection *)
-  | Type.Snd p -> (
-      match infer ctx p with
-      | Value.Sigma (_, _, c) ->
-          Value.apply_closure c (Value.vfst (Value.eval ctx.env p))
-      | ty ->
-          Error.type_error
-            [ Error.txt "expected a pair, but "
-            ; tm ctx p
-            ; Error.txt " has type "
-            ; vl ctx ty
-            ])
   (* (Proj): the i-th field of a record, at its dependent field type *)
   | Type.Proj (i, e) -> (
       match infer ctx e with
@@ -746,11 +561,10 @@ and check_telescope ctx params tms =
   in
   go [] params tms
 
-(* (Rec): the generic recursor. Generalizes (NatRec): the motive is [P : Ind
-   params → Sort j]; each constructor contributes a minor premise (see
-   {!minor_type}); the result is [P major]. Prop inductives that are not
-   subsingletons are restricted to Prop-valued elimination (large-elimination
-   restriction, generalizing the one on (Case)). *)
+(* (Rec): the generic recursor. The motive is [P : Ind params → Sort j]; each
+   constructor contributes a minor premise (see {!minor_type}); the result is [P
+   major]. Prop inductives that are not subsingletons are restricted to
+   Prop-valued elimination (the large-elimination restriction). *)
 and infer_rec ctx rh args =
   let spec = lookup_ind ctx rh.Type.rind in
   let m = rh.Type.nparams in
@@ -830,14 +644,6 @@ and check ctx t expected =
           ];
       check (bind x va ctx) b
         (Value.apply_closure c (Value.Neutral (Value.Var ctx.lvl)))
-  (* (Inl)/(Inr): an injection checks against a sum *)
-  | Type.Inl a, Value.Sum (va, _) -> check ctx a va
-  | Type.Inr b, Value.Sum (_, vb) -> check ctx b vb
-  (* (Pair): check the components, the second against the family instantiated at
-     the first *)
-  | Type.Pair (a, b), Value.Sigma (_, dom, c) ->
-      check ctx a dom;
-      check ctx b (Value.apply_closure c (Value.eval ctx.env a))
   (* (Refl): reflexivity proves x = y exactly when x ≡ y *)
   | Type.Refl, Value.Eq (va, vx, vy) ->
       if not (conv ctx va vx vy) then

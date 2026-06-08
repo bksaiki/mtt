@@ -10,22 +10,39 @@ type t =
   ; nat : (Type.ctor_head * Type.ctor_head) option
         (** [(zero, succ)]: closed succ-chains ending in zero fold to decimals
         *)
+  ; sigma : Type.ctor_head option
+        (** the [mk] constructor of the dependent-pair record: an applied former
+            renders as [Σ (x : A) ⇒ B] / [A × B], an applied [mk] as a tuple *)
+  ; sum : string option
+        (** the binary sum's type former, by name: an applied former renders as
+            [A + B]. The injections and eliminator are ordinary qualified names
+            ([Sum.inl], [Sum.rec]), so they need no sugar. *)
   }
 
 (** the empty registry: no role bound, so nothing is sugared *)
 val empty : t
 
 (** [register role spec n] records that the inductive [spec] fills the notation
-    [role] (["unit"] for [()], ["nat"] for decimal literals), returning the
-    updated registry. Shape-checks that [spec] can play the role (e.g. ["nat"]
-    demands a nullary then a single-recursive-field constructor) and rejects
-    re-registering an already-bound role. Raises {!Error.Type_error} otherwise.
-*)
+    [role] (["unit"] for [()], ["nat"] for decimal literals, ["sigma"] for
+    [Σ]/[×]/tuples, ["sum"] for the [+] former), returning the updated registry.
+    Shape-checks that [spec] can play the role (e.g. ["nat"] demands a nullary
+    then a single-recursive-field constructor; ["sigma"] a two-parameter record
+    with a two-field constructor; ["sum"] a two-parameter inductive with two
+    single-field constructors) and rejects re-registering an already-bound role.
+    Raises {!Error.Type_error} otherwise. *)
 val register : string -> Inductive.spec -> t -> t
 
-(** [sugar n term] renders [term] as a surface atom ([()], a decimal) if it
-    matches a registered role, else [None] — the hook {!Type.pp_in} expects. *)
-val sugar : t -> Type.t -> string option
+(** [sugar n ~recurse names term] renders [term] as surface notation ([()], a
+    decimal, [A × B], a tuple) if it matches a registered role, else [None] —
+    the hook {!Type.pp_in} expects, returning [(prec, text)] for
+    parenthesization. [recurse] renders subterms (for infix/mixfix forms) and
+    [names] are the binders in scope. *)
+val sugar :
+     t
+  -> recurse:(int -> string list -> Type.t -> string)
+  -> string list
+  -> Type.t
+  -> (int * string) option
 
 (** [show n names lvl v] / [show_term n names t] render a value / term against
     the binder [names] (with de Bruijn level [lvl] to quote a value) with

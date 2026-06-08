@@ -144,7 +144,7 @@ let%expect_test "flat .n projections explain themselves" =
   [%expect
     {| 1:2: no projection .3: tuples are right-nested pairs, so e.g. the third component of a triple is .2.2 |}]
 
-let%expect_test "sums: precedence, injections, case" =
+let%expect_test "sums: + precedence; qualified injections and recursor" =
   (* + is right-associative, between × and -> *)
   roundtrip "Unit + Unit + Unit";
   [%expect {| Unit + Unit + Unit |}];
@@ -156,18 +156,19 @@ let%expect_test "sums: precedence, injections, case" =
   [%expect {| Unit + Unit -> Unit |}];
   roundtrip "(Unit -> Unit) + Unit";
   [%expect {| (Unit -> Unit) + Unit |}];
-  (* injections and case are prefix forms at application precedence *)
-  roundtrip "(inl () : Unit + Nat)";
-  [%expect {| (fun (x : Unit + Nat) => x) (inl ()) |}];
+  (* the injections and eliminator are ordinary qualified names (the checked
+     injection drops its recovered parameters on input, but prints them) *)
+  roundtrip "(Sum.inl () : Unit + Nat)";
+  [%expect {| (fun (x : Unit + Nat) => x) (Sum.inl Unit Nat ()) |}];
   roundtrip {|λ f : Unit → Unit + Unit ⇒ f ()|};
   [%expect {| fun (f : Unit -> Unit + Unit) => f () |}];
   roundtrip
-    {|λ s : Unit + Unit ⇒ case (λ x : Unit + Unit ⇒ Unit) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
+    {|λ s : Unit + Unit ⇒ Sum.rec Unit Unit (λ x : Unit + Unit ⇒ Unit) (λ x : Unit ⇒ x) (λ y : Unit ⇒ y) s|};
   [%expect
     {|
     fun (s : Unit + Unit) =>
-    case (fun (x : Unit + Unit) => Unit) s (fun (x : Unit) => x)
-    (fun (y : Unit) => y)
+    Sum.rec Unit Unit (fun (x : Unit + Unit) => Unit) (fun (x : Unit) => x)
+    (fun (y : Unit) => y) s
     |}]
 
 let%expect_test "equality: Eq, refl, J" =
