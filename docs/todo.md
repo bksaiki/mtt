@@ -20,14 +20,19 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 - [ ] Universe polymorphism (level-polymorphic defs; see questions.md); also
       needed for inductive `Sum`/`Σ`/`Eq` to form at the max of their
       components' levels rather than one fixed level
-- [ ] Replace the inductively-describable builtins: move
-      `Empty`/`Sum`/`Nat`/`Unit`/`Σ`/`Eq` into `std/prelude.mtt` as `inductive`
-      declarations and delete their `Type.t`/`Value.t` constructors,
-      eval/quote/conv/infer cases, and lexer keywords — collapsing the kernel to
-      Sort/Pi/Lam/App/Var/Ind/Ctor/Rec (`Π`/`Sort` stay primitive), with the
-      current builtin tests as the regression spec. Depends on record-η and
-      universe polymorphism (above) and, for ergonomic parity, implicit
-      arguments and the notation sugar (Elaborator / Surface syntax)
+- [~] Replace the inductively-describable builtins: move them into
+      `std/prelude.mtt` as `inductive` declarations and delete their
+      `Type.t`/`Value.t` constructors, eval/quote/conv/infer cases, and lexer
+      keywords — collapsing the kernel to Sort/Pi/Lam/App/Var/Ind/Ctor/Rec
+      (`Π`/`Sort` stay primitive), with the current builtin tests as the
+      regression spec. `builtin-removal-plan.md` has the order and prerequisites.
+      - [x] `Empty` (pilot): `inductive Empty : Prop`, `absurd` a prelude def
+            over `Empty.rec`; generic recursor conversion now respects
+            Prop-scrutinee irrelevance
+      - [ ] `Sum` (surfaces the implicit-argument question for `inl`/`inr`)
+      - [ ] `Nat` (needs numeral/printer "blessed inductive" support)
+      - [ ] `Unit`, `Σ` (need record-η, above)
+      - [ ] `Eq` (needs indexed families, above)
 
 ## Elaborator (type-directed surface → core)
 
