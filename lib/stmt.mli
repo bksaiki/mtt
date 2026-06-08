@@ -12,9 +12,21 @@
       an ascription, [#check (t : A)] asserts that [t] checks against [A]
     - [#eval t] — type checks and normalizes [t], reporting just [nf]
     - [#check_equal t u] — asserts that [t] and [u] are definitionally equal
+    - [inductive T params : sort := | c : ty | ...] — declares an inductive
+      type, adding its former, constructors and recursor to the signature
 
     Only [#check] and [#eval] produce output; the rest are silent, and
-    [#check_equal] / a failed [theorem] raise a type error. *)
+    [#check_equal] / a failed [theorem] or [inductive] raise a type error. *)
+
+(** the surface form of an inductive declaration (names and types still
+    unelaborated), as produced by the parser *)
+type ind_decl =
+  { iname : string  (** the inductive's name *)
+  ; iparams : (string * Ast.t) list  (** the parameter telescope, flattened *)
+  ; isort : Ast.t  (** the result sort *)
+  ; ictors : (string * Ast.t) list
+        (** each constructor's name and declared type *)
+  }
 
 type desc =
   | Check of Ast.t  (** [#check t]: reports the normal form and type *)
@@ -23,6 +35,7 @@ type desc =
   | Def of string * Ast.t option * Ast.t  (** [def x [: A] = t], transparent *)
   | Theorem of string * Ast.t * Ast.t  (** [theorem x : A = t], opaque *)
   | CheckEqual of Ast.t * Ast.t  (** [#check_equal t u] *)
+  | Inductive of ind_decl  (** [inductive T params : sort := ...] *)
   | Prelude
       (** the [prelude] directive: opt out of the auto-loaded standard prelude
           (the file is prelude-level / wants a bare environment). Must be the

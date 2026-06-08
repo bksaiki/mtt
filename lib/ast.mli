@@ -9,6 +9,7 @@ type t =
 
 and desc =
   | Var of string
+  | Field of t * string  (** a named projection, e.g. the recursor [Nat.rec] *)
   | Sort of int  (** Prop = Sort 0, Type i = Sort (i+1), as in the core *)
   | Pi of string * t * t  (** (x : A) -> B *)
   | Arrow of t * t  (** A -> B *)
@@ -60,9 +61,11 @@ val var_spine : t -> string list option
 
 exception Unbound_variable of Loc.t * string
 
-(** [to_term names s] scope-checks [s], converting named binders to de Bruijn
-    indices; [names] binds free variables (innermost first), e.g. top-level
-    declarations. Ascriptions [(t : A)] elaborate to the typed identity
-    [(fun (x : A) => x) t]. Raises {!Unbound_variable}, with the variable's
-    location, if a variable is not in scope. *)
-val to_term : string list -> t -> Type.t
+(** [to_term sg names s] scope-checks [s], converting named binders to de Bruijn
+    indices; [names] binds local variables (innermost first), e.g. top-level
+    declarations. A bare name not bound locally resolves to an inductive former
+    in the signature [sg]; qualified [T.c] / [T.rec] resolve to a constructor or
+    the recursor of [T]. Ascriptions [(t : A)] elaborate to the typed identity
+    [(fun (x : A) => x) t]. Raises {!Unbound_variable}, with the offending
+    location, if a name is not in scope. *)
+val to_term : Signature.t -> string list -> t -> Type.t

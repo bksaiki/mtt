@@ -1,7 +1,8 @@
 %token <string> ID
+%token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES PLUS INL INR CASE EQ REFL J NAT SUCC NATREC COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM PRELUDE LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES PLUS INL INR CASE EQ REFL J NAT SUCC NATREC COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -42,9 +43,24 @@ decl_desc:
   | THEOREM; x = ID; bs = list(binder_group); COLON; a = term; EQUALS; t = term
     { Stmt.Theorem (x, Ast.pis $loc bs a, Ast.lams $loc bs t) }
   | CHECK_EQUAL; t = atom; u = atom { Stmt.CheckEqual (t, u) }
+  (* an inductive type declaration: a parameter telescope, a result sort, and a
+     bar-separated list of constructors (possibly empty, as for Empty). The
+     parameters are explicit and in scope for the sort and every constructor. *)
+  | INDUCTIVE; x = ID; ps = list(binder_group); COLON; s = term; EQUALS;
+    cs = list(ctor)
+    { Stmt.Inductive
+        { Stmt.iname = x
+        ; iparams = List.concat_map (fun (xs, a) -> List.map (fun y -> (y, a)) xs) ps
+        ; isort = s
+        ; ictors = cs
+        } }
   (* a directive (first statement only) that opts out of the auto-loaded
      standard prelude *)
   | PRELUDE { Stmt.Prelude }
+
+(* one constructor of an inductive: [| name : type] *)
+ctor:
+  | BAR; c = ID; COLON; t = term { (c, t) }
 
 (* a binder group: one annotation shared by one or more names *)
 binder_group:
@@ -139,5 +155,7 @@ atom:
   (* postfix projections bind tightest: f p.1 is f (p.1) *)
   | p = atom; FST { Ast.mk $loc (Ast.Fst p) }
   | p = atom; SND { Ast.mk $loc (Ast.Snd p) }
+  (* a named projection, e.g. the recursor [Nat.rec] *)
+  | e = atom; f = DOTID { Ast.mk $loc (Ast.Field (e, f)) }
   | LPAREN; t = term; COLON; a = term; RPAREN
     { Ast.mk $loc (Ast.Ascribe (t, a)) }

@@ -1,3 +1,13 @@
+(* the surface form of an inductive declaration, before elaboration into an
+   {!Inductive.spec}: names and types are still parameters/terms *)
+type ind_decl =
+  { iname : string (* the inductive's name *)
+  ; iparams : (string * Ast.t) list (* the parameter telescope (flattened) *)
+  ; isort : Ast.t (* the result sort *)
+  ; ictors :
+      (string * Ast.t) list (* each constructor's name and declared type *)
+  }
+
 type desc =
   | Check of Ast.t (* #check t: reports the normal form and type *)
   | Eval of Ast.t (* #eval t: reports the normal form *)
@@ -5,6 +15,7 @@ type desc =
   | Def of string * Ast.t option * Ast.t (* def x [: A] = t, transparent *)
   | Theorem of string * Ast.t * Ast.t (* theorem x : A = t, opaque *)
   | CheckEqual of Ast.t * Ast.t (* #check_equal t u *)
+  | Inductive of ind_decl (* inductive T params : sort := | c : ty | ... *)
   | Prelude (* opt out of the auto-loaded prelude (handled by the driver) *)
 
 type t =
@@ -12,16 +23,73 @@ type t =
   ; desc : desc
   }
 
+(* Elaborates a surface inductive declaration into an {!Inductive.spec}:
+   scope-checks the parameter telescope and the result sort, then each
+   constructor's declared type. A constructor type is decomposed as a Π-spine
+   [(f₀ : F₀) -> ... -> T params]: the arguments become fields (a field is
+   recursive when its type is exactly the inductive applied to the parameters),
+   and the result must be the inductive applied to its parameters (no indices).
+   The former is registered provisionally so constructor types can mention
+   it. *)
+let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
+  let sg = ctx.Check.signature in
+  (* parameter telescope: each type is scope-checked under the earlier params *)
+  let params, param_names =
+    List.fold_left
+      (fun (params, names) (x, aty) ->
+        (params @ [ (x, Ast.to_term sg names aty) ], x :: names))
+      ([], []) d.iparams
+  in
+  let sort =
+    match Ast.to_term sg param_names d.isort with
+    | Type.Sort k -> k
+    | _ ->
+        Check.type_error
+          "the result of an inductive must be a sort (Type, Prop, or Type n)"
+  in
+  let provisional = { Inductive.name = d.iname; params; sort; ctors = [] } in
+  let sg = Signature.add provisional sg in
+  let m = List.length params in
+  (* a field/result at depth [d] is recursive iff it is the inductive applied to
+     its parameters there *)
+  let is_self depth ty = ty = Inductive.apply provisional depth in
+  let ctors =
+    List.map
+      (fun (cname, cty) ->
+        if String.equal cname "rec" then
+          Check.type_error
+            "a constructor may not be named 'rec' (reserved for the recursor \
+             T.rec)";
+        let rec decompose j ty =
+          match (ty : Type.t) with
+          | Pi (x, a, b) ->
+              let fields, result = decompose (j + 1) b in
+              ( { Inductive.aname = x; aty = a; recursive = is_self (m + j) a }
+                :: fields
+              , result )
+          | result -> ([], result)
+        in
+        let fields, result = decompose 0 (Ast.to_term sg param_names cty) in
+        if not (is_self (m + List.length fields) result) then
+          Check.type_error
+            "constructor %s must construct %s applied to its parameters" cname
+            d.iname;
+        { Inductive.cname; fields })
+      d.ictors
+  in
+  { Inductive.name = d.iname; params; sort; ctors }
+
 let run (ctx : Check.ctx) stmt =
+  let to_term = Ast.to_term ctx.signature ctx.names in
   (* scope-check and evaluate an annotation, requiring it to be a type *)
   let eval_ann sa =
-    let a = Ast.to_term ctx.names sa in
+    let a = to_term sa in
     let _ = Check.infer_univ ctx a in
     Value.eval ctx.env a
   in
   match stmt.desc with
   | Check s ->
-      let t = Ast.to_term ctx.names s in
+      let t = to_term s in
       let ty = Check.infer ctx t in
       let nf = Value.quote ctx.lvl (Value.eval ctx.env t) in
       ( ctx
@@ -29,7 +97,7 @@ let run (ctx : Check.ctx) stmt =
           (Printf.sprintf "%s : %s" (Check.show_term ctx nf) (Check.show ctx ty))
       )
   | Eval s ->
-      let t = Ast.to_term ctx.names s in
+      let t = to_term s in
       (* still type-checked first: evaluation of ill-typed terms can get stuck
          on a non-function *)
       let _ = Check.infer ctx t in
@@ -39,7 +107,7 @@ let run (ctx : Check.ctx) stmt =
       let va = eval_ann sa in
       (Check.bind x va ctx, None)
   | Def (x, sa, st) ->
-      let t = Ast.to_term ctx.names st in
+      let t = to_term st in
       let va =
         match sa with
         | Some sa ->
@@ -52,12 +120,12 @@ let run (ctx : Check.ctx) stmt =
       (Check.define x v va ctx, None)
   | Theorem (x, sa, st) ->
       let va = eval_ann sa in
-      Check.check ctx (Ast.to_term ctx.names st) va;
+      Check.check ctx (to_term st) va;
       (* opaque: the proof is checked, then forgotten *)
       (Check.bind x va ctx, None)
   | CheckEqual (st, su) ->
-      let t = Ast.to_term ctx.names st in
-      let u = Ast.to_term ctx.names su in
+      let t = to_term st in
+      let u = to_term su in
       (* definitional equality is typed: both sides at the same type *)
       let ty = Check.infer ctx t in
       Check.check ctx u ty;
@@ -67,6 +135,10 @@ let run (ctx : Check.ctx) stmt =
         Check.type_error "#check_equal failed: %s is not convertible with %s"
           (Check.show ctx vt) (Check.show ctx vu);
       (ctx, None)
+  | Inductive d ->
+      let spec = elaborate_inductive ctx d in
+      Check.check_inductive ctx spec;
+      (Check.add_ind spec ctx, None)
   (* the prelude directive only controls the driver's choice of starting context
      (auto-load vs. bare); it is handled there, so by the time a statement
      reaches [run] it is a no-op *)

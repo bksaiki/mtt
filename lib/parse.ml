@@ -11,7 +11,8 @@ let with_lexbuf ?(fname = "") s k =
   | Parser.Error -> raise (Error (loc (), "unexpected token"))
 
 let term_of_string s =
-  with_lexbuf s (fun lexbuf -> Ast.to_term [] (Parser.main Lexer.token lexbuf))
+  with_lexbuf s (fun lexbuf ->
+      Ast.to_term Signature.empty [] (Parser.main Lexer.token lexbuf))
 
 let stmt_of_string s = with_lexbuf s (Parser.stmt Lexer.token)
 

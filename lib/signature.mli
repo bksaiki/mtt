@@ -16,7 +16,3 @@ val add : Inductive.spec -> t -> t
 
 (** [find t name] is the inductive declared under [name], if any *)
 val find : t -> string -> Inductive.spec option
-
-(** [find_ctor t cname] finds the inductive and constructor index of the
-    (globally unique) constructor name [cname], if any *)
-val find_ctor : t -> string -> (Inductive.spec * int) option

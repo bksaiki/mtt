@@ -5,6 +5,7 @@ type t =
 
 and desc =
   | Var of string
+  | Field of t * string (* a named projection, e.g. [Nat.rec] *)
   | Sort of int
   | Pi of string * t * t (* (x : A) -> B *)
   | Arrow of t * t (* A -> B *)
@@ -78,13 +79,36 @@ let var_spine t =
 
 exception Unbound_variable of Loc.t * string
 
-let to_term names s =
+let to_term sg names s =
   let rec go env s =
     match s.desc with
+    (* a bare name is a local binder (de Bruijn) first, otherwise a global
+       inductive former. Constructors are not bare: they are qualified [T.c]
+       (handled below), so their names need only be unique within their type. *)
     | Var x -> (
         match List.find_index (String.equal x) env with
         | Some i -> Type.Var i
-        | None -> raise (Unbound_variable (s.loc, x)))
+        | None -> (
+            match Signature.find sg x with
+            | Some spec -> Type.Ind spec.Inductive.name
+            | None -> raise (Unbound_variable (s.loc, x))))
+    (* qualified access on an inductive [T]: [T.rec] is its recursor, [T.c] one
+       of its constructors *)
+    | Field ({ desc = Var tname; _ }, field) -> (
+        match Signature.find sg tname with
+        | None -> raise (Unbound_variable (s.loc, tname))
+        | Some spec -> (
+            if String.equal field "rec" then
+              Type.Rec (Inductive.rec_head spec)
+            else
+              match
+                List.find_index
+                  (fun (c : Inductive.ctor) -> String.equal c.cname field)
+                  spec.Inductive.ctors
+              with
+              | Some i -> Type.Ctor (Inductive.ctor_head spec i)
+              | None -> raise (Unbound_variable (s.loc, tname ^ "." ^ field))))
+    | Field (_, f) -> raise (Unbound_variable (s.loc, "_." ^ f))
     | Sort i -> Type.Sort i
     | Pi (x, a, b) -> Type.Pi (x, go env a, go (x :: env) b)
     (* non-dependent: extend the env with a dummy no identifier can equal, so

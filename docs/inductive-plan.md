@@ -49,14 +49,15 @@ in `ctx`).
   the indexed `Eq`) are a follow-up PR.
 - **Explicit parameters.** With no elaborator/implicits yet, parameters are
   ordinary explicit leading arguments to the former, every constructor, and the
-  recursor (e.g. `cons A x (nil A)`, `List.rec A P …`). Implicit parameters
-  await the elaborator already on the todo.
-- **`Nat.rec` (dotted) eliminator.** A new lexer rule reads `.` followed by an
-  identifier as a postfix dotted field (distinct from the `.1`/`.2` numeric
-  projections); `to_term` requires the head to be an inductive and emits the
-  `Rec` node. Constructors stay **bare** globals, so the only qualified name is
-  the `rec` suffix (which never collides). Bare constructors ⇒ constructor
-  names must be globally unique until namespacing arrives.
+  recursor (e.g. `List.cons A x (List.nil A)`, `List.rec A P …`). Implicit
+  parameters await the elaborator already on the todo.
+- **Qualified constructors and recursor (`T.c`, `T.rec`).** A lexer rule reads
+  `.` followed by an identifier as a postfix dotted field (distinct from the
+  `.1`/`.2` numeric projections); `to_term` requires the head to be an inductive
+  and emits the constructor's `Ctor` node (or, for `.rec`, the `Rec` node). Bare
+  names resolve only to local binders and type formers. Because constructors are
+  qualified by their type, their names need only be unique *within* a type;
+  bringing them to top-level (an `open`-like form) is deferred.
 - **Strict positivity enforced** at declaration time. First cut allows
   *direct* recursive arguments (`T params`); a recursive occurrence anywhere
   else (under an arrow, nested) is rejected — soundly, but more conservatively
