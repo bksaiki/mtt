@@ -91,15 +91,15 @@ let%expect_test "single binders may drop their parens" =
 
 let%expect_test "unit syntax" =
   roundtrip {|λ x : Unit ⇒ ()|};
-  [%expect {| fun (x : Unit) => Unit.unit |}]
+  [%expect {| fun (x : Unit) => () |}]
 
 let%expect_test "() is the unit element" =
   roundtrip "()";
-  [%expect {| Unit.unit |}];
+  [%expect {| () |}];
   roundtrip "( )";
-  [%expect {| Unit.unit |}];
+  [%expect {| () |}];
   roundtrip {|λ f : Unit → Unit ⇒ f ()|};
-  [%expect {| fun (f : Unit -> Unit) => f Unit.unit |}]
+  [%expect {| fun (f : Unit -> Unit) => f () |}]
 
 let%expect_test "sigma, products, pairs, projections" =
   roundtrip {|Σ (A : Type) ⇒ A|};
@@ -123,9 +123,9 @@ let%expect_test "sigma, products, pairs, projections" =
   [%expect {| (Unit × Unit) × Unit |}];
   (* tuples right-nest; projections are postfix and tightest *)
   roundtrip "((), ((), ()))";
-  [%expect {| (Unit.unit, Unit.unit, Unit.unit) |}];
+  [%expect {| ((), (), ()) |}];
   roundtrip "((), (), ())";
-  [%expect {| (Unit.unit, Unit.unit, Unit.unit) |}];
+  [%expect {| ((), (), ()) |}];
   roundtrip {|λ p : Unit × Unit ⇒ p.1|};
   [%expect {| fun (p : Unit × Unit) => p.1 |}];
   roundtrip {|λ p : Unit × (Unit × Unit) ⇒ p.2.1|};
@@ -153,9 +153,9 @@ let%expect_test "sums: precedence, injections, case" =
   [%expect {| (Unit -> Unit) + Unit |}];
   (* injections and case are prefix forms at application precedence *)
   roundtrip "(inl () : Unit + Nat)";
-  [%expect {| (fun (x : Unit + Nat) => x) (inl Unit.unit) |}];
+  [%expect {| (fun (x : Unit + Nat) => x) (inl ()) |}];
   roundtrip {|λ f : Unit → Unit + Unit ⇒ f ()|};
-  [%expect {| fun (f : Unit -> Unit + Unit) => f Unit.unit |}];
+  [%expect {| fun (f : Unit -> Unit + Unit) => f () |}];
   roundtrip
     {|λ s : Unit + Unit ⇒ case (λ x : Unit + Unit ⇒ Unit) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
   [%expect
@@ -167,10 +167,10 @@ let%expect_test "sums: precedence, injections, case" =
 
 let%expect_test "equality: Eq, refl, J" =
   roundtrip "Eq Unit () ()";
-  [%expect {| Eq Unit Unit.unit Unit.unit |}];
+  [%expect {| Eq Unit () () |}];
   (* Eq is a prefix form at application precedence; refl is an atom *)
   roundtrip "(refl : Eq Unit () ())";
-  [%expect {| (fun (x : Eq Unit Unit.unit Unit.unit) => x) refl |}];
+  [%expect {| (fun (x : Eq Unit () ()) => x) refl |}];
   roundtrip {|λ A : Type ⇒ λ x : A ⇒ (refl : Eq A x x)|};
   [%expect
     {| fun (A : Type) => fun (x : A) => (fun (x' : Eq A x x) => x') refl |}];

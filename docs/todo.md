@@ -46,7 +46,8 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 ## Elaborator (type-directed surface → core)
 
 Inference that sits above the kernel, turning concise surface terms into fully
-explicit core terms.
+explicit core terms. Its mirror — the delaborator (core → surface) — lives with
+the notation registry under Surface syntax; the two share that registry.
 
 - [ ] Implicit arguments: infer the type arguments the kernel demands
       explicitly — gives `x = y` infix over `Eq A x y`, motive inference for
@@ -66,11 +67,32 @@ explicit core terms.
 
 - [ ] `open`-style form to use a type's constructors unqualified (`nil` instead
       of `List.nil`); also lets the printer drop the qualifier when unambiguous
-- [ ] "Blessed" inductives in the surface: numeral literals desugaring to a
-      designated `Nat`, the printer folding its successor chains to decimals,
-      and `+`/`×`/`=` notation expanding to the chosen inductives (the parser
-      and printer must know which inductive is "the" Nat/Sum/Σ/Eq; the `=` case
-      also needs the elaborator's implicit-argument inference)
+- [ ] Notation registry + delaborator ("blessed" inductives, done right).
+      The `()`/numeral/`×`/`Σ`/`=`/`+` sugar is *notation* in both directions,
+      and none of it is the kernel's checking/eval concern — only parse and
+      print. Replace today's hardcoded strings (the `()` printer case, the
+      `Unit`/`Sigma` lookups in `to_term`) with one registry:
+      - a **role registry** mapping notation roles (`unit`/`nat`/`sum`/`sigma`/
+        `eq`) to the inductive that fills them, populated declaratively by an
+        attribute on the declaration, e.g. `@[notation unit] inductive Unit …`;
+        registration is **one-shot** (no overwrite) and **shape-checked** (the
+        `unit` role demands a single nullary constructor, `nat` demands
+        `zero`/`succ`, …), so a malformed or duplicate binding is rejected
+      - **forward** (parser/`to_term`): `()`→`Unit.unit`, `2`→`succ (succ zero)`,
+        `A × B`/`Σ`/`=`/`+` → the registered inductive applied
+      - **reverse** (a **delaborator** — the elaborator's mirror, core → surface):
+        the registered unit ctor → `()`, succ-chains of the registered `Nat` →
+        decimals, the relevant inductives → infix `×`/`+`/`=`
+      - the kernel printer stays **faithful/plain** (`Unit.unit`,
+        `Nat.succ (… Nat.zero)`, qualified ctors); the delaborator applies sugar
+        in the frontend. This forces a decision on error messages: either accept
+        plain kernel errors, or make `Type_error` carry the offending **terms**
+        (not pre-rendered strings) so the driver can delaborate them — the latter
+        is what lets the kernel stay entirely notation-ignorant. Pairs naturally
+        with the elaborator (forward) since they share the registry.
+- [x] Print `Unit.unit` as `()` — interim: the kernel printer hardcodes the
+      designated `Unit.unit` ctor head. Subsumed by the notation registry +
+      delaborator above (which should retire this special case).
 - [ ] Block comments: `/- ... -/` (nesting)
 - [ ] Unicode identifiers (needs sedlex; ocamllex handles only fixed
       keyword literals)

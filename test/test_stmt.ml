@@ -234,7 +234,7 @@ let%expect_test "sigma: beta, eta, dependent pairs, irrelevance" =
     ; "axiom c2 : a × a"
     ; "#check_equal c1 c2"
     ];
-  [%expect {| Unit.unit : Unit |}]
+  [%expect {| () : Unit |}]
 
 let%expect_test "sums: iota, stuck cases, irrelevance" =
   session

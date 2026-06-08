@@ -201,7 +201,7 @@ let%expect_test "equality formation and refl" =
   [%expect
     {| type error: cannot infer the type of refl: ascribe it, e.g. (refl : Eq A x x) |}];
   infer "(refl : Eq Unit () ())";
-  [%expect {| Eq Unit Unit.unit Unit.unit |}];
+  [%expect {| Eq Unit () () |}];
   (* refl reifies definitional equality: it checks because the sides are
      convertible (here by β) *)
   infer {|(refl : Eq Type ((λ A : Type ⇒ A) Unit) Unit)|};
