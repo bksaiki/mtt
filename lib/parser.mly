@@ -1,6 +1,7 @@
 %token <string> ID
 %token <int> INT
-%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES PLUS INL INR CASE EQ REFL J COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
+%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES PLUS INL INR CASE EQ REFL J NAT SUCC NATREC COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -101,17 +102,24 @@ app_term:
   (* equality former (explicit type) and its eliminator J *)
   | EQ; a = atom; x = atom; y = atom { Ast.mk $loc (Ast.Eq (a, x, y)) }
   | J; p = atom; d = atom; pr = atom { Ast.mk $loc (Ast.J (p, d, pr)) }
+  (* Nat successor and recursor *)
+  | SUCC; n = atom { Ast.mk $loc (Ast.Succ n) }
+  | NATREC; p = atom; z = atom; s = atom; n = atom
+    { Ast.mk $loc (Ast.NatRec (p, z, s, n)) }
   | t = atom { t }
 
 atom:
   | x = ID { Ast.mk $loc (Ast.Var x) }
   (* surface universes name sorts: Prop = Sort 0, Type i = Sort (i+1) *)
-  | TYPE; i = INT { Ast.mk $loc (Ast.Sort (i + 1)) }
+  | i = TYPELEVEL { Ast.mk $loc (Ast.Sort (i + 1)) }
   | TYPE { Ast.mk $loc (Ast.Sort 1) }
   | PROP { Ast.mk $loc (Ast.Sort 0) }
   | UNIT { Ast.mk $loc Ast.Unit }
   | EMPTY { Ast.mk $loc Ast.Empty }
   | REFL { Ast.mk $loc Ast.Refl }
+  | NAT { Ast.mk $loc Ast.Nat }
+  (* a decimal literal is a Nat numeral: succ (succ ... 0) *)
+  | n = INT { Ast.numeral $loc n }
   (* () is the unit element, like OCaml; whitespace between the parens is
      fine since this is a grammar rule, not a lexeme *)
   | LPAREN; RPAREN { Ast.mk $loc Ast.MkUnit }

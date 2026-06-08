@@ -3,7 +3,7 @@
 def nat := Π (A : Type) ⇒ (A → A) → A → A
 
 def zero (A : Type) (f : A → A) (x : A) : A := x
-def succ (n : nat) (A : Type) (f : A → A) (x : A) : A := f (n A f x)
+def csucc (n : nat) (A : Type) (f : A → A) (x : A) : A := f (n A f x)
 
 -- addition runs m's iteration on top of n's; multiplication iterates an
 -- iteration
@@ -15,11 +15,11 @@ def mul (m n : nat) (A : Type) (f : A → A) (x : A) : A :=
 
 -- numerals; the [: nat] annotations double as type assertions, since the
 -- declared type must match the inferred one up to conversion
-def one : nat := succ zero
-def two : nat := succ one
-def three : nat := succ two
-def four : nat := succ three
-def five : nat := succ four
+def one : nat := csucc zero
+def two : nat := csucc one
+def three : nat := csucc two
+def four : nat := csucc three
+def five : nat := csucc four
 def ten : nat := add five five
 def hundred : nat := mul ten ten
 def thousand : nat := mul hundred ten

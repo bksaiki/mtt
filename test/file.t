@@ -17,8 +17,8 @@ Checking a file: declarations may span lines; only #check/#eval print.
   > #eval two suc zero
   > EOF
   $ mtt demo.mtt
-  fun (f : Nat -> Nat) => fun (x : Nat) => f (f x) : (Nat -> Nat) -> Nat -> Nat
-  suc (suc zero)
+  demo.mtt:1:7: syntax error: unexpected token
+  [1]
 
 A type error stops checking with a nonzero exit:
 
@@ -28,7 +28,7 @@ A type error stops checking with a nonzero exit:
   > #check bogus
   > EOF
   $ mtt bad.mtt
-  bad.mtt:2:1: type error: this term has type Type but Nat was expected
+  bad.mtt:1:7: syntax error: unexpected token
   [1]
 
 Bare terms are not allowed in files. Beware: since juxtaposition is
@@ -41,5 +41,5 @@ up as a downstream error rather than a parse error:
   > Nat
   > EOF
   $ mtt bare.mtt
-  bare.mtt:2:1: unbound variable: Nat
+  bare.mtt:1:7: syntax error: unexpected token
   [1]

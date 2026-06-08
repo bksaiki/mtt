@@ -27,8 +27,23 @@ and desc =
   | Eq of t * t * t (* Eq A x y *)
   | Refl (* refl *)
   | J of t * t * t (* J P d p *)
+  | Nat (* Nat *)
+  | Zero (* 0 *)
+  | Succ of t (* succ n *)
+  | NatRec of t * t * t * t (* natrec P pz ps n *)
 
 let mk loc desc = { loc; desc }
+
+(* a decimal literal [n] is sugar for [succ (succ ... zero)] with [n] succs,
+   every node sharing the literal's location *)
+let numeral loc n =
+  let rec go acc i =
+    if i = 0 then
+      acc
+    else
+      go (mk loc (Succ acc)) (i - 1)
+  in
+  go (mk loc Zero) n
 
 (* telescopes: a binder group [(x y : A)] is a name list and an annotation;
    [lams]/[pis] fold groups into nested lambdas / pis, stamping the synthetic
@@ -94,6 +109,10 @@ let to_term names s =
     | Eq (a, x, y) -> Type.Eq (go env a, go env x, go env y)
     | Refl -> Type.Refl
     | J (p, d, pr) -> Type.J (go env p, go env d, go env pr)
+    | Nat -> Type.Nat
+    | Zero -> Type.Zero
+    | Succ n -> Type.Succ (go env n)
+    | NatRec (p, z, s, n) -> Type.NatRec (go env p, go env z, go env s, go env n)
     (* ascription is the typed identity: applying (fun (x : A) => x) to [t]
        forces the checking judgment t ⇐ A, and the redex evaporates under
        evaluation. No core constructor needed. *)

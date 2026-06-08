@@ -8,15 +8,15 @@ def LEq (A : Type) (x y : A) :=
 def lrefl (A : Type) (x : A) : LEq A x x :=
   λ (P : A → Type) (h : P x) ⇒ h
 
-axiom Nat : Type
-axiom zero : Nat
+axiom N : Type
+axiom zero : N
 
 def id (A : Type) (x : A) : A := x
 
 -- δ- and β-conversion, proved inside the theory...
-theorem id_zero : LEq Nat (id Nat zero) zero := lrefl Nat zero
-theorem beta : LEq Nat ((λ (x : Nat) ⇒ x) zero) zero := lrefl Nat zero
+theorem id_zero : LEq N (id N zero) zero := lrefl N zero
+theorem beta : LEq N ((λ (x : N) ⇒ x) zero) zero := lrefl N zero
 
 -- ...and the same facts asserted at the judgment level
-#check_equal (id Nat zero) zero
-#check_equal ((λ (x : Nat) ⇒ x) zero) zero
+#check_equal (id N zero) zero
+#check_equal ((λ (x : N) ⇒ x) zero) zero
