@@ -202,3 +202,24 @@ let%expect_test "the large-elimination restriction" =
   infer
     {|λ (p q : Prop) (s : p + q) ⇒ case (λ x : p + q ⇒ q + p) s (λ x : p ⇒ (inr x : q + p)) (λ y : q ⇒ (inl y : q + p))|};
   [%expect {| (p : Prop) -> (q : Prop) -> p + q -> q + p |}]
+
+let%expect_test "equality formation and refl" =
+  infer "Eq Unit () ()";
+  [%expect {| Prop |}];
+  (* refl is check-only *)
+  infer "refl";
+  [%expect
+    {| type error: cannot infer the type of refl: ascribe it, e.g. (refl : Eq A x x) |}];
+  infer "(refl : Eq Unit () ())";
+  [%expect {| Eq Unit () () |}];
+  (* refl reifies definitional equality: it checks because the sides are
+     convertible (here by β) *)
+  infer {|(refl : Eq Type ((λ A : Type ⇒ A) Unit) Unit)|};
+  [%expect {| Eq Type Unit Unit |}];
+  (* but refl rejects genuinely distinct sides *)
+  infer "(refl : Eq Type Unit Empty)";
+  [%expect
+    {| type error: refl requires the sides to be equal, but Unit is not Empty |}];
+  (* the endpoints must share the type A *)
+  infer "Eq Unit () Type";
+  [%expect {| type error: this term has type Type 1 but Unit was expected |}]

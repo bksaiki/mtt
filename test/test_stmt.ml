@@ -279,3 +279,47 @@ let%expect_test "sums: iota, stuck cases, irrelevance" =
     type error: #check_equal failed: case (fun (x : A + A) => A + A) t (fun (x : A) => inl x)
     (fun (y : A) => inr y) is not convertible with t
     |}]
+
+let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
+  session
+    [ "axiom A : Type"
+    ; "axiom B : Type"
+    ; "axiom a : A"
+    ; "axiom b : A"
+    ; (* the standard lemmas, each one J at a different motive *)
+      "def sym (x y : A) (p : Eq A x y) : Eq A y x :="
+      ^ " J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq A z x) refl p"
+    ; "def trans (x y z : A) (p : Eq A x y) (q : Eq A y z) : Eq A x z :="
+      ^ " J (λ w : A ⇒ λ r : Eq A y w ⇒ Eq A x w) p q"
+    ; "def cong (f : A → B) (x y : A) (p : Eq A x y) : Eq B (f x) (f y) :="
+      ^ " J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl p"
+    ; (* subst is large elimination: the motive lands in Type *)
+      "def subst (P : A → Type) (x y : A) (p : Eq A x y) (h : P x) : P y :="
+      ^ " J (λ z : A ⇒ λ q : Eq A x z ⇒ P z) h p"
+    ; "#check sym"
+    ; "#check subst"
+    ; (* ι: transport along refl is the identity, definitionally *)
+      "axiom P : A → Type"
+    ; "axiom h : P a"
+    ; "#check_equal (subst P a a refl h) h"
+    ; (* a stuck J (proof is a variable) is a neutral, equal to itself *)
+      "axiom q : Eq A a b"
+    ; "#check sym a b q"
+    ; "#check_equal (sym a b q) (sym a b q)"
+    ; (* UIP for free: any two proofs of the same equation are equal *)
+      "axiom q2 : Eq A a b"
+    ; "#check_equal q q2"
+    ];
+  [%expect
+    {|
+    fun (x : A) =>
+    fun (y : A) =>
+    fun (p : Eq A x y) =>
+    J (fun (z : A) => fun (q : Eq A x z) => Eq A z x) refl p : (x : A) -> (y : A) -> Eq A x y -> Eq A y x
+    fun (P : A -> Type) =>
+    fun (x : A) =>
+    fun (y : A) =>
+    fun (p : Eq A x y) =>
+    fun (h : P x) => J (fun (z : A) => fun (q : Eq A x z) => P z) h p : (P : A -> Type) -> (x : A) -> (y : A) -> Eq A x y -> P x -> P y
+    J (fun (z : A) => fun (q' : Eq A a z) => Eq A z a) refl q : Eq A b a
+    |}]

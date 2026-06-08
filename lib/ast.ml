@@ -24,6 +24,9 @@ and desc =
   | Inl of t (* inl a *)
   | Inr of t (* inr b *)
   | Case of t * t * t * t (* case P s u v *)
+  | Eq of t * t * t (* Eq A x y *)
+  | Refl (* refl *)
+  | J of t * t * t (* J P d p *)
 
 let mk loc desc = { loc; desc }
 
@@ -88,6 +91,9 @@ let to_term names s =
     | Inl t -> Type.Inl (go env t)
     | Inr t -> Type.Inr (go env t)
     | Case (p, s, u, v) -> Type.Case (go env p, go env s, go env u, go env v)
+    | Eq (a, x, y) -> Type.Eq (go env a, go env x, go env y)
+    | Refl -> Type.Refl
+    | J (p, d, pr) -> Type.J (go env p, go env d, go env pr)
     (* ascription is the typed identity: applying (fun (x : A) => x) to [t]
        forces the checking judgment t ⇐ A, and the redex evaporates under
        evaluation. No core constructor needed. *)

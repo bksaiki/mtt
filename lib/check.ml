@@ -52,6 +52,9 @@ let branch_ty ctx p x inj comp =
   let pq = Value.quote (ctx.lvl + 1) p in
   Value.Pi (x, comp, { env = ctx.env; body = Type.App (pq, inj (Type.Var 0)) })
 
+(* a J motive [p] applied to an endpoint [y] and a proof [pr], i.e. [P y pr] *)
+let motive_at p y pr = Value.apply (Value.apply p y) pr
+
 (* the type of a stuck neutral, reconstructed by walking the spine *)
 let rec infer_neutral ctx (n : Value.neutral) : Value.t =
   match n with
@@ -71,6 +74,11 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
           Value.apply_closure c (Value.Neutral (Value.Fst n))
       | _ -> assert false)
   | Value.Case (p, n, _, _) -> Value.apply p (Value.Neutral n)
+  (* J P d p : P y p; recover y from the stuck proof's type Eq A x y *)
+  | Value.J (p, _, n) -> (
+      match infer_neutral ctx n with
+      | Value.Eq (_, _, y) -> motive_at p y (Value.Neutral n)
+      | _ -> assert false)
 
 (* [sort_of ctx ty] is the i such that [ty : Sort i] *)
 let rec sort_of ctx (ty : Value.t) : int =
@@ -88,6 +96,7 @@ let rec sort_of ctx (ty : Value.t) : int =
       max (sort_of ctx a) j
   (* plain max, like sigma: a sum is a proposition only when both sides are *)
   | Value.Sum (a, b) -> max (sort_of ctx a) (sort_of ctx b)
+  | Value.Eq _ -> 0 (* Eq : Prop *)
   | Value.Neutral n -> (
       match infer_neutral ctx n with
       | Value.Sort i -> i
@@ -96,7 +105,8 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.MkUnit
   | Value.Pair _
   | Value.Inl _
-  | Value.Inr _ ->
+  | Value.Inr _
+  | Value.Refl ->
       assert false (* not types *)
 
 (* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
@@ -167,6 +177,10 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
   (* sum: covariant in both sides, like sigma *)
   | Value.Sum (a1, b1), Value.Sum (a2, b2) ->
       conv_ty ~cumul ctx a1 a2 && conv_ty ~cumul ctx b1 b2
+  (* equality: invariant in the type, and the endpoints are compared at it.
+     (Both are Prop, so cumulativity adds nothing.) *)
+  | Value.Eq (a1, x1, y1), Value.Eq (a2, x2, y2) ->
+      conv_ty ~cumul:false ctx a1 a2 && conv ctx a1 x1 x2 && conv ctx a1 y1 y2
   | Value.Neutral n1, Value.Neutral n2 ->
       Option.is_some (conv_neutral ctx n1 n2)
   | _ -> false
@@ -216,6 +230,26 @@ and conv_neutral ctx n1 n2 : Value.t option =
           else
             None
       | _ -> None)
+  (* stuck J: the proofs are equality proofs (a Prop), so by irrelevance only
+     their *types* must agree (giving equal endpoints); then compare motives
+     extensionally and the diagonal cases *)
+  | Value.J (p1, d1, n1), Value.J (p2, d2, n2) -> (
+      match (infer_neutral ctx n1, infer_neutral ctx n2) with
+      | (Value.Eq (a, x, y) as t1), t2 ->
+          let yv = fresh ctx in
+          let ctx1 = bind "y" a ctx in
+          let pv = fresh ctx1 in
+          let ctx2 = bind "p" (Value.Eq (a, x, yv)) ctx1 in
+          if
+            conv_ty ~cumul:false ctx t1 t2
+            && conv_ty ~cumul:false ctx2 (motive_at p1 yv pv)
+                 (motive_at p2 yv pv)
+            && conv ctx (motive_at p1 x Value.Refl) d1 d2
+          then
+            Some (motive_at p1 y (Value.Neutral n1))
+          else
+            None
+      | _ -> assert false)
   (* stuck ex falso: the motives must agree; the proofs are of type Empty, a
      Prop, so by irrelevance they need not be compared at all *)
   | Value.Absurd (a1, _), Value.Absurd (a2, _) ->
@@ -345,6 +379,61 @@ let rec infer ctx t =
       | ty ->
           type_error "expected a pair, but %s has type %s" (show_term ctx p)
             (show ctx ty))
+  (* (Eq): propositional equality is a proposition *)
+  | Type.Eq (a, x, y) ->
+      let _ = infer_univ ctx a in
+      let va = Value.eval ctx.env a in
+      check ctx x va;
+      check ctx y va;
+      Value.Sort 0
+  (* refl does not determine its endpoints: it is checked, not inferred *)
+  | Type.Refl ->
+      type_error
+        "cannot infer the type of refl: ascribe it, e.g. (refl : Eq A x x)"
+  (* (J): based path induction. The motive abstracts over the endpoint and the
+     proof; the diagonal proves it for [refl]. No large-elimination restriction
+     — Eq is a single-constructor subsingleton (like Empty), so eliminating into
+     any sort is sound. *)
+  | Type.J (p, d, pr) -> (
+      match infer ctx pr with
+      | Value.Eq (va, vx, vy) ->
+          (* validate the motive P : Π (y : A) ⇒ Eq A x y → Sort *)
+          (match infer ctx p with
+          | Value.Pi (_, dom1, c1) -> (
+              if not (conv_ty ~cumul:false ctx dom1 va) then
+                type_error
+                  "the motive should take an endpoint of type %s, but takes %s"
+                  (show ctx va) (show ctx dom1);
+              let yv = fresh ctx in
+              let ctx1 = bind "y" va ctx in
+              match Value.apply_closure c1 yv with
+              | Value.Pi (_, dom2, c2) -> (
+                  let expected = Value.Eq (va, vx, yv) in
+                  if not (conv_ty ~cumul:false ctx1 dom2 expected) then
+                    type_error
+                      "the motive should take a proof of %s, but takes %s"
+                      (show ctx1 expected) (show ctx1 dom2);
+                  match Value.apply_closure c2 (fresh ctx1) with
+                  | Value.Sort _ -> ()
+                  | cod ->
+                      type_error "the motive must land in a sort, not %s"
+                        (show ctx1 cod))
+              | cod ->
+                  type_error
+                    "the motive must also take the equality proof, but its \
+                     body is %s"
+                    (show ctx1 cod))
+          | ty ->
+              type_error "expected a motive, but %s has type %s"
+                (show_term ctx p) (show ctx ty));
+          let vp = Value.eval ctx.env p in
+          (* the diagonal proves P x refl *)
+          check ctx d (motive_at vp vx Value.Refl);
+          (* result: P y p *)
+          motive_at vp vy (Value.eval ctx.env pr)
+      | ty ->
+          type_error "expected an equality proof, but %s has type %s"
+            (show_term ctx pr) (show ctx ty))
 
 (* infers and requires a sort: used where the rules demand "a type" *)
 and infer_univ ctx t =
@@ -374,6 +463,11 @@ and check ctx t expected =
   | Type.Pair (a, b), Value.Sigma (_, dom, c) ->
       check ctx a dom;
       check ctx b (Value.apply_closure c (Value.eval ctx.env a))
+  (* (Refl): reflexivity proves x = y exactly when x ≡ y *)
+  | Type.Refl, Value.Eq (va, vx, vy) ->
+      if not (conv ctx va vx vy) then
+        type_error "refl requires the sides to be equal, but %s is not %s"
+          (show ctx vx) (show ctx vy)
   (* subsumption: infer and compare up to definitional equality (βδη plus proof
      irrelevance) and cumulativity *)
   | _ ->

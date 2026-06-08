@@ -160,3 +160,23 @@ let%expect_test "sums: precedence, injections, case" =
     case (fun (x : Unit + Unit) => Unit) s (fun (x : Unit) => x)
     (fun (y : Unit) => y)
     |}]
+
+let%expect_test "equality: Eq, refl, J" =
+  roundtrip "Eq Unit () ()";
+  [%expect {| Eq Unit () () |}];
+  (* Eq is a prefix form at application precedence; refl is an atom *)
+  roundtrip "(refl : Eq Unit () ())";
+  [%expect {| (fun (x : Eq Unit () ()) => x) refl |}];
+  roundtrip {|λ A : Type ⇒ λ x : A ⇒ (refl : Eq A x x)|};
+  [%expect
+    {| fun (A : Type) => fun (x : A) => (fun (x' : Eq A x x) => x') refl |}];
+  (* J takes three atoms: motive, diagonal, proof *)
+  roundtrip
+    {|λ A : Type ⇒ λ x : A ⇒ λ p : Eq A x x ⇒ J (λ y : A ⇒ λ q : Eq A x y ⇒ Eq A x x) refl p|};
+  [%expect
+    {|
+    fun (A : Type) =>
+    fun (x : A) =>
+    fun (p : Eq A x x) =>
+    J (fun (y : A) => fun (q : Eq A x y) => Eq A x x) refl p
+    |}]

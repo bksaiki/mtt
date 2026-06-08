@@ -1,6 +1,6 @@
 %token <string> ID
 %token <int> INT
-%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES PLUS INL INR CASE COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES PLUS INL INR CASE EQ REFL J COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -98,6 +98,9 @@ app_term:
   | INR; t = atom { Ast.mk $loc (Ast.Inr t) }
   | CASE; p = atom; s = atom; u = atom; v = atom
     { Ast.mk $loc (Ast.Case (p, s, u, v)) }
+  (* equality former (explicit type) and its eliminator J *)
+  | EQ; a = atom; x = atom; y = atom { Ast.mk $loc (Ast.Eq (a, x, y)) }
+  | J; p = atom; d = atom; pr = atom { Ast.mk $loc (Ast.J (p, d, pr)) }
   | t = atom { t }
 
 atom:
@@ -108,6 +111,7 @@ atom:
   | PROP { Ast.mk $loc (Ast.Sort 0) }
   | UNIT { Ast.mk $loc Ast.Unit }
   | EMPTY { Ast.mk $loc Ast.Empty }
+  | REFL { Ast.mk $loc Ast.Refl }
   (* () is the unit element, like OCaml; whitespace between the parens is
      fine since this is a grammar rule, not a lexeme *)
   | LPAREN; RPAREN { Ast.mk $loc Ast.MkUnit }

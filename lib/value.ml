@@ -10,6 +10,8 @@ type t =
   | Sum of t * t
   | Inl of t
   | Inr of t
+  | Eq of t * t * t
+  | Refl
   | Neutral of neutral
 
 and neutral =
@@ -19,6 +21,7 @@ and neutral =
   | Fst of neutral (* a stuck first projection *)
   | Snd of neutral (* a stuck second projection *)
   | Case of t * neutral * t * t (* a stuck case: motive, scrutinee, branches *)
+  | J of t * t * neutral (* a stuck J: motive, diagonal, stuck proof *)
 
 and closure =
   { env : env
@@ -54,6 +57,9 @@ let rec eval env t =
   | Type.Inr t -> Inr (eval env t)
   | Type.Case (p, s, u, v) ->
       vcase (eval env p) (eval env s) (eval env u) (eval env v)
+  | Type.Eq (a, x, y) -> Eq (eval env a, eval env x, eval env y)
+  | Type.Refl -> Refl
+  | Type.J (p, d, pr) -> vj (eval env p) (eval env d) (eval env pr)
 
 (* β-reduction: (fun (x : A) => b) a ≡ b[a/x]. The substitution is just
    evaluating the closure body in an extended environment: no term-level
@@ -88,6 +94,14 @@ and vcase p s u v =
   | Neutral n -> Neutral (Case (p, n, u, v))
   | _ -> assert false
 
+(* ι-reduction: J on refl picks the diagonal case; a stuck proof freezes the
+   whole elimination as a neutral frame *)
+and vj p d pr =
+  match pr with
+  | Refl -> d
+  | Neutral n -> Neutral (J (p, d, n))
+  | _ -> assert false
+
 let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
@@ -97,6 +111,8 @@ let rec quote l v =
   | Sum (a, b) -> Type.Sum (quote l a, quote l b)
   | Inl t -> Type.Inl (quote l t)
   | Inr t -> Type.Inr (quote l t)
+  | Eq (a, x, y) -> Type.Eq (quote l a, quote l x, quote l y)
+  | Refl -> Type.Refl
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
   | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
   | Sigma (x, a, c) -> Type.Sigma (x, quote l a, quote_closure l c)
@@ -116,5 +132,6 @@ and quote_neutral l = function
   | Snd n -> Type.Snd (quote_neutral l n)
   | Case (p, n, u, v) ->
       Type.Case (quote l p, quote_neutral l n, quote l u, quote l v)
+  | J (p, d, n) -> Type.J (quote l p, quote l d, quote_neutral l n)
 
 let normalize t = quote 0 (eval [] t)

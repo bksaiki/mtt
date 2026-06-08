@@ -1,11 +1,11 @@
 -- Leibniz (Church-style) equality: x equals y when y satisfies every
--- predicate x does. Checking [refl] at [Eq A t u] forces the type checker
--- to decide t ≡ u, so a theorem proved by refl is the internal twin of the
--- #check_equal command.
-def Eq (A : Type) (x y : A) :=
+-- predicate x does. This is the *encoded* equality; mtt also has a native
+-- Eq (see eq.mtt) — this file is kept as the encoding counterpart, with the
+-- encoded operator written LEq to avoid the Eq keyword.
+def LEq (A : Type) (x y : A) :=
   Π (P : A → Type) ⇒ P x → P y
 
-def refl (A : Type) (x : A) : Eq A x x :=
+def lrefl (A : Type) (x : A) : LEq A x x :=
   λ (P : A → Type) (h : P x) ⇒ h
 
 axiom Nat : Type
@@ -14,8 +14,8 @@ axiom zero : Nat
 def id (A : Type) (x : A) : A := x
 
 -- δ- and β-conversion, proved inside the theory...
-theorem id_zero : Eq Nat (id Nat zero) zero := refl Nat zero
-theorem beta : Eq Nat ((λ (x : Nat) ⇒ x) zero) zero := refl Nat zero
+theorem id_zero : LEq Nat (id Nat zero) zero := lrefl Nat zero
+theorem beta : LEq Nat ((λ (x : Nat) ⇒ x) zero) zero := lrefl Nat zero
 
 -- ...and the same facts asserted at the judgment level
 #check_equal (id Nat zero) zero

@@ -17,6 +17,9 @@ type t =
   | Inl of t (* left injection *)
   | Inr of t (* right injection *)
   | Case of t * t * t * t (* case P s u v: eliminates s : A + B at motive P *)
+  | Eq of t * t * t (* Eq A x y: propositional equality of x, y : A *)
+  | Refl (* the reflexivity proof; check-only *)
+  | J of t * t * t (* J P d p: eliminates p : Eq A x y at motive P *)
 
 let rec occurs k = function
   | Unit
@@ -40,6 +43,9 @@ let rec occurs k = function
   | Inr t ->
       occurs k t
   | Case (p, s, u, v) -> occurs k p || occurs k s || occurs k u || occurs k v
+  | Eq (a, x, y) -> occurs k a || occurs k x || occurs k y
+  | Refl -> false
+  | J (p, d, pr) -> occurs k p || occurs k d || occurs k pr
 
 let pp_in names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
@@ -148,6 +154,15 @@ let pp_in names fmt t =
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[case@ %a@ %a@ %a@ %a@]" (go 11 names) p
               (go 11 names) s (go 11 names) u (go 11 names) v)
+    | Eq (a, x, y) ->
+        paren_if (prec > 10) (fun fmt ->
+            Format.fprintf fmt "@[Eq@ %a@ %a@ %a@]" (go 11 names) a
+              (go 11 names) x (go 11 names) y)
+    | Refl -> Format.pp_print_string fmt "refl"
+    | J (p, d, pr) ->
+        paren_if (prec > 10) (fun fmt ->
+            Format.fprintf fmt "@[J@ %a@ %a@ %a@]" (go 11 names) p (go 11 names)
+              d (go 11 names) pr)
   in
   go 0 names fmt t
 
