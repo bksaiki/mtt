@@ -2,7 +2,7 @@
 -- and y (both : A) are equal; refl is the only constructor and checks
 -- exactly when the sides are definitionally equal; J is the eliminator
 -- (based path induction). The standard lemmas are each one J at a chosen
--- motive. Compare leibniz.mtt, which encodes the same notion with Π.
+-- motive. Compare church_eq.mtt, which encodes the same notion with Π.
 
 axiom A : Type
 axiom B : Type

@@ -1,0 +1,22 @@
+-- Church-encoded (Leibniz) equality: x equals y when y satisfies every
+-- predicate x does. This is the *encoded* counterpart to the native
+-- inductive Eq (see eq.mtt); the operator is written LEq to leave the Eq
+-- keyword free.
+def LEq (A : Type) (x y : A) :=
+  Π (P : A → Type) ⇒ P x → P y
+
+def lrefl (A : Type) (x : A) : LEq A x x :=
+  λ (P : A → Type) (h : P x) ⇒ h
+
+axiom N : Type
+axiom zero : N
+
+def id (A : Type) (x : A) : A := x
+
+-- δ- and β-conversion, proved inside the theory...
+theorem id_zero : LEq N (id N zero) zero := lrefl N zero
+theorem beta : LEq N ((λ (x : N) ⇒ x) zero) zero := lrefl N zero
+
+-- ...and the same facts asserted at the judgment level
+#check_equal (id N zero) zero
+#check_equal ((λ (x : N) ⇒ x) zero) zero

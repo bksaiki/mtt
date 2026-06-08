@@ -180,3 +180,31 @@ let%expect_test "equality: Eq, refl, J" =
     fun (p : Eq A x x) =>
     J (fun (y : A) => fun (q : Eq A x y) => Eq A x x) refl p
     |}]
+
+let%expect_test "Nat: numerals, succ, natrec" =
+  roundtrip "Nat";
+  [%expect {| Nat |}];
+  (* decimal literals are succ-chains; the printer folds them back *)
+  roundtrip "0";
+  [%expect {| 0 |}];
+  roundtrip "3";
+  [%expect {| 3 |}];
+  roundtrip "succ (succ 0)";
+  [%expect {| 2 |}];
+  (* succ on a neutral stays a prefix form (no numeral folding) *)
+  roundtrip {|λ n : Nat ⇒ succ n|};
+  [%expect {| fun (n : Nat) => succ n |}];
+  (* natrec is a four-atom prefix form like case *)
+  roundtrip
+    {|λ n : Nat ⇒ natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ succ ih) n|};
+  [%expect
+    {|
+    fun (n : Nat) =>
+    natrec (fun (x : Nat) => Nat) 0 (fun (k : Nat) => fun (ih : Nat) => succ ih)
+    n
+    |}];
+  (* a universe literal is one lexeme; numerals are ordinary atoms *)
+  roundtrip "Type 3";
+  [%expect {| Type 3 |}];
+  roundtrip {|λ f : Nat → Nat ⇒ f 2|};
+  [%expect {| fun (f : Nat -> Nat) => f 2 |}]

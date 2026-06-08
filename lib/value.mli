@@ -18,6 +18,9 @@ type t =
   | Inr of t
   | Eq of t * t * t
   | Refl
+  | Nat
+  | Zero
+  | Succ of t
   | Neutral of neutral
 
 (** a stuck term: a variable applied to a spine of eliminations *)
@@ -31,6 +34,8 @@ and neutral =
       (** a stuck case: motive, stuck scrutinee, both branches *)
   | J of t * t * neutral
       (** a stuck J: motive, diagonal case, stuck equality proof *)
+  | NatRec of t * t * t * neutral
+      (** a stuck recursion: motive, base, step, stuck scrutinee *)
 
 (** a suspended binder body: syntax waiting for the bound variable's value *)
 and closure =

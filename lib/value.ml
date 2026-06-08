@@ -12,6 +12,9 @@ type t =
   | Inr of t
   | Eq of t * t * t
   | Refl
+  | Nat
+  | Zero
+  | Succ of t
   | Neutral of neutral
 
 and neutral =
@@ -22,6 +25,8 @@ and neutral =
   | Snd of neutral (* a stuck second projection *)
   | Case of t * neutral * t * t (* a stuck case: motive, scrutinee, branches *)
   | J of t * t * neutral (* a stuck J: motive, diagonal, stuck proof *)
+  | NatRec of
+      t * t * t * neutral (* a stuck recursion: motive, base, step, scrutinee *)
 
 and closure =
   { env : env
@@ -60,6 +65,11 @@ let rec eval env t =
   | Type.Eq (a, x, y) -> Eq (eval env a, eval env x, eval env y)
   | Type.Refl -> Refl
   | Type.J (p, d, pr) -> vj (eval env p) (eval env d) (eval env pr)
+  | Type.Nat -> Nat
+  | Type.Zero -> Zero
+  | Type.Succ n -> Succ (eval env n)
+  | Type.NatRec (p, z, s, n) ->
+      vnatrec (eval env p) (eval env z) (eval env s) (eval env n)
 
 (* β-reduction: (fun (x : A) => b) a ≡ b[a/x]. The substitution is just
    evaluating the closure body in an extended environment: no term-level
@@ -102,6 +112,16 @@ and vj p d pr =
   | Neutral n -> Neutral (J (p, d, n))
   | _ -> assert false
 
+(* recursion: the step receives the predecessor and the recursive result on it
+   (the induction hypothesis); a stuck scrutinee freezes the whole recursion.
+   Terminates by descending on the structurally smaller predecessor. *)
+and vnatrec p z s n =
+  match n with
+  | Zero -> z
+  | Succ m -> apply (apply s m) (vnatrec p z s m)
+  | Neutral ne -> Neutral (NatRec (p, z, s, ne))
+  | _ -> assert false
+
 let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
@@ -113,6 +133,9 @@ let rec quote l v =
   | Inr t -> Type.Inr (quote l t)
   | Eq (a, x, y) -> Type.Eq (quote l a, quote l x, quote l y)
   | Refl -> Type.Refl
+  | Nat -> Type.Nat
+  | Zero -> Type.Zero
+  | Succ n -> Type.Succ (quote l n)
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
   | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
   | Sigma (x, a, c) -> Type.Sigma (x, quote l a, quote_closure l c)
@@ -133,5 +156,7 @@ and quote_neutral l = function
   | Case (p, n, u, v) ->
       Type.Case (quote l p, quote_neutral l n, quote l u, quote l v)
   | J (p, d, n) -> Type.J (quote l p, quote l d, quote_neutral l n)
+  | NatRec (p, z, s, n) ->
+      Type.NatRec (quote l p, quote l z, quote l s, quote_neutral l n)
 
 let normalize t = quote 0 (eval [] t)

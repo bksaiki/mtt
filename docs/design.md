@@ -67,9 +67,11 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **η for pairs** (surjective pairing) — at a Σ type, values are compared
   by their projections, the second at the family instantiated by the
   first; `p ≡ (p.1, p.2)` holds for neutral `p`.
-- **ι** — `case` on an injection picks the branch (`vcase`), and `J` on
-  `refl` picks the diagonal (`vj`); these positive types have **no η**, so a
-  stuck `case`/`J` equals only another with convertible parts.
+- **ι** — `case` on an injection picks the branch (`vcase`), `J` on `refl`
+  picks the diagonal (`vj`), and `natrec` recurses on `succ` (`vnatrec`,
+  feeding the step its result on the predecessor — the induction
+  hypothesis). These positive types have **no η**, so a stuck eliminator
+  equals only another with convertible parts.
 - **proof irrelevance** — at a type in `Prop`, any two values are equal
   (a one-line guard in `conv`, made possible by type direction); applies
   inside neutral spines, so `P h1 ≡ P h2` for any proofs `h1`, `h2`.

@@ -2,14 +2,14 @@
 -- value of the first. The non-dependent case is the ordinary product
 -- A × B, and η (surjective pairing) holds definitionally: p ≡ (p.1, p.2).
 
-axiom Nat : Type
-axiom Even : Nat → Prop
+axiom N : Type
+axiom Even : N → Prop
 
 -- a subset type: an even number is a number with a proof of evenness;
 -- because Even n : Prop, the proof component is irrelevant
-def EvenNat := Σ (n : Nat) ⇒ Even n
+def EvenNat := Σ (n : N) ⇒ Even n
 
-axiom two : Nat
+axiom two : N
 axiom two_even : Even two
 
 def packed : EvenNat := (two, two_even)
@@ -22,15 +22,15 @@ axiom two_even' : Even two
 
 -- swapping a non-dependent pair, and swapping back is the identity (η)
 def swap (A B : Type) (p : A × B) : B × A := (p.2, p.1)
-axiom q : Nat × Nat
-#check_equal (swap Nat Nat (swap Nat Nat q)) q
+axiom q : N × N
+#check_equal (swap N N (swap N N q)) q
 
 -- the currying isomorphism: A × B → C ≅ A → B → C
 def curry (A B C : Type) (f : A × B → C) (a : A) (b : B) : C := f (a, b)
 def uncurry (A B C : Type) (f : A → B → C) (p : A × B) : C := f p.1 p.2
 axiom C : Type
-axiom f : Nat × Nat → C
-axiom g : Nat → Nat → C
+axiom f : N × N → C
+axiom g : N → N → C
 -- both round trips are the identity, by β plus pair-η
-#check_equal (uncurry Nat Nat C (curry Nat Nat C f)) f
-#check_equal (curry Nat Nat C (uncurry Nat Nat C g)) g
+#check_equal (uncurry N N C (curry N N C f)) f
+#check_equal (curry N N C (uncurry N N C g)) g

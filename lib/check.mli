@@ -27,49 +27,10 @@
     subsumption rule the inferred type is compared up to Sort i ≤ Sort j when i
     ≤ j, with products invariant in their domains and covariant in their
     codomains. {!infer} still returns principal types: Sort i : Sort (i+1)
-    exactly. *)
+    exactly.
 
-exception Type_error of string
-
-(** [type_error fmt ...] raises {!Type_error} with a formatted message *)
-val type_error : ('a, Format.formatter, unit, 'b) format4 -> 'a
-
-(** the typing context: one entry per binder in scope, all index-aligned *)
-type ctx =
-  { env : Value.env  (** values of bound variables, for evaluation *)
-  ; types : Value.t list  (** their types *)
-  ; names : string list  (** binder names, for error messages *)
-  ; lvl : int  (** binders in scope = next fresh de Bruijn level *)
-  }
-
-val empty : ctx
-
-(** [bind x ty ctx] extends the context with a variable [x] of type [ty], bound
-    to a fresh neutral so that under the binder it blocks reduction instead of
-    disappearing *)
-val bind : string -> Value.t -> ctx -> ctx
-
-(** [define x v ty ctx] extends the context with a {e defined} variable [x] of
-    type [ty]: bound to its value [v] rather than a neutral, so occurrences
-    unfold during evaluation (δ-reduction) *)
-val define : string -> Value.t -> Value.t -> ctx -> ctx
-
-(** [show ctx v] renders a value with the context's binder names *)
-val show : ctx -> Value.t -> string
-
-(** [show_term ctx t] renders a term with the context's binder names *)
-val show_term : ctx -> Type.t -> string
-
-(** [conv ctx ty v1 v2] decides definitional equality of the values [v1] and
-    [v2] at the type [ty], which both must inhabit. Type-directed: at a Prop,
-    true by proof irrelevance; at a Pi, both sides are applied to a fresh
-    variable (η, so lambda annotations are never compared); at [Unit], true (η:
-    every element is [()]); at a Σ, by comparing projections (surjective
-    pairing); at a sum, injections compare componentwise and there is no η; at a
-    sort, the values are types and are compared structurally. *)
-val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
-
-(** [infer ctx t] synthesizes the type of [t] as a value, by the rules:
+    The typing rules ({!infer} synthesizes; (Refl), (Pair-check), (Inl), (Inr)
+    are checking rules):
 
     {v
       (x : A) ∈ Γ
@@ -149,6 +110,18 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
         subsingleton (like Empty), so eliminating into any sort is sound —
         this is what lets subst transport between types
 
+      ─────────────── (Nat)   ─────────────── (Zero)   Γ ⊢ n : Nat
+      Γ ⊢ Nat : Type          Γ ⊢ zero : Nat           ──────────────── (Succ)
+                                                        Γ ⊢ succ n : Nat
+
+      Γ ⊢ n : Nat    Γ ⊢ P : Nat → Sort j
+      Γ ⊢ pz ⇐ P zero    Γ ⊢ ps ⇐ Π (k : Nat) ⇒ P k → P (succ k)
+      ─────────────────────────────────────────────────────────── (NatRec)
+                      Γ ⊢ natrec P pz ps n : P n
+
+        the step's [P k] argument is the induction hypothesis; no
+        large-elimination restriction (Nat is in Type, not Prop)
+
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Pi)
           Γ ⊢ (x : A) -> B : Sort (imax i j)
@@ -166,6 +139,49 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
     v}
 
     In (App), the substitution [B[a/x]] is closure application. *)
+
+exception Type_error of string
+
+(** [type_error fmt ...] raises {!Type_error} with a formatted message *)
+val type_error : ('a, Format.formatter, unit, 'b) format4 -> 'a
+
+(** the typing context: one entry per binder in scope, all index-aligned *)
+type ctx =
+  { env : Value.env  (** values of bound variables, for evaluation *)
+  ; types : Value.t list  (** their types *)
+  ; names : string list  (** binder names, for error messages *)
+  ; lvl : int  (** binders in scope = next fresh de Bruijn level *)
+  }
+
+val empty : ctx
+
+(** [bind x ty ctx] extends the context with a variable [x] of type [ty], bound
+    to a fresh neutral so that under the binder it blocks reduction instead of
+    disappearing *)
+val bind : string -> Value.t -> ctx -> ctx
+
+(** [define x v ty ctx] extends the context with a {e defined} variable [x] of
+    type [ty]: bound to its value [v] rather than a neutral, so occurrences
+    unfold during evaluation (δ-reduction) *)
+val define : string -> Value.t -> Value.t -> ctx -> ctx
+
+(** [show ctx v] renders a value with the context's binder names *)
+val show : ctx -> Value.t -> string
+
+(** [show_term ctx t] renders a term with the context's binder names *)
+val show_term : ctx -> Type.t -> string
+
+(** [conv ctx ty v1 v2] decides definitional equality of the values [v1] and
+    [v2] at the type [ty], which both must inhabit. Type-directed: at a Prop,
+    true by proof irrelevance; at a Pi, both sides are applied to a fresh
+    variable (η, so lambda annotations are never compared); at [Unit], true (η:
+    every element is [()]); at a Σ, by comparing projections (surjective
+    pairing); at a sum, injections compare componentwise and there is no η; at a
+    sort, the values are types and are compared structurally. *)
+val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
+
+(** [infer ctx t] synthesizes the type of [t] as a value, by the typing rules in
+    the module header. *)
 val infer : ctx -> Type.t -> Value.t
 
 (** [infer_univ ctx t] infers and requires a sort, returning its index: used

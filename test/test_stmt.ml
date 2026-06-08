@@ -18,41 +18,41 @@ let session lines =
 
 let%expect_test "axioms postulate stuck constants" =
   session
-    [ "axiom Nat : Type"
-    ; "axiom zero : Nat"
-    ; "axiom suc : Nat -> Nat"
+    [ "axiom N : Type"
+    ; "axiom zero : N"
+    ; "axiom suc : N -> N"
     ; "#check suc (suc zero)"
     ];
-  [%expect {| suc (suc zero) : Nat |}]
+  [%expect {| suc (suc zero) : N |}]
 
 let%expect_test "defs unfold (delta), theorems do not (opaque)" =
   session
-    [ "axiom Nat : Type"
-    ; "axiom zero : Nat"
-    ; "def d : Nat = zero"
-    ; "theorem t : Nat = zero"
+    [ "axiom N : Type"
+    ; "axiom zero : N"
+    ; "def d : N = zero"
+    ; "theorem t : N = zero"
     ; "#check d"
     ; "#check t"
     ];
   [%expect {|
-    zero : Nat
-    t : Nat
+    zero : N
+    t : N
     |}]
 
 let%expect_test "def with inferred type, used at two types" =
   session
     [ "def id = fun (A : Type) => fun (x : A) => x"
-    ; "axiom Nat : Nat"
-    ; "axiom Nat : Type"
-    ; "axiom zero : Nat"
-    ; "#check id Nat zero"
-    ; "#check id (Nat -> Nat) (id Nat)"
+    ; "axiom N : N"
+    ; "axiom N : Type"
+    ; "axiom zero : N"
+    ; "#check id N zero"
+    ; "#check id (N -> N) (id N)"
     ];
   [%expect
     {|
-    1:13: unbound variable: Nat
-    zero : Nat
-    fun (x : Nat) => x : Nat -> Nat
+    1:11: unbound variable: N
+    zero : N
+    fun (x : N) => x : N -> N
     |}]
 
 let%expect_test "a theorem and its use" =
@@ -68,95 +68,95 @@ let%expect_test "a theorem and its use" =
 
 let%expect_test "declared names are in scope for later annotations" =
   session
-    [ "axiom Nat : Type"
-    ; "def arrow : Type = Nat -> Nat"
+    [ "axiom N : Type"
+    ; "def arrow : Type = N -> N"
     ; "axiom g : arrow"
     ; "#check g"
     ];
-  [%expect {| g : Nat -> Nat |}]
+  [%expect {| g : N -> N |}]
 
 let%expect_test "#eval reports just the normal form" =
   session
-    [ "axiom Nat : Type"
-    ; "axiom zero : Nat"
-    ; "def two = fun (f : Nat -> Nat) => fun (x : Nat) => f (f x)"
-    ; "def add = fun (m : (Nat -> Nat) -> Nat -> Nat) => fun (n : (Nat -> Nat) \
-       -> Nat -> Nat) => fun (f : Nat -> Nat) => fun (x : Nat) => m f (n f x)"
+    [ "axiom N : Type"
+    ; "axiom zero : N"
+    ; "def two = fun (f : N -> N) => fun (x : N) => f (f x)"
+    ; "def add = fun (m : (N -> N) -> N -> N) => fun (n : (N -> N) -> N -> N) \
+       => fun (f : N -> N) => fun (x : N) => m f (n f x)"
     ; "#eval add two two"
     ; "#eval Type Type"
     ];
   [%expect
     {|
-    fun (f : Nat -> Nat) => fun (x : Nat) => f (f (f (f x)))
+    fun (f : N -> N) => fun (x : N) => f (f (f (f x)))
     type error: expected a function, but Type has type Type 1
     |}]
 
 let%expect_test "#check_equal succeeds silently and fails loudly" =
   session
-    [ "axiom Nat : Type"
-    ; "axiom zero : Nat"
+    [ "axiom N : Type"
+    ; "axiom zero : N"
     ; "#check_equal zero zero"
-    ; "#check_equal ((fun (x : Nat) => x) zero) zero"
-    ; "#check_equal zero Nat"
+    ; "#check_equal ((fun (x : N) => x) zero) zero"
+    ; "#check_equal zero N"
     ];
-  [%expect {| type error: this term has type Type but Nat was expected |}]
+  [%expect {| type error: this term has type Type but N was expected |}]
 
 let%expect_test "#check with ascription, and #check_equal" =
   session
-    [ "axiom Nat : Type"
-    ; "axiom zero : Nat"
-    ; "#check (zero : Nat)"
+    [ "axiom N : Type"
+    ; "axiom zero : N"
+    ; "#check (zero : N)"
     ; "#check ((fun (A : Type) => fun (x : A) => x) : (B : Type) -> B -> B)"
     ; "#check (zero : Type)"
-    ; "#check_equal (zero : Nat) zero"
+    ; "#check_equal (zero : N) zero"
     ];
   [%expect
     {|
-    zero : Nat
+    zero : N
     fun (A : Type) => fun (x : A) => x : (B : Type) -> B -> B
-    type error: this term has type Nat but Type was expected
+    type error: this term has type N but Type was expected
     |}]
 
 let%expect_test "definitions accept := and unicode binders" =
   session
-    [ "axiom Nat : Type"
-    ; "axiom zero : Nat"
+    [ "axiom N : Type"
+    ; "axiom zero : N"
     ; "def id : Π (A : Type) ⇒ A → A := λ (A : Type) ⇒ λ (x : A) ⇒ x"
-    ; "#check_equal (id Nat zero) zero"
+    ; "#check_equal (id N zero) zero"
     ; "#check id"
     ];
   [%expect {| fun (A : Type) => fun (x : A) => x : (A : Type) -> A -> A |}]
 
 let%expect_test "declaration telescopes" =
   session
-    [ "axiom Nat : Type"
-    ; "axiom zero : Nat"
+    [ "axiom N : Type"
+    ; "axiom zero : N"
     ; "def const (A B : Type) (x : A) (y : B) : A := x"
     ; "#check const"
-    ; "#check_equal (const Nat Nat zero zero) zero"
-    ; "axiom plus (m n : Nat) : Nat"
+    ; "#check_equal (const N N zero zero) zero"
+    ; "axiom plus (m n : N) : N"
     ; "#check plus"
-    ; "theorem plus_self (n : Nat) : Nat := plus n n"
+    ; "theorem plus_self (n : N) : N := plus n n"
     ; "def bad (A : Type) (x : A) : A := A"
     ];
   [%expect
     {|
     fun (A : Type) => fun (B : Type) => fun (x : A) => fun (y : B) => x : (A : Type) -> (B : Type) -> A -> B -> A
-    plus : Nat -> Nat -> Nat
+    plus : N -> N -> N
     type error: this term has type Type but A was expected
     |}]
 
 let%expect_test "def return annotations are optional, with telescopes" =
   session
-    [ "axiom Nat : Type"
-    ; "def twice (f : Nat -> Nat) (n : Nat) := f (f n)"
+    [ "axiom N : Type"
+    ; "def twice (f : N -> N) (n : N) := f (f n)"
     ; "#check twice"
     ; "def Bool := Π (A : Type) ⇒ A → A → A"
     ; "#check Bool"
     ];
   [%expect
     {|
-    fun (f : Nat -> Nat) => fun (n : Nat) => f (f n) : (Nat -> Nat) -> Nat -> Nat
+    fun (f : N -> N) => fun (n : N) => f (f n) : (N -> N) -> N -> N
     (A : Type) -> A -> A -> A : Type 1
     |}]
 
@@ -192,13 +192,13 @@ let%expect_test "eta for Unit: every element is definitionally ()" =
 
 let%expect_test "Empty: irrelevance and stuck absurd" =
   session
-    [ "axiom Nat : Type"
+    [ "axiom N : Type"
     ; "axiom h1 : Empty"
     ; "axiom h2 : Empty"
     ; (* all proofs of Empty are equal (it is a Prop) *)
       "#check_equal h1 h2"
     ; (* and so stuck eliminations of them are equal too *)
-      "#check_equal (absurd Nat h1) (absurd Nat h2)"
+      "#check_equal (absurd N h1) (absurd N h2)"
     ; (* native negation, and double-negation introduction *)
       "def negate (A : Prop) := A → Empty"
     ; "#check negate"
@@ -209,16 +209,16 @@ let%expect_test "Empty: irrelevance and stuck absurd" =
 
 let%expect_test "sigma: beta, eta, dependent pairs, irrelevance" =
   session
-    [ "axiom Nat : Type"
-    ; "axiom zero : Nat"
+    [ "axiom N : Type"
+    ; "axiom zero : N"
     ; (* beta: projections of a literal pair *)
-      "def p : Nat × Nat := (zero, zero)"
+      "def p : N × N := (zero, zero)"
     ; "#check_equal p.1 zero"
     ; (* a dependent pair: the type of the package depends on its head *)
       "def package : Σ (A : Type) ⇒ A := (Unit, ())"
     ; "#check package.2"
     ; (* eta (surjective pairing) on a neutral pair *)
-      "axiom q : Nat × Nat"
+      "axiom q : N × N"
     ; "#check_equal q (q.1, q.2)"
     ; (* eta and unit-eta compose: any two pairs of units are equal *)
       "axiom r : Unit × Unit"
@@ -322,4 +322,36 @@ let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
     fun (p : Eq A x y) =>
     fun (h : P x) => J (fun (z : A) => fun (q : Eq A x z) => P z) h p : (P : A -> Type) -> (x : A) -> (y : A) -> Eq A x y -> P x -> P y
     J (fun (z : A) => fun (q' : Eq A a z) => Eq A z a) refl q : Eq A b a
+    |}]
+
+let%expect_test "Nat: computation by recursion, and induction" =
+  session
+    [ "def add (m n : Nat) : Nat :="
+      ^ " natrec (λ x : Nat ⇒ Nat) n (λ k : Nat ⇒ λ ih : Nat ⇒ succ ih) m"
+    ; "def mul (m n : Nat) : Nat :="
+      ^ " natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ add n ih) m"
+    ; (* ι-reduction computes closed numerals *)
+      "#eval add 2 3"
+    ; "#eval mul 2 3"
+    ; "#check_equal (add 2 3) 5"
+    ; (* add zero on the left reduces definitionally; on the right it is stuck,
+         so 0 + n = n holds by computation but n + 0 = n needs induction *)
+      "def cong (A B : Type) (f : A → B) (x y : A) (p : Eq A x y)"
+      ^ " : Eq B (f x) (f y) :="
+      ^ " J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl p"
+    ; "theorem add_zero (n : Nat) : Eq Nat (add n 0) n :="
+      ^ " natrec (λ m : Nat ⇒ Eq Nat (add m 0) m) refl"
+      ^ " (λ k : Nat ⇒ λ ih : Eq Nat (add k 0) k ⇒"
+      ^ " cong Nat Nat (λ m : Nat ⇒ succ m) (add k 0) k ih) n"
+    ; "#check add_zero"
+    ];
+  [%expect
+    {|
+    5
+    6
+    add_zero : (n : Nat) ->
+    Eq Nat
+    (natrec (fun (x : Nat) => Nat) 0 (fun (k : Nat) => fun (ih : Nat) => succ ih)
+     n)
+    n
     |}]

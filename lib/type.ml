@@ -20,6 +20,10 @@ type t =
   | Eq of t * t * t (* Eq A x y: propositional equality of x, y : A *)
   | Refl (* the reflexivity proof; check-only *)
   | J of t * t * t (* J P d p: eliminates p : Eq A x y at motive P *)
+  | Nat (* the natural numbers *)
+  | Zero
+  | Succ of t
+  | NatRec of t * t * t * t (* natrec P pz ps n: recursion on n : Nat *)
 
 let rec occurs k = function
   | Unit
@@ -46,6 +50,11 @@ let rec occurs k = function
   | Eq (a, x, y) -> occurs k a || occurs k x || occurs k y
   | Refl -> false
   | J (p, d, pr) -> occurs k p || occurs k d || occurs k pr
+  | Nat
+  | Zero ->
+      false
+  | Succ t -> occurs k t
+  | NatRec (p, z, s, n) -> occurs k p || occurs k z || occurs k s || occurs k n
 
 let pp_in names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
@@ -163,6 +172,25 @@ let pp_in names fmt t =
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[J@ %a@ %a@ %a@]" (go 11 names) p (go 11 names)
               d (go 11 names) pr)
+    | Nat -> Format.pp_print_string fmt "Nat"
+    | Zero -> Format.pp_print_string fmt "0"
+    | Succ t -> (
+        (* fold a closed succ-chain to a decimal literal; otherwise print the
+           prefix form succ ... *)
+        let rec count acc = function
+          | Zero -> Some acc
+          | Succ u -> count (acc + 1) u
+          | _ -> None
+        in
+        match count 1 t with
+        | Some k -> Format.fprintf fmt "%d" k
+        | None ->
+            paren_if (prec > 10) (fun fmt ->
+                Format.fprintf fmt "@[succ@ %a@]" (go 11 names) t))
+    | NatRec (p, z, s, n) ->
+        paren_if (prec > 10) (fun fmt ->
+            Format.fprintf fmt "@[natrec@ %a@ %a@ %a@ %a@]" (go 11 names) p
+              (go 11 names) z (go 11 names) s (go 11 names) n)
   in
   go 0 names fmt t
 

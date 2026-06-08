@@ -8,9 +8,9 @@
 
 (rule
  (alias runtest)
- (deps leibniz.mtt %{bin:mtt})
+ (deps church_eq.mtt %{bin:mtt})
  (action
-  (run mtt leibniz.mtt)))
+  (run mtt church_eq.mtt)))
 
 (rule
  (alias runtest)
@@ -53,6 +53,12 @@
  (deps bool.mtt %{bin:mtt})
  (action
   (run mtt bool.mtt)))
+
+(rule
+ (alias runtest)
+ (deps nat.mtt %{bin:mtt})
+ (action
+  (run mtt nat.mtt)))
 
 (rule
  (alias runtest)

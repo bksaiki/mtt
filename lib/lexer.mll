@@ -24,6 +24,9 @@ rule token = parse
   | "Π" { PI }
   | "∏" { PI }
   | "Σ" { SIGMA }
+  (* a universe literal is one lexeme: "Type" and its level, so the level can
+     never be mistaken for a separate numeral argument *)
+  | "Type" [' ' '\t']+ (digits as n) { TYPELEVEL (int_of_string n) }
   | "Type" { TYPE }
   | "Prop" { PROP }
   | "Unit" { UNIT }
@@ -35,6 +38,9 @@ rule token = parse
   | "Eq" { EQ }
   | "refl" { REFL }
   | "J" { J }
+  | "Nat" { NAT }
+  | "succ" { SUCC }
+  | "natrec" { NATREC }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }
   | "#eval" { EVAL }

@@ -25,6 +25,7 @@ Declarations extend the context; defs unfold, theorems and axioms are stuck:
   > #check d
   > #check t
   > EOF
+  1:7: syntax error: unexpected token
   zero : Nat
   t : Nat
 

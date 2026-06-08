@@ -55,6 +55,18 @@ let branch_ty ctx p x inj comp =
 (* a J motive [p] applied to an endpoint [y] and a proof [pr], i.e. [P y pr] *)
 let motive_at p y pr = Value.apply (Value.apply p y) pr
 
+(* the type of a NatRec step, Π (k : Nat) ⇒ P k → P (succ k): the motive [p] is
+   quoted one binder deep for [P k] and two deep for [P (succ k)] (the weakening
+   trick, as in branch_ty). The inner [P k] is the induction hypothesis. *)
+let step_ty ctx p =
+  let body =
+    Type.Pi
+      ( "_ih"
+      , Type.App (Value.quote (ctx.lvl + 1) p, Type.Var 0)
+      , Type.App (Value.quote (ctx.lvl + 2) p, Type.Succ (Type.Var 1)) )
+  in
+  Value.Pi ("k", Value.Nat, { env = ctx.env; body })
+
 (* the type of a stuck neutral, reconstructed by walking the spine *)
 let rec infer_neutral ctx (n : Value.neutral) : Value.t =
   match n with
@@ -79,6 +91,8 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       match infer_neutral ctx n with
       | Value.Eq (_, _, y) -> motive_at p y (Value.Neutral n)
       | _ -> assert false)
+  (* natrec P pz ps n : P n *)
+  | Value.NatRec (p, _, _, n) -> Value.apply p (Value.Neutral n)
 
 (* [sort_of ctx ty] is the i such that [ty : Sort i] *)
 let rec sort_of ctx (ty : Value.t) : int =
@@ -97,6 +111,7 @@ let rec sort_of ctx (ty : Value.t) : int =
   (* plain max, like sigma: a sum is a proposition only when both sides are *)
   | Value.Sum (a, b) -> max (sort_of ctx a) (sort_of ctx b)
   | Value.Eq _ -> 0 (* Eq : Prop *)
+  | Value.Nat -> 1 (* Nat : Type *)
   | Value.Neutral n -> (
       match infer_neutral ctx n with
       | Value.Sort i -> i
@@ -106,7 +121,9 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.Pair _
   | Value.Inl _
   | Value.Inr _
-  | Value.Refl ->
+  | Value.Refl
+  | Value.Zero
+  | Value.Succ _ ->
       assert false (* not types *)
 
 (* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
@@ -139,6 +156,14 @@ let rec conv ctx ty v1 v2 =
       match (v1, v2) with
       | Value.Inl x1, Value.Inl x2 -> conv ctx a x1 x2
       | Value.Inr y1, Value.Inr y2 -> conv ctx b y1 y2
+      | Value.Neutral n1, Value.Neutral n2 ->
+          Option.is_some (conv_neutral ctx n1 n2)
+      | _ -> false)
+  (* Nat is positive: compare constructors structurally, no η *)
+  | Value.Nat -> (
+      match (v1, v2) with
+      | Value.Zero, Value.Zero -> true
+      | Value.Succ a, Value.Succ b -> conv ctx Value.Nat a b
       | Value.Neutral n1, Value.Neutral n2 ->
           Option.is_some (conv_neutral ctx n1 n2)
       | _ -> false)
@@ -181,6 +206,7 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
      (Both are Prop, so cumulativity adds nothing.) *)
   | Value.Eq (a1, x1, y1), Value.Eq (a2, x2, y2) ->
       conv_ty ~cumul:false ctx a1 a2 && conv ctx a1 x1 x2 && conv ctx a1 y1 y2
+  | Value.Nat, Value.Nat -> true
   | Value.Neutral n1, Value.Neutral n2 ->
       Option.is_some (conv_neutral ctx n1 n2)
   | _ -> false
@@ -250,6 +276,22 @@ and conv_neutral ctx n1 n2 : Value.t option =
           else
             None
       | _ -> assert false)
+  (* stuck recursion: scrutinees, then motives (extensionally), the base at P
+     zero, and the step at its Π type *)
+  | Value.NatRec (p1, z1, s1, n1), Value.NatRec (p2, z2, s2, n2) -> (
+      match conv_neutral ctx n1 n2 with
+      | Some Value.Nat ->
+          if
+            conv_ty ~cumul:false (bind "n" Value.Nat ctx)
+              (Value.apply p1 (fresh ctx))
+              (Value.apply p2 (fresh ctx))
+            && conv ctx (Value.apply p1 Value.Zero) z1 z2
+            && conv ctx (step_ty ctx p1) s1 s2
+          then
+            Some (Value.apply p1 (Value.Neutral n1))
+          else
+            None
+      | _ -> None)
   (* stuck ex falso: the motives must agree; the proofs are of type Empty, a
      Prop, so by irrelevance they need not be compared at all *)
   | Value.Absurd (a1, _), Value.Absurd (a2, _) ->
@@ -262,8 +304,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
 (* the cumulativity relation t1 ≤ t2 on types, used by subsumption *)
 let sub ctx t1 t2 = conv_ty ~cumul:true ctx t1 t2
 
-(* the rule markers below refer to the typing rules spelled out on [infer] in
-   check.mli *)
+(* the rule markers below refer to the typing rules in check.mli's header *)
 let rec infer ctx t =
   match t with
   | Type.Unit -> Value.Sort 1 (* (Unit): Unit : Type *)
@@ -434,6 +475,37 @@ let rec infer ctx t =
       | ty ->
           type_error "expected an equality proof, but %s has type %s"
             (show_term ctx pr) (show ctx ty))
+  (* (Nat) *)
+  | Type.Nat -> Value.Sort 1
+  (* (Zero) / (Succ): the constructors; succ infers (its argument is Nat) *)
+  | Type.Zero -> Value.Nat
+  | Type.Succ n ->
+      check ctx n Value.Nat;
+      Value.Nat
+  (* (NatRec): recursion. No large-elimination restriction — Nat is in Type, so
+     there are no irrelevant proofs to protect; the motive may land in any
+     sort. *)
+  | Type.NatRec (p, z, s, n) ->
+      check ctx n Value.Nat;
+      (* validate the motive P : Nat → Sort *)
+      (match infer ctx p with
+      | Value.Pi (_, dom, c) -> (
+          if not (conv_ty ~cumul:false ctx dom Value.Nat) then
+            type_error "the motive should take a Nat, but takes %s"
+              (show ctx dom);
+          match Value.apply_closure c (fresh ctx) with
+          | Value.Sort _ -> ()
+          | cod ->
+              type_error "the motive must land in a sort, not %s"
+                (show (bind "n" Value.Nat ctx) cod))
+      | ty ->
+          type_error "expected a motive Nat → Sort, but %s has type %s"
+            (show_term ctx p) (show ctx ty));
+      let vp = Value.eval ctx.env p in
+      (* base case proves P zero; step proves P k → P (succ k) *)
+      check ctx z (Value.apply vp Value.Zero);
+      check ctx s (step_ty ctx vp);
+      Value.apply vp (Value.eval ctx.env n)
 
 (* infers and requires a sort: used where the rules demand "a type" *)
 and infer_univ ctx t =
