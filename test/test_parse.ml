@@ -148,8 +148,8 @@ let%expect_test "sums: precedence, injections, case" =
   roundtrip "(Unit -> Unit) + Unit";
   [%expect {| (Unit -> Unit) + Unit |}];
   (* injections and case are prefix forms at application precedence *)
-  roundtrip "(inl () : Unit + Empty)";
-  [%expect {| (fun (x : Unit + Empty) => x) (inl ()) |}];
+  roundtrip "(inl () : Unit + Nat)";
+  [%expect {| (fun (x : Unit + Nat) => x) (inl ()) |}];
   roundtrip {|λ f : Unit → Unit + Unit ⇒ f ()|};
   [%expect {| fun (f : Unit -> Unit + Unit) => f () |}];
   roundtrip

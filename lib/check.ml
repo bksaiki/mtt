@@ -137,7 +137,6 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       match infer_neutral ctx m with
       | Value.Pi (_, _, c) -> Value.apply_closure c a
       | _ -> assert false (* values are well-typed by invariant *))
-  | Value.Absurd (a, _) -> a (* the motive is the type *)
   | Value.Fst n -> (
       match infer_neutral ctx n with
       | Value.Sigma (_, a, _) -> a
@@ -169,7 +168,6 @@ let rec sort_of ctx (ty : Value.t) : int =
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
       imax (sort_of ctx a) j
   | Value.Unit -> 1 (* Unit : Type *)
-  | Value.Empty -> 0 (* Empty : Prop *)
   (* plain max, no imax: a Σ is a proposition only when both components are, so
      data can never hide inside a Prop *)
   | Value.Sigma (x, a, c) ->
@@ -273,7 +271,6 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
       conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
         (Value.apply_closure c2 v)
   | Value.Unit, Value.Unit -> true
-  | Value.Empty, Value.Empty -> true
   (* sigma: unlike pi there is no contravariant position, so both components are
      covariant under cumulativity *)
   | Value.Sigma (x, a1, c1), Value.Sigma (_, a2, c2) ->
@@ -406,45 +403,40 @@ and conv_neutral ctx n1 n2 : Value.t option =
      [params @ motive :: minors], and each minor is compared at its derived
      minor-premise type *)
   | Value.Rec (h, pre1, n1), Value.Rec (h2, pre2, n2)
-    when String.equal h.Type.rind h2.Type.rind -> (
-      match conv_neutral ctx n1 n2 with
-      | Some _ ->
-          let spec = lookup_ind ctx h.Type.rind in
-          let m = h.Type.nparams in
-          let params1 = List.filteri (fun i _ -> i < m) pre1 in
-          let params2 = List.filteri (fun i _ -> i < m) pre2 in
-          let motive1 = List.nth pre1 m and motive2 = List.nth pre2 m in
-          let minors1 = List.filteri (fun i _ -> i > m) pre1 in
-          let minors2 = List.filteri (fun i _ -> i > m) pre2 in
-          let ind_ty =
-            List.fold_left Value.apply (Value.VInd (h.Type.rind, [])) params1
-          in
-          let motives_ok =
-            conv_ty ~cumul:false (bind "x" ind_ty ctx)
-              (Value.apply motive1 (fresh ctx))
-              (Value.apply motive2 (fresh ctx))
-          in
-          let minors_ok =
-            List.for_all2
-              (fun (i, mn1) mn2 ->
-                conv ctx (minor_type ctx spec params1 motive1 i) mn1 mn2)
-              (List.mapi (fun i mn -> (i, mn)) minors1)
-              minors2
-          in
-          if
-            conv_params ctx [] spec.Inductive.params params1 params2
-            && motives_ok
-            && minors_ok
-          then
-            Some (Value.apply motive1 (Value.Neutral n1))
-          else
-            None
-      | None -> None)
-  (* stuck ex falso: the motives must agree; the proofs are of type Empty, a
-     Prop, so by irrelevance they need not be compared at all *)
-  | Value.Absurd (a1, _), Value.Absurd (a2, _) ->
-      if conv_ty ~cumul:false ctx a1 a2 then
-        Some a1
+    when String.equal h.Type.rind h2.Type.rind ->
+      let spec = lookup_ind ctx h.Type.rind in
+      let m = h.Type.nparams in
+      let params1 = List.filteri (fun i _ -> i < m) pre1 in
+      let params2 = List.filteri (fun i _ -> i < m) pre2 in
+      let motive1 = List.nth pre1 m and motive2 = List.nth pre2 m in
+      let minors1 = List.filteri (fun i _ -> i > m) pre1 in
+      let minors2 = List.filteri (fun i _ -> i > m) pre2 in
+      let ind_ty =
+        List.fold_left Value.apply (Value.VInd (h.Type.rind, [])) params1
+      in
+      (* the major is compared *at the inductive type*, not structurally: a Prop
+         scrutinee is a proof, so by irrelevance two stuck recursions on
+         different proofs are equal (this is what subsumes [absurd]) *)
+      let majors_ok = conv ctx ind_ty (Value.Neutral n1) (Value.Neutral n2) in
+      let motives_ok =
+        conv_ty ~cumul:false (bind "x" ind_ty ctx)
+          (Value.apply motive1 (fresh ctx))
+          (Value.apply motive2 (fresh ctx))
+      in
+      let minors_ok =
+        List.for_all2
+          (fun (i, mn1) mn2 ->
+            conv ctx (minor_type ctx spec params1 motive1 i) mn1 mn2)
+          (List.mapi (fun i mn -> (i, mn)) minors1)
+          minors2
+      in
+      if
+        conv_params ctx [] spec.Inductive.params params1 params2
+        && majors_ok
+        && motives_ok
+        && minors_ok
+      then
+        Some (Value.apply motive1 (Value.Neutral n1))
       else
         None
   | _ -> None
@@ -495,7 +487,6 @@ let rec infer ctx t =
   match t with
   | Type.Unit -> Value.Sort 1 (* (Unit): Unit : Type *)
   | Type.MkUnit -> Value.Unit (* (MkUnit) *)
-  | Type.Empty -> Value.Sort 0 (* (Empty): Empty : Prop *)
   | Type.Var i -> List.nth ctx.types i (* (Var) *)
   | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
   (* (Pi) *)
@@ -525,12 +516,6 @@ let rec infer ctx t =
           | ty ->
               type_error "expected a function, but %s has type %s"
                 (show_term ctx f) (show ctx ty)))
-  (* (Absurd): subsingleton elimination — the motive may live in any sort, even
-     though Empty is a Prop, because Empty has no introduction forms *)
-  | Type.Absurd (a, h) ->
-      let _ = infer_univ ctx a in
-      check ctx h Value.Empty;
-      Value.eval ctx.env a
   (* (Sum): plain max, like sigma *)
   | Type.Sum (a, b) ->
       let i = infer_univ ctx a in

@@ -92,8 +92,11 @@ Sort (i+1)` (predicative tower). Π formation lands in `Sort (imax i j)`
 where `imax i 0 = 0` — a product into a proposition is a proposition, no
 matter the domain — and `max i j` otherwise. The whole difference between
 `Prop` and `Type` is that one `imax` in `check.ml`'s Pi rule, plus proof
-irrelevance in `conv`. `Empty : Prop` eliminates into any sort via `absurd`
-— subsingleton elimination, sound because it has no introduction forms. For
+irrelevance in `conv`. `Empty` (now a prelude inductive with no constructors,
+not a kernel primitive — see Inductive types) eliminates into any sort via its
+recursor `Empty.rec`, which the prelude wraps as `absurd` — subsingleton
+elimination, the degenerate (zero-constructor) case of the generic
+large-elimination rule. For
 sums the general large-elimination restriction is enforced: `+` forms at
 plain `max` (so `p + q : Prop` is native disjunction), proof irrelevance
 makes `inl h ≡ inr h'` at a `Prop`-sum, and therefore `case` on a
@@ -127,8 +130,13 @@ signature `Σ` (`signature.ml`) keyed by name, beside the de Bruijn context.
   type as a constant; `infer` types a saturated application as a bespoke rule.
 - **Surface.** Parameters are explicit; constructors and the recursor are
   qualified by their type (`Bool.true`, `Nat'.rec`), so constructor names need
-  only be unique within a type. (`Nat`/`succ`/`Empty`/`Eq`/`Unit` are reserved
-  for the builtins, which remain until they are re-derived.)
+  only be unique within a type. (`Nat`/`succ`/`Eq`/`Unit` are still reserved for
+  the remaining builtins.)
+- **Replacing the builtins.** `Empty` is the first hardcoded type retired this
+  way: it is now `inductive Empty : Prop` in `std/prelude.mtt`, with `absurd`
+  a prelude `def` over `Empty.rec`. The remaining inductively-describable
+  builtins (`Sum`/`Nat`/`Unit`/`Σ`/`Eq`) follow; `builtin-removal-plan.md`
+  tracks the sequence and prerequisites.
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
   only as a *direct* recursive field `T params`, never under an arrow or nested
   (more conservative than full strict positivity, a later extension);

@@ -191,8 +191,13 @@ let%expect_test "eta for Unit: every element is definitionally ()" =
     {| type error: #check_equal failed: Unit is not convertible with Prop |}]
 
 let%expect_test "Empty: irrelevance and stuck absurd" =
+  (* Empty and absurd are the prelude inductive/def; this session is bare, so it
+     declares them itself (as the prelude does) *)
   session
-    [ "axiom N : Type"
+    [ "inductive Empty : Prop"
+    ; "def absurd (A : Type) (h : Empty) : A := Empty.rec (fun (_ : Empty) => \
+       A) h"
+    ; "axiom N : Type"
     ; "axiom h1 : Empty"
     ; "axiom h2 : Empty"
     ; (* all proofs of Empty are equal (it is a Prop) *)

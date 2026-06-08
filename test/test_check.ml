@@ -113,21 +113,6 @@ let%expect_test "Unit and its element" =
   infer "Unit -> Unit";
   [%expect {| Type |}]
 
-let%expect_test "Empty and absurd" =
-  infer "Empty";
-  [%expect {| Prop |}];
-  (* negation of anything is a Prop, by imax — even negation of data *)
-  infer "Type -> Empty";
-  [%expect {| Prop |}];
-  (* ex falso eliminates into any sort *)
-  infer {|λ h : Empty ⇒ absurd Type h|};
-  [%expect {| Empty -> Type |}];
-  infer {|λ h : Empty ⇒ absurd (Type 3) h|};
-  [%expect {| Empty -> Type 3 |}];
-  (* the proof must actually be of type Empty *)
-  infer "absurd Unit ()";
-  [%expect {| type error: this term has type Unit but Empty was expected |}]
-
 let%expect_test "sigma formation sorts" =
   infer {|Σ (A : Type) ⇒ A|};
   [%expect {| Type 1 |}];
@@ -136,7 +121,7 @@ let%expect_test "sigma formation sorts" =
   (* plain max: a pair of props is a prop, data never hides in Prop *)
   infer "(p : Prop) -> (q : Prop) -> (p × q : Prop) -> Unit";
   [%expect {| Type |}];
-  infer "Unit × Empty";
+  infer "Unit × Nat";
   [%expect {| Type |}]
 
 let%expect_test "pair inference defaults to the constant family (Lean-style)" =
@@ -161,7 +146,7 @@ let%expect_test "pair inference defaults to the constant family (Lean-style)" =
 let%expect_test "sum formation sorts" =
   infer "Unit + Unit";
   [%expect {| Type |}];
-  infer "Unit + Empty";
+  infer "Unit + Nat";
   [%expect {| Type |}];
   (* plain max: a sum of props is a prop (native disjunction) *)
   infer "(p : Prop) -> (q : Prop) -> (p + q : Prop) -> Unit";
@@ -171,8 +156,8 @@ let%expect_test "injections are check-only" =
   infer "inl ()";
   [%expect
     {| type error: cannot infer the type of an injection: ascribe it, e.g. (inl a : A + B) |}];
-  infer "(inl () : Unit + Empty)";
-  [%expect {| Unit + Empty |}]
+  infer "(inl () : Unit + Nat)";
+  [%expect {| Unit + Nat |}]
 
 let%expect_test "case: typing, dependent motive, errors" =
   infer
@@ -180,8 +165,8 @@ let%expect_test "case: typing, dependent motive, errors" =
   [%expect {| Unit + Unit -> Unit |}];
   (* a Type-valued motive: large elimination of a data sum is fine *)
   infer
-    {|λ s : Unit + Empty ⇒ case (λ x : Unit + Empty ⇒ Type) s (λ x : Unit ⇒ Unit) (λ h : Empty ⇒ Empty)|};
-  [%expect {| Unit + Empty -> Type |}];
+    {|λ s : Unit + Nat ⇒ case (λ x : Unit + Nat ⇒ Type) s (λ x : Unit ⇒ Unit) (λ h : Nat ⇒ Nat)|};
+  [%expect {| Unit + Nat -> Type |}];
   (* the motive must consume the scrutinee's type *)
   infer
     {|λ s : Unit + Unit ⇒ case (λ x : Unit ⇒ Unit) s (λ x : Unit ⇒ x) (λ y : Unit ⇒ y)|};
@@ -217,9 +202,9 @@ let%expect_test "equality formation and refl" =
   infer {|(refl : Eq Type ((λ A : Type ⇒ A) Unit) Unit)|};
   [%expect {| Eq Type Unit Unit |}];
   (* but refl rejects genuinely distinct sides *)
-  infer "(refl : Eq Type Unit Empty)";
+  infer "(refl : Eq Type Unit Nat)";
   [%expect
-    {| type error: refl requires the sides to be equal, but Unit is not Empty |}];
+    {| type error: refl requires the sides to be equal, but Unit is not Nat |}];
   (* the endpoints must share the type A *)
   infer "Eq Unit () Type";
   [%expect {| type error: this term has type Type 1 but Unit was expected |}]

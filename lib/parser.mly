@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES PLUS INL INR CASE EQ REFL J NAT SUCC NATREC COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI SIGMA TYPE PROP UNIT TIMES PLUS INL INR CASE EQ REFL J NAT SUCC NATREC COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -44,10 +44,10 @@ decl_desc:
     { Stmt.Theorem (x, Ast.pis $loc bs a, Ast.lams $loc bs t) }
   | CHECK_EQUAL; t = atom; u = atom { Stmt.CheckEqual (t, u) }
   (* an inductive type declaration: a parameter telescope, a result sort, and a
-     bar-separated list of constructors (possibly empty, as for Empty). The
-     parameters are explicit and in scope for the sort and every constructor. *)
-  | INDUCTIVE; x = ID; ps = list(binder_group); COLON; s = term; EQUALS;
-    cs = list(ctor)
+     bar-separated list of constructors. The parameters are explicit and in
+     scope for the sort and every constructor. A type with no constructors (e.g.
+     Empty) drops the [:=] entirely: [inductive Empty : Prop]. *)
+  | INDUCTIVE; x = ID; ps = list(binder_group); COLON; s = term; cs = ctors_opt
     { Stmt.Inductive
         { Stmt.iname = x
         ; iparams = List.concat_map (fun (xs, a) -> List.map (fun y -> (y, a)) xs) ps
@@ -57,6 +57,13 @@ decl_desc:
   (* a directive (first statement only) that opts out of the auto-loaded
      standard prelude *)
   | PRELUDE { Stmt.Prelude }
+
+(* the constructors of an inductive: omitted entirely for an empty type, else
+   [:=] followed by a bar-separated list (the [:=] with no constructors after it
+   is also accepted) *)
+ctors_opt:
+  | { [] }
+  | EQUALS; cs = list(ctor) { cs }
 
 (* one constructor of an inductive: [| name : type] *)
 ctor:
@@ -112,8 +119,6 @@ prod_term:
 (* application is left-associative *)
 app_term:
   | f = app_term; a = atom { Ast.mk $loc (Ast.App (f, a)) }
-  (* the eliminator for Empty is primitive syntax: motive, then proof *)
-  | ABSURD; a = atom; h = atom { Ast.mk $loc (Ast.Absurd (a, h)) }
   (* injections, and the sum recursor: motive, scrutinee, branches *)
   | INL; t = atom { Ast.mk $loc (Ast.Inl t) }
   | INR; t = atom { Ast.mk $loc (Ast.Inr t) }
@@ -135,7 +140,6 @@ atom:
   | TYPE { Ast.mk $loc (Ast.Sort 1) }
   | PROP { Ast.mk $loc (Ast.Sort 0) }
   | UNIT { Ast.mk $loc Ast.Unit }
-  | EMPTY { Ast.mk $loc Ast.Empty }
   | REFL { Ast.mk $loc Ast.Refl }
   | NAT { Ast.mk $loc Ast.Nat }
   (* a decimal literal is a Nat numeral: succ (succ ... 0) *)

@@ -4,7 +4,6 @@ type t =
   | Lam of string * t * closure
   | Unit
   | MkUnit
-  | Empty
   | Sigma of string * t * closure
   | Pair of t * t
   | Sum of t * t
@@ -29,7 +28,6 @@ type t =
 and neutral =
   | Var of int (* de Bruijn level *)
   | App of neutral * t
-  | Absurd of t * neutral (* a stuck ex falso: motive and stuck proof *)
   | Fst of neutral (* a stuck first projection *)
   | Snd of neutral (* a stuck second projection *)
   | Case of t * neutral * t * t (* a stuck case: motive, scrutinee, branches *)
@@ -53,18 +51,11 @@ let rec eval env t =
   match t with
   | Type.Unit -> Unit
   | Type.MkUnit -> MkUnit
-  | Type.Empty -> Empty
   | Type.Var i -> List.nth env i
   | Type.Sort i -> Sort i
   | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
   | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
-  (* Empty has no introduction forms, so a well-typed scrutinee can only be
-     stuck: absurd is always a neutral *)
-  | Type.Absurd (a, h) -> (
-      match eval env h with
-      | Neutral n -> Neutral (Absurd (eval env a, n))
-      | _ -> assert false)
   | Type.Sigma (x, a, b) -> Sigma (x, eval env a, { env; body = b })
   | Type.Pair (a, b) -> Pair (eval env a, eval env b)
   | Type.Fst t -> vfst (eval env t)
@@ -211,7 +202,6 @@ let rec quote l v =
   | Sort i -> Type.Sort i
   | Unit -> Type.Unit
   | MkUnit -> Type.MkUnit
-  | Empty -> Type.Empty
   | Sum (a, b) -> Type.Sum (quote l a, quote l b)
   | Inl t -> Type.Inl (quote l t)
   | Inr t -> Type.Inr (quote l t)
@@ -241,7 +231,6 @@ and quote_neutral l = function
      binders, is index l - k - 1 *)
   | Var k -> Type.Var (l - k - 1)
   | App (n, a) -> Type.App (quote_neutral l n, quote l a)
-  | Absurd (a, n) -> Type.Absurd (quote l a, quote_neutral l n)
   | Fst n -> Type.Fst (quote_neutral l n)
   | Snd n -> Type.Snd (quote_neutral l n)
   | Case (p, n, u, v) ->

@@ -18,8 +18,6 @@ and desc =
   | Ascribe of t * t  (** (t : A) *)
   | Unit
   | MkUnit
-  | Empty
-  | Absurd of t * t  (** [absurd A h] *)
   | Sigma of string * t * t  (** Σ (x : A) ⇒ B *)
   | Prod of t * t  (** A × B *)
   | Pair of t * t  (** (a, b) *)

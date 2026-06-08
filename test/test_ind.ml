@@ -257,3 +257,61 @@ let%expect_test "Prop large-elimination restriction" =
   in
   infers punit_ctx big;
   [%expect {| Nat |}]
+
+let conv_str ctx ty v1 v2 =
+  if Check.conv ctx ty v1 v2 then
+    "equal"
+  else
+    "not equal"
+
+let%expect_test "a stuck recursor on a Prop scrutinee ignores the proof" =
+  (* Bot : Prop with no constructors (an Empty); Bot.rec is ex falso. Two stuck
+     eliminations of distinct proofs h1, h2 : Bot into a *Type* motive A are
+     definitionally equal — the proofs are irrelevant, even though A is not a
+     Prop so result-level irrelevance does not apply. This is what subsumes the
+     hardcoded `absurd`. *)
+  let bot_spec =
+    { Inductive.name = "Bot"; params = []; sort = 0; ctors = [] }
+  in
+  let ctx = Check.add_ind bot_spec Check.empty in
+  let ctx = Check.bind "A" (Value.Sort 1) ctx in
+  let ctx = Check.bind "h1" (Value.VInd ("Bot", [])) ctx in
+  let ctx = Check.bind "h2" (Value.VInd ("Bot", [])) ctx in
+  let bot_rec = Type.Rec (Inductive.rec_head bot_spec) in
+  (* motive (fun _ => A); A is Var 2, shifted to Var 3 under the binder *)
+  let motive = Type.Lam ("_", Type.Ind "Bot", Type.Var 3) in
+  let elim major = Type.App (Type.App (bot_rec, motive), major) in
+  let v1 =
+    Value.eval ctx.Check.env (elim (Type.Var 1))
+    (* h1 *)
+  in
+  let v2 =
+    Value.eval ctx.Check.env (elim (Type.Var 0))
+    (* h2 *)
+  in
+  let a = Value.eval ctx.Check.env (Type.Var 2) in
+  print_endline (conv_str ctx a v1 v2);
+  [%expect {| equal |}]
+
+let%expect_test "a stuck recursor on a non-Prop scrutinee compares it" =
+  (* the same shape on Nat (a Type): distinct scrutinees x, y are relevant, so
+     the eliminations are not equal *)
+  let ctx = Check.add_ind nat_spec Check.empty in
+  let ctx = Check.bind "x" (Value.VInd ("Nat", [])) ctx in
+  let ctx = Check.bind "y" (Value.VInd ("Nat", [])) ctx in
+  let motive = Type.Lam ("_", nat, nat) in
+  let step = Type.Lam ("k", nat, Type.Lam ("ih", nat, Type.Var 0)) in
+  let elim major =
+    Type.App
+      (Type.App (Type.App (Type.App (nat_rec, motive), zero), step), major)
+  in
+  let v1 =
+    Value.eval ctx.Check.env (elim (Type.Var 1))
+    (* x *)
+  in
+  let v2 =
+    Value.eval ctx.Check.env (elim (Type.Var 0))
+    (* y *)
+  in
+  print_endline (conv_str ctx (Value.eval ctx.Check.env nat) v1 v2);
+  [%expect {| not equal |}]

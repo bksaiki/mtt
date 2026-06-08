@@ -1,6 +1,6 @@
 Inductive type declarations: a former, its constructors, and a recursor.
 Constructors are qualified by their type (`Bool.true`, `List.cons`), as is the
-recursor (`T.rec`). (`Nat`/`succ`/`Empty`/`Eq` are keywords, so user inductives
+recursor (`T.rec`). (`Nat`/`succ`/`Eq`/`Unit` are keywords, so user inductives
 use other names.)
 
   $ cat > data.mtt <<'EOF'
