@@ -3,6 +3,26 @@
     binder names are display hints only, ignored by every algorithm
     (α-equivalence is structural equality). *)
 
+(** The computational skeleton of an inductive constructor, carried by the
+    syntax node so the NbE core can fire ι without consulting the global
+    signature (which holds the full types, for the checker only). *)
+type ctor_head =
+  { ind : string  (** the inductive this constructs *)
+  ; cname : string  (** the constructor's (globally unique) name *)
+  ; cindex : int  (** its position in the inductive's constructor list *)
+  ; carity : int  (** total arguments: leading parameters + fields *)
+  }
+
+(** The skeleton of a recursor, enough to drive ι. [recs] has one entry per
+    constructor; each flags, for that constructor's {e fields} (its
+    non-parameter arguments), which are recursive. Parameters are shared and
+    never recursive, so they are excluded. *)
+type rec_head =
+  { rind : string  (** the inductive being eliminated; prints as ["rind.rec"] *)
+  ; nparams : int  (** leading parameter arguments, shared and fixed *)
+  ; recs : bool list list
+  }
+
 type t =
   | Unit  (** the unit type, with definitional η: every element is [MkUnit] *)
   | MkUnit  (** the element of [Unit] *)
@@ -43,6 +63,13 @@ type t =
           [P : Nat → Sort j], given [pz : P zero] and the step
           [ps : Π (k : Nat) ⇒ P k → P (succ k)] (whose [P k] argument is the
           induction hypothesis); yields [P n] *)
+  | Ind of string
+      (** an inductive type former, applied to its parameters via [App] *)
+  | Ctor of ctor_head
+      (** an inductive constructor, applied to its arguments via [App] *)
+  | Rec of rec_head
+      (** an inductive's recursor, applied to parameters, motive, minor premises
+          and the major premise via [App] *)
 
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool

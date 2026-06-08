@@ -93,6 +93,7 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       | _ -> assert false)
   (* natrec P pz ps n : P n *)
   | Value.NatRec (p, _, _, n) -> Value.apply p (Value.Neutral n)
+  | Value.Rec _ -> assert false (* phase 2 *)
 
 (* [sort_of ctx ty] is the i such that [ty : Sort i] *)
 let rec sort_of ctx (ty : Value.t) : int =
@@ -116,6 +117,11 @@ let rec sort_of ctx (ty : Value.t) : int =
       match infer_neutral ctx n with
       | Value.Sort i -> i
       | _ -> assert false)
+  (* VInd is a type (its sort comes from the signature in phase 2); the rest are
+     not types *)
+  | Value.VInd _
+  | Value.VCtor _
+  | Value.VRec _
   | Value.Lam _
   | Value.MkUnit
   | Value.Pair _
@@ -124,7 +130,7 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.Refl
   | Value.Zero
   | Value.Succ _ ->
-      assert false (* not types *)
+      assert false (* not types / phase 2 *)
 
 (* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
    types themselves (with optional cumulativity). β/δ have already happened
@@ -506,6 +512,12 @@ let rec infer ctx t =
       check ctx z (Value.apply vp Value.Zero);
       check ctx s (step_ty ctx vp);
       Value.apply vp (Value.eval ctx.env n)
+  (* general inductive types: typing arrives in phase 2 (the kernel can already
+     evaluate them — see value.ml) *)
+  | Type.Ind _
+  | Type.Ctor _
+  | Type.Rec _ ->
+      type_error "inductive type checking is not implemented yet"
 
 (* infers and requires a sort: used where the rules demand "a type" *)
 and infer_univ ctx t =

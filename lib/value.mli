@@ -21,6 +21,15 @@ type t =
   | Nat
   | Zero
   | Succ of t
+  | VInd of string * t list
+      (** an inductive type former applied to its parameters: a type once
+          complete, a type-returning function while partial *)
+  | VCtor of Type.ctor_head * t list
+      (** a constructor applied to a spine: canonical data once saturated, a
+          constructor function while partial *)
+  | VRec of Type.rec_head * t list
+      (** a recursor accumulating [params @ motive :: minors @ [major]] until
+          saturated, when it fires ι *)
   | Neutral of neutral
 
 (** a stuck term: a variable applied to a spine of eliminations *)
@@ -36,6 +45,9 @@ and neutral =
       (** a stuck J: motive, diagonal case, stuck equality proof *)
   | NatRec of t * t * t * neutral
       (** a stuck recursion: motive, base, step, stuck scrutinee *)
+  | Rec of Type.rec_head * t list * neutral
+      (** a stuck inductive recursion: the recursor skeleton, the arguments
+          before the major ([params @ motive :: minors]), and the stuck major *)
 
 (** a suspended binder body: syntax waiting for the bound variable's value *)
 and closure =
