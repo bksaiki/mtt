@@ -57,11 +57,12 @@ let apply spec depth =
   in
   go (Type.Ind spec.name) 0
 
+(* wrap [body] in the parameter telescope as Π binders *)
+let pi_params spec body =
+  List.fold_right (fun (x, pty) acc -> Type.Pi (x, pty, acc)) spec.params body
+
 (* the type former's type: [(params) -> Sort sort] *)
-let former_type spec =
-  List.fold_right
-    (fun (x, pty) acc -> Type.Pi (x, pty, acc))
-    spec.params (Type.Sort spec.sort)
+let former_type spec = pi_params spec (Type.Sort spec.sort)
 
 (* the [i]-th constructor's type: [(params) -> (fields) -> Ind params]. Field
    types are stored in the context [params, earlier fields], which is exactly
@@ -69,12 +70,10 @@ let former_type spec =
 let ctor_type spec i =
   let c = List.nth spec.ctors i in
   let result = apply spec (nparams spec + List.length c.fields) in
-  let with_fields =
-    List.fold_right (fun a acc -> Type.Pi (a.aname, a.aty, acc)) c.fields result
-  in
-  List.fold_right
-    (fun (x, pty) acc -> Type.Pi (x, pty, acc))
-    spec.params with_fields
+  pi_params spec
+    (List.fold_right
+       (fun a acc -> Type.Pi (a.aname, a.aty, acc))
+       c.fields result)
 
 (* whether the inductive [name] occurs anywhere in [t]; the positivity check
    uses it to reject the inductive appearing in a non-recursive field *)

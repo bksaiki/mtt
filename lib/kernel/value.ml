@@ -103,15 +103,7 @@ and apply f a =
 and apply_closure { env; body } a = eval (a :: env) body
 
 (* split [l] into its first [n] elements and the rest *)
-and split_at n l =
-  if n = 0 then
-    ([], l)
-  else
-    match l with
-    | x :: xs ->
-        let hd, tl = split_at (n - 1) xs in
-        (x :: hd, tl)
-    | [] -> assert false
+and split_at n l = (List.take n l, List.drop n l)
 
 (* ι-reduction for the generic recursor, on the saturated argument list [params
    @ motive :: minors @ [major]]. On a constructor it applies that constructor's

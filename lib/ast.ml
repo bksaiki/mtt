@@ -45,26 +45,19 @@ let numeral loc n =
   go (mk loc Zero) n
 
 (* telescopes: a binder group [(x y : A)] is a name list and an annotation;
-   [lams]/[pis] fold groups into nested lambdas / pis, stamping the synthetic
-   binder nodes with the span of the whole construct *)
-
-let lams loc groups body =
+   [telescope] folds groups into nested binders built by [node], stamping each
+   synthetic node with the span of the whole construct *)
+let telescope node loc groups body =
   List.fold_right
     (fun (xs, a) acc ->
-      List.fold_right (fun x acc -> mk loc (Lam (x, a, acc))) xs acc)
+      List.fold_right (fun x acc -> mk loc (node x a acc)) xs acc)
     groups body
 
-let pis loc groups body =
-  List.fold_right
-    (fun (xs, a) acc ->
-      List.fold_right (fun x acc -> mk loc (Pi (x, a, acc))) xs acc)
-    groups body
+let lams = telescope (fun x a b -> Lam (x, a, b))
 
-let sigmas loc groups body =
-  List.fold_right
-    (fun (xs, a) acc ->
-      List.fold_right (fun x acc -> mk loc (Sigma (x, a, acc))) xs acc)
-    groups body
+let pis = telescope (fun x a b -> Pi (x, a, b))
+
+let sigmas = telescope (fun x a b -> Sigma (x, a, b))
 
 let var_spine t =
   let rec go acc t =
