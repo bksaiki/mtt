@@ -5,6 +5,13 @@ prelude
 -- ordinary mtt, this file doubles as the reference for how the basics are
 -- built.
 
+-- === Data ===
+
+-- the unit type: a record (single constructor, no fields), so it has
+-- definitional η — any two elements are equal. `()` is sugar for `Unit.unit`.
+inductive Unit : Type :=
+| unit : Unit
+
 -- === Functions ===
 
 def id (A : Type) (x : A) : A := x

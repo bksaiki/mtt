@@ -6,6 +6,7 @@ type ctor_head =
   ; cname : string (* the constructor's (globally unique) name *)
   ; cindex : int (* its position in the inductive's constructor list *)
   ; carity : int (* total arguments: leading parameters + fields *)
+  ; nparams : int (* leading parameters, so a projection can skip them *)
   }
 
 (* The skeleton of a recursor, enough to drive ι. [recs] has one entry per
@@ -19,8 +20,6 @@ type rec_head =
   }
 
 type t =
-  | Unit (* the unit type *)
-  | MkUnit (* the element of Unit *)
   | Var of int (* de Bruijn index *)
   | Sort of int (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of string * t * t (* Π (x : A). B, B binds index 0 *)
@@ -30,6 +29,7 @@ type t =
   | Pair of t * t (* (a, b) *)
   | Fst of t (* p.1 *)
   | Snd of t (* p.2 *)
+  | Proj of int * t (* x.(i+1): the i-th field projection of a record *)
   | Sum of t * t (* A + B *)
   | Inl of t (* left injection *)
   | Inr of t (* right injection *)
@@ -46,9 +46,6 @@ type t =
   | Rec of rec_head (* an inductive's recursor, applied to args via App *)
 
 let rec occurs k = function
-  | Unit
-  | MkUnit ->
-      false
   | Var i -> i = k
   | Sort _ -> false
   | Pi (_, a, b)
@@ -60,6 +57,7 @@ let rec occurs k = function
   | Fst t
   | Snd t ->
       occurs k t
+  | Proj (_, t) -> occurs k t
   | Sum (a, b) -> occurs k a || occurs k b
   | Inl t
   | Inr t ->
@@ -106,8 +104,6 @@ let pp_in names fmt t =
      11 = atom *)
   let rec go prec names fmt t =
     match t with
-    | Unit -> Format.pp_print_string fmt "Unit"
-    | MkUnit -> Format.pp_print_string fmt "()"
     | Var i -> (
         match List.nth_opt names i with
         | Some x -> Format.pp_print_string fmt x
@@ -168,6 +164,7 @@ let pp_in names fmt t =
           (a :: components b)
     | Fst t -> Format.fprintf fmt "%a.1" (go 11 names) t
     | Snd t -> Format.fprintf fmt "%a.2" (go 11 names) t
+    | Proj (i, t) -> Format.fprintf fmt "%a.%d" (go 11 names) t (i + 1)
     (* + is right-associative, between arrows and products *)
     | Sum (a, b) ->
         paren_if (prec > 2) (fun fmt ->
@@ -213,8 +210,11 @@ let pp_in names fmt t =
     (* inductive heads are atoms; their arguments print via the enclosing App
        nodes (so [Nat.rec P z s n] renders through application) *)
     | Ind name -> Format.pp_print_string fmt name
-    (* constructors and the recursor print qualified by their type, matching how
-       they are written *)
+    (* the designated unit element prints as its [()] sugar (mirroring the
+       surface); other constructors and the recursor print qualified by their
+       type, matching how they are written *)
+    | Ctor { ind = "Unit"; cname = "unit"; _ } ->
+        Format.pp_print_string fmt "()"
     | Ctor h -> Format.fprintf fmt "%s.%s" h.ind h.cname
     | Rec h -> Format.fprintf fmt "%s.rec" h.rind
   in

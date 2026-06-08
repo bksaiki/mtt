@@ -13,10 +13,10 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 - [ ] Full strict positivity: accept strictly-positive function-typed recursive
       arguments (`(Nat -> T) -> T`); currently only direct recursive fields
       `T params` are allowed
-- [ ] Definitional η for single-constructor inductives ("records"): an η case in
-      `conv` (eta-expand to `mk (proj₁ x) ...`) plus named projections — the
-      self-contained step that lets `Unit` and `Σ` be replaced without losing
-      their definitional η
+- [x] Definitional η for single-constructor inductives ("records"): an η case in
+      `conv` comparing field projections, plus the positional `Proj` node — lets
+      `Unit`/`Σ` be replaced without losing their η (see `design.md`). The
+      surface `.i` projection syntax lands with the `Σ` removal.
 - [ ] Universe polymorphism (level-polymorphic defs; see questions.md); also
       needed for inductive `Sum`/`Σ`/`Eq` to form at the max of their
       components' levels rather than one fixed level
@@ -25,7 +25,8 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
       `Type.t`/`Value.t` constructors, eval/quote/conv/infer cases, and lexer
       keywords — collapsing the kernel to Sort/Pi/Lam/App/Var/Ind/Ctor/Rec
       (`Π`/`Sort` stay primitive), with the current builtin tests as the
-      regression spec. `builtin-removal-plan.md` has the order and prerequisites.
+      regression spec. Order and prerequisites below; `Sum`/`Σ`/`Eq`
+      introductions are gated on the elaborator.
       - [x] `Empty` (pilot): `inductive Empty : Prop`, `absurd` a prelude def
             over `Empty.rec`; generic recursor conversion now respects
             Prop-scrutinee irrelevance
@@ -35,15 +36,19 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
                   forms the contradiction itself; switching would leave raw ex
                   falso as just `Empty.rec`. Wants implicit args + universe
                   polymorphism for full parity (`b : Sort v`)
+      - [x] `Unit`: a prelude record `inductive Unit : Type := unit`, `()`
+            sugar for `Unit.unit`, η from the record rule
       - [ ] `Sum` (surfaces the implicit-argument question for `inl`/`inr`)
       - [ ] `Nat` (needs numeral/printer "blessed inductive" support)
-      - [ ] `Unit`, `Σ` (need record-η, above)
+      - [ ] `Σ` (needs the surface `.i` projections + the `(a,b)`/`×`/`Σ`
+            notation retargeted to the record)
       - [ ] `Eq` (needs indexed families, above)
 
 ## Elaborator (type-directed surface → core)
 
 Inference that sits above the kernel, turning concise surface terms into fully
-explicit core terms.
+explicit core terms. Its mirror — the delaborator (core → surface) — lives with
+the notation registry under Surface syntax; the two share that registry.
 
 - [ ] Implicit arguments: infer the type arguments the kernel demands
       explicitly — gives `x = y` infix over `Eq A x y`, motive inference for
@@ -63,11 +68,32 @@ explicit core terms.
 
 - [ ] `open`-style form to use a type's constructors unqualified (`nil` instead
       of `List.nil`); also lets the printer drop the qualifier when unambiguous
-- [ ] "Blessed" inductives in the surface: numeral literals desugaring to a
-      designated `Nat`, the printer folding its successor chains to decimals,
-      and `+`/`×`/`=` notation expanding to the chosen inductives (the parser
-      and printer must know which inductive is "the" Nat/Sum/Σ/Eq; the `=` case
-      also needs the elaborator's implicit-argument inference)
+- [ ] Notation registry + delaborator ("blessed" inductives, done right).
+      The `()`/numeral/`×`/`Σ`/`=`/`+` sugar is *notation* in both directions,
+      and none of it is the kernel's checking/eval concern — only parse and
+      print. Replace today's hardcoded strings (the `()` printer case, the
+      `Unit`/`Sigma` lookups in `to_term`) with one registry:
+      - a **role registry** mapping notation roles (`unit`/`nat`/`sum`/`sigma`/
+        `eq`) to the inductive that fills them, populated declaratively by an
+        attribute on the declaration, e.g. `@[notation unit] inductive Unit …`;
+        registration is **one-shot** (no overwrite) and **shape-checked** (the
+        `unit` role demands a single nullary constructor, `nat` demands
+        `zero`/`succ`, …), so a malformed or duplicate binding is rejected
+      - **forward** (parser/`to_term`): `()`→`Unit.unit`, `2`→`succ (succ zero)`,
+        `A × B`/`Σ`/`=`/`+` → the registered inductive applied
+      - **reverse** (a **delaborator** — the elaborator's mirror, core → surface):
+        the registered unit ctor → `()`, succ-chains of the registered `Nat` →
+        decimals, the relevant inductives → infix `×`/`+`/`=`
+      - the kernel printer stays **faithful/plain** (`Unit.unit`,
+        `Nat.succ (… Nat.zero)`, qualified ctors); the delaborator applies sugar
+        in the frontend. This forces a decision on error messages: either accept
+        plain kernel errors, or make `Type_error` carry the offending **terms**
+        (not pre-rendered strings) so the driver can delaborate them — the latter
+        is what lets the kernel stay entirely notation-ignorant. Pairs naturally
+        with the elaborator (forward) since they share the registry.
+- [x] Print `Unit.unit` as `()` — interim: the kernel printer hardcodes the
+      designated `Unit.unit` ctor head. Subsumed by the notation registry +
+      delaborator above (which should retire this special case).
 - [ ] Block comments: `/- ... -/` (nesting)
 - [ ] Unicode identifiers (needs sedlex; ocamllex handles only fixed
       keyword literals)

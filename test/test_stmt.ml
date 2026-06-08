@@ -1,5 +1,9 @@
 open Mtt
 
+(* the standard prelude, loaded once: sessions start from it, as the REPL and
+   file runner do, so the standard types (Unit, Empty, ...) are in scope *)
+let prelude = Prelude.load Check.empty
+
 (* feed lines through a toplevel session, printing each response *)
 let session lines =
   let step ctx line =
@@ -14,7 +18,7 @@ let session lines =
         Printf.printf "type error: %s\n" msg;
         ctx
   in
-  ignore (List.fold_left step Check.empty lines)
+  ignore (List.fold_left step prelude lines)
 
 let%expect_test "axioms postulate stuck constants" =
   session
@@ -191,13 +195,9 @@ let%expect_test "eta for Unit: every element is definitionally ()" =
     {| type error: #check_equal failed: Unit is not convertible with Prop |}]
 
 let%expect_test "Empty: irrelevance and stuck absurd" =
-  (* Empty and absurd are the prelude inductive/def; this session is bare, so it
-     declares them itself (as the prelude does) *)
+  (* Empty and absurd come from the prelude *)
   session
-    [ "inductive Empty : Prop"
-    ; "def absurd (A : Type) (h : Empty) : A := Empty.rec (fun (_ : Empty) => \
-       A) h"
-    ; "axiom N : Type"
+    [ "axiom N : Type"
     ; "axiom h1 : Empty"
     ; "axiom h2 : Empty"
     ; (* all proofs of Empty are equal (it is a Prop) *)

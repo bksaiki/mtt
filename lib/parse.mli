@@ -4,8 +4,12 @@
 
 exception Error of Loc.t * string
 
-(** [term_of_string s] parses and scope-checks the closed term [s]. Raises
-    {!Error} or {!Ast.Unbound_variable}. *)
+(** [term_of_string_in sg s] parses and scope-checks the closed term [s],
+    resolving inductive names against the signature [sg]. Raises {!Error} or
+    {!Ast.Unbound_variable}. *)
+val term_of_string_in : Signature.t -> string -> Type.t
+
+(** [term_of_string s] is {!term_of_string_in} with the empty signature. *)
 val term_of_string : string -> Type.t
 
 (** [stmt_of_string s] parses [s] as a top-level statement (one REPL line).

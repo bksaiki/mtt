@@ -11,6 +11,7 @@ type ctor_head =
   ; cname : string  (** the constructor's (globally unique) name *)
   ; cindex : int  (** its position in the inductive's constructor list *)
   ; carity : int  (** total arguments: leading parameters + fields *)
+  ; nparams : int  (** leading parameters, so a projection can skip them *)
   }
 
 (** The skeleton of a recursor, enough to drive ι. [recs] has one entry per
@@ -24,8 +25,6 @@ type rec_head =
   }
 
 type t =
-  | Unit  (** the unit type, with definitional η: every element is [MkUnit] *)
-  | MkUnit  (** the element of [Unit] *)
   | Var of int  (** de Bruijn index *)
   | Sort of int  (** the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of string * t * t  (** Π (x : A). B, where B binds index 0 *)
@@ -37,6 +36,9 @@ type t =
   | Pair of t * t  (** (a, b) *)
   | Fst of t  (** p.1 *)
   | Snd of t  (** p.2 *)
+  | Proj of int * t
+      (** [x.(i+1)]: the [i]-th (0-based) field projection of a record (a
+          single-constructor inductive); generalizes [Fst]/[Snd] *)
   | Sum of t * t  (** A + B *)
   | Inl of t  (** left injection *)
   | Inr of t  (** right injection *)

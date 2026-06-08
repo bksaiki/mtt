@@ -16,8 +16,7 @@ and desc =
   | Lam of string * t * t  (** fun (x : A) => b *)
   | App of t * t
   | Ascribe of t * t  (** (t : A) *)
-  | Unit
-  | MkUnit
+  | MkUnit  (** [()], sugar for the prelude's [Unit.unit] *)
   | Sigma of string * t * t  (** Σ (x : A) ⇒ B *)
   | Prod of t * t  (** A × B *)
   | Pair of t * t  (** (a, b) *)

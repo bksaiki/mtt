@@ -68,11 +68,13 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **δ** — `def`s unfold eagerly: a defined name is bound in the env to its
   value, so evaluation replaces it (no `Const` constructor, no kernel
   lookup). Upgrade path if unfolded output hurts: glued evaluation.
-- **η for `Unit`** — at type `Unit`, any two values are equal (every
-  element is `()`); the same one-line pattern as proof irrelevance.
 - **η for pairs** (surjective pairing) — at a Σ type, values are compared
   by their projections, the second at the family instantiated by the
   first; `p ≡ (p.1, p.2)` holds for neutral `p`.
+- **η for records** — the same, generalized to any single-constructor,
+  non-recursive inductive: two values are equal iff their field projections
+  are. The 0-field case makes any two values equal — this is now how `Unit`
+  (a prelude record, `()` = `Unit.unit`) gets its η.
 - **ι** — `case` on an injection picks the branch (`vcase`), `J` on `refl`
   picks the diagonal (`vj`), and `natrec` recurses on `succ` (`vnatrec`,
   feeding the step its result on the predecessor — the induction
@@ -136,13 +138,24 @@ signature `Σ` (`signature.ml`) keyed by name, beside the de Bruijn context.
   type as a constant; `infer` types a saturated application as a bespoke rule.
 - **Surface.** Parameters are explicit; constructors and the recursor are
   qualified by their type (`Bool.true`, `Nat'.rec`), so constructor names need
-  only be unique within a type. (`Nat`/`succ`/`Eq`/`Unit` are still reserved for
-  the remaining builtins.)
-- **Replacing the builtins.** `Empty` is the first hardcoded type retired this
-  way: it is now `inductive Empty : Prop` in `std/prelude.mtt`, with `absurd`
-  a prelude `def` over `Empty.rec`. The remaining inductively-describable
-  builtins (`Sum`/`Nat`/`Unit`/`Σ`/`Eq`) follow; `builtin-removal-plan.md`
-  tracks the sequence and prerequisites.
+  only be unique within a type. (`Nat`/`succ`/`Eq` are still reserved for the
+  remaining builtins.)
+- **Records.** A single-constructor, non-recursive inductive is a record: it
+  has positional field projections (`x.i`, generalizing `Fst`/`Snd`) and
+  definitional η (see "η for records" above). Projections are a *primitive*
+  node (`Proj`), not derived from the recursor — that is what buys definitional
+  η and a clean ι (this is how Lean/Coq do records too); `ctor_head` carries
+  `nparams` so `vproj` skips parameters, keeping the NbE core signature-free.
+  The stuck projection's field type is recovered by the checker from the
+  scrutinee's type, so the node needs only the index. The surface is positional
+  (`x.1`); named projection (`x.field`) awaits the elaborator. This is what lets
+  `Unit`/`Σ` become ordinary inductives.
+- **Replacing the builtins.** Retired so far: `Empty` (`inductive Empty : Prop`,
+  with `absurd` a prelude `def` over `Empty.rec`) and `Unit` (a prelude record,
+  `()` sugar for `Unit.unit`, η from the record rule). The remaining
+  inductively-describable builtins (`Sum`/`Nat`/`Σ`/`Eq`) follow; `todo.md`
+  tracks the sequence and prerequisites (`Sum`/`Σ`/`Eq` introductions are gated
+  on the elaborator).
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
   only as a *direct* recursive field `T params`, never under an arrow or nested
   (more conservative than full strict positivity, a later extension);
@@ -151,8 +164,8 @@ signature `Σ` (`signature.ml`) keyed by name, beside the de Bruijn context.
   inductive eliminates into a larger sort only when it is a subsingleton (≤ 1
   constructor, all fields proofs), generalizing the rule on `case`.
 
-See `examples/inductive.mtt`; the design notes and deferred work (indices,
-mutual/nested, `open`, replacing the builtins) live in `inductive-plan.md`.
+See `examples/inductive.mtt`; deferred work (indices, mutual/nested, `open`,
+replacing the builtins) is tracked in `todo.md`.
 
 ## Errors and locations
 
@@ -196,6 +209,13 @@ only loads when it is not `prelude`, so an opted-out file never pays for it;
 a `prelude` anywhere but first is an error. (`Stmt` sits below
 `Parse`/`Prelude`, so it cannot load — hence the driver owns this, and
 `Stmt.run` treats the `Prelude` marker as a no-op.)
+
+Builtins retired into inductives (`Empty`, `Unit`, …) live here, in the
+auto-loaded prelude — so they are *not* in scope for a file that opts out. That
+is fine while no opted-out file needs them (today none do; `church_*`/`logic`
+use their own encodings). When one eventually does — or once notation needs a
+designated `Nat` etc. — the escalation is a small always-loaded set of primitive
+inductives that `prelude` does not opt out of (a two-tier prelude).
 
 ## Conventions
 

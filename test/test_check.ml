@@ -1,9 +1,14 @@
 open Mtt
 
-(* parse, infer, print the type (or the type error) *)
+(* parse and check against the prelude, so the standard types (Unit, Empty, ...)
+   are in scope; print the inferred type (or the type error) *)
+let prelude = Prelude.load Check.empty
+
 let infer s =
-  match Check.infer Check.empty (Parse.term_of_string s) with
-  | ty -> print_endline (Type.to_string (Value.quote 0 ty))
+  match
+    Check.infer prelude (Parse.term_of_string_in prelude.Check.signature s)
+  with
+  | ty -> print_endline (Check.show prelude ty)
   | exception Check.Type_error msg -> Printf.printf "type error: %s\n" msg
 
 let%expect_test "universe rules" =

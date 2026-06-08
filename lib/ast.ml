@@ -12,8 +12,7 @@ and desc =
   | Lam of string * t * t (* fun (x : A) => b *)
   | App of t * t
   | Ascribe of t * t (* (t : A) *)
-  | Unit
-  | MkUnit
+  | MkUnit (* (), sugar for the prelude's Unit.unit *)
   | Sigma of string * t * t (* Σ (x : A) ⇒ B *)
   | Prod of t * t (* A × B *)
   | Pair of t * t (* (a, b) *)
@@ -107,8 +106,12 @@ let to_term sg names s =
     | Arrow (a, b) -> Type.Pi ("", go env a, go ("" :: env) b)
     | Lam (x, a, b) -> Type.Lam (x, go env a, go (x :: env) b)
     | App (f, a) -> Type.App (go env f, go env a)
-    | Unit -> Type.Unit
-    | MkUnit -> Type.MkUnit
+    (* () is sugar for the unit constructor; the unit type itself is the
+       ordinary prelude inductive [Unit] (resolved as a [Var] above) *)
+    | MkUnit -> (
+        match Signature.find sg "Unit" with
+        | Some spec -> Type.Ctor (Inductive.ctor_head spec 0)
+        | None -> raise (Unbound_variable (s.loc, "() (Unit is not in scope)")))
     | Sigma (x, a, b) -> Type.Sigma (x, go env a, go (x :: env) b)
     (* non-dependent product: same dummy-binder trick as Arrow *)
     | Prod (a, b) -> Type.Sigma ("", go env a, go ("" :: env) b)

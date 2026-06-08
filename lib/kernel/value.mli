@@ -8,8 +8,6 @@ type t =
   | Sort of int
   | Pi of string * t * closure
   | Lam of string * t * closure
-  | Unit
-  | MkUnit
   | Sigma of string * t * closure
   | Pair of t * t
   | Sum of t * t
@@ -37,6 +35,7 @@ and neutral =
   | App of neutral * t
   | Fst of neutral  (** a stuck first projection *)
   | Snd of neutral  (** a stuck second projection *)
+  | Proj of int * neutral  (** a stuck record field projection *)
   | Case of t * neutral * t * t
       (** a stuck case: motive, stuck scrutinee, both branches *)
   | J of t * t * neutral
@@ -82,6 +81,10 @@ val vfst : t -> t
 
 (** [vsnd v] is the second-component counterpart of {!vfst} *)
 val vsnd : t -> t
+
+(** [vproj i v] projects the [i]-th field of a record value: the matching
+    constructor argument (past the parameters), or a stuck {!neutral.Proj} *)
+val vproj : int -> t -> t
 
 (** [vcase p s u v] eliminates the sum value [s]: ι-reduction on an injection, a
     stuck {!neutral.Case} frame otherwise *)

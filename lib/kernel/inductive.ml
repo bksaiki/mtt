@@ -1,7 +1,7 @@
 (* A parameterized inductive type declaration. Parameters are shared across the
    whole definition and appear as explicit leading arguments to the former,
-   every constructor, and the recursor. There are no indices yet (see
-   docs/inductive-plan.md). *)
+   every constructor, and the recursor. There are no indices yet (see the
+   Inductive types section of docs/design.md). *)
 
 type arg =
   { aname : string (* the field's binder name (display only) *)
@@ -33,7 +33,15 @@ let ctor_head spec i =
   ; cname = c.cname
   ; cindex = i
   ; carity = nparams spec + List.length c.fields
+  ; nparams = nparams spec
   }
+
+(* a record is a single-constructor inductive with no recursive fields; it gets
+   field projections and definitional η *)
+let is_record spec =
+  match spec.ctors with
+  | [ c ] -> List.for_all (fun a -> not a.recursive) c.fields
+  | _ -> false
 
 (* the skeleton (see {!Type.rec_head}) of the recursor *)
 let rec_head spec =
@@ -84,14 +92,13 @@ let rec occurs name (t : Type.t) =
   | Rec h -> String.equal h.rind name
   | Var _
   | Sort _
-  | Unit
-  | MkUnit
   | Nat
   | Zero
   | Refl ->
       false
   | Fst a
   | Snd a
+  | Proj (_, a)
   | Inl a
   | Inr a
   | Succ a ->

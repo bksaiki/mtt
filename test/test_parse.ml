@@ -1,7 +1,11 @@
 open Mtt
 
-(* parse, convert to de Bruijn, then pretty-print back *)
-let roundtrip s = print_endline (Type.to_string (Parse.term_of_string s))
+(* parse, convert to de Bruijn, then pretty-print back. Resolves names against
+   the prelude so the standard types (Unit, ...) and [()] are in scope. *)
+let prelude_sig = (Prelude.load Check.empty).Check.signature
+
+let roundtrip s =
+  print_endline (Type.to_string (Parse.term_of_string_in prelude_sig s))
 
 let%expect_test "universes" =
   roundtrip "Type";
