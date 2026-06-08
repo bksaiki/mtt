@@ -52,14 +52,6 @@ type t =
       (** [J (P, d, p)]: the eliminator (based path induction) — eliminates
           [p : Eq A x y] at motive [P : Π (y : A) ⇒ Eq A x y → Sort j], given
           the diagonal case [d : P x refl]; yields [P y p] *)
-  | Nat  (** the natural numbers *)
-  | Zero
-  | Succ of t
-  | NatRec of t * t * t * t
-      (** [NatRec (P, pz, ps, n)]: the recursor — eliminates [n : Nat] at motive
-          [P : Nat → Sort j], given [pz : P zero] and the step
-          [ps : Π (k : Nat) ⇒ P k → P (succ k)] (whose [P k] argument is the
-          induction hypothesis); yields [P n] *)
   | Ind of string
       (** an inductive type former, applied to its parameters via [App] *)
   | Ctor of ctor_head
@@ -75,7 +67,12 @@ val occurs : int -> t -> bool
     instead of their plain qualified form. The kernel stays notation-ignorant —
     it never names [Unit]/[Nat]; the frontend builds this from the
     [@[notation ...]] registry. *)
-type notation = { unit_ctor : ctor_head option  (** rendered as [()] *) }
+type notation =
+  { unit_ctor : ctor_head option  (** rendered as [()] *)
+  ; nat : (ctor_head * ctor_head) option
+        (** [(zero, succ)]: closed succ-chains ending in zero fold to decimal
+            literals *)
+  }
 
 (** notation that sugars nothing: the plain, faithful printing *)
 val no_notation : notation

@@ -240,24 +240,25 @@ let%expect_test "Prop large-elimination restriction" =
   let into_type =
     Type.App
       ( Type.App
-          ( Type.App (Type.App (pbool_rec, Type.Lam ("_", pbool, Type.Nat)), pt)
+          ( Type.App
+              (Type.App (pbool_rec, Type.Lam ("_", pbool, Type.Sort 1)), pt)
           , pt )
       , pt )
   in
   (try ignore (Check.infer pbool_ctx into_type) with
   | Check.Type_error msg -> print_endline msg);
   [%expect
-    {| cannot eliminate the proposition PBool into Type: only a subsingleton (at most one constructor, all fields proofs) may eliminate large |}];
-  (* but a subsingleton Prop may: PUnit.rec (fun _ => Nat) 0 pstar : Nat *)
+    {| cannot eliminate the proposition PBool into Type 1: only a subsingleton (at most one constructor, all fields proofs) may eliminate large |}];
+  (* but a subsingleton Prop may: PUnit.rec (fun _ => Type) Prop pstar : Type *)
   let big =
     Type.App
       ( Type.App
-          ( Type.App (punit_rec, Type.Lam ("_", Type.Ind "PUnit", Type.Nat))
-          , Type.Zero )
+          ( Type.App (punit_rec, Type.Lam ("_", Type.Ind "PUnit", Type.Sort 1))
+          , Type.Sort 0 )
       , pstar )
   in
   infers punit_ctx big;
-  [%expect {| Nat |}]
+  [%expect {| Type |}]
 
 let conv_str ctx ty v1 v2 =
   if Check.conv ctx ty v1 v2 then
@@ -345,38 +346,41 @@ let dpair_spec =
 
 let dmk = Type.Ctor (Inductive.ctor_head dpair_spec 0)
 
-let nat_fam = Type.Lam ("_", Type.Nat, Type.Nat) (* fun _ : Nat => Nat *)
+(* the components are types: fun _ : Type => Type, with Prop and Type as two
+   distinct elements (an arbitrary type-with-elements; the builtin Nat once
+   played this role) *)
+let ty_fam = Type.Lam ("_", Type.Sort 1, Type.Sort 1)
 
-(* mk Nat (fun _ => Nat) a b : DPair Nat (fun _ => Nat) *)
-let dmk_nat a b =
-  Type.App (Type.App (Type.App (Type.App (dmk, Type.Nat), nat_fam), a), b)
+(* mk Type (fun _ => Type) a b : DPair Type (fun _ => Type) *)
+let dmk_ty a b =
+  Type.App (Type.App (Type.App (Type.App (dmk, Type.Sort 1), ty_fam), a), b)
 
 let%expect_test "record projection computes (ι)" =
-  norm (Type.Proj (0, dmk_nat Type.Zero (Type.Succ Type.Zero)));
-  [%expect {| 0 |}];
-  norm (Type.Proj (1, dmk_nat Type.Zero (Type.Succ Type.Zero)));
-  [%expect {| 1 |}]
+  norm (Type.Proj (0, dmk_ty (Type.Sort 0) (Type.Sort 1)));
+  [%expect {| Prop |}];
+  norm (Type.Proj (1, dmk_ty (Type.Sort 0) (Type.Sort 1)));
+  [%expect {| Type |}]
 
 let%expect_test "record η: a value equals the tuple of its projections" =
   let ctx = Check.add_ind dpair_spec Check.empty in
   let dty =
-    Value.eval [] (Type.App (Type.App (Type.Ind "DPair", Type.Nat), nat_fam))
+    Value.eval [] (Type.App (Type.App (Type.Ind "DPair", Type.Sort 1), ty_fam))
   in
   let ctx = Check.bind "x" dty ctx in
   let xv = Value.eval ctx.Check.env (Type.Var 0) in
-  (* mk Nat (fun _ => Nat) x.1 x.2 *)
+  (* mk Type (fun _ => Type) x.1 x.2 *)
   let expanded =
     Value.eval ctx.Check.env
       (Type.App
          ( Type.App
-             ( Type.App (Type.App (dmk, Type.Nat), nat_fam)
+             ( Type.App (Type.App (dmk, Type.Sort 1), ty_fam)
              , Type.Proj (0, Type.Var 0) )
          , Type.Proj (1, Type.Var 0) ))
   in
   print_endline (conv_str ctx dty xv expanded);
   [%expect {| equal |}];
   (* but a neutral is not equal to an arbitrary pair *)
-  let other = Value.eval ctx.Check.env (dmk_nat Type.Zero Type.Zero) in
+  let other = Value.eval ctx.Check.env (dmk_ty (Type.Sort 0) (Type.Sort 0)) in
   print_endline (conv_str ctx dty xv other);
   [%expect {| not equal |}]
 

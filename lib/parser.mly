@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP TIMES PLUS INL INR CASE EQ REFL J NAT SUCC NATREC COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE EOF
+%token FUN PI SIGMA TYPE PROP TIMES PLUS INL INR CASE EQ REFL J COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -135,10 +135,6 @@ app_term:
   (* equality former (explicit type) and its eliminator J *)
   | EQ; a = atom; x = atom; y = atom { Ast.mk $loc (Ast.Eq (a, x, y)) }
   | J; p = atom; d = atom; pr = atom { Ast.mk $loc (Ast.J (p, d, pr)) }
-  (* Nat successor and recursor *)
-  | SUCC; n = atom { Ast.mk $loc (Ast.Succ n) }
-  | NATREC; p = atom; z = atom; s = atom; n = atom
-    { Ast.mk $loc (Ast.NatRec (p, z, s, n)) }
   | t = atom { t }
 
 atom:
@@ -148,9 +144,8 @@ atom:
   | TYPE { Ast.mk $loc (Ast.Sort 1) }
   | PROP { Ast.mk $loc (Ast.Sort 0) }
   | REFL { Ast.mk $loc Ast.Refl }
-  | NAT { Ast.mk $loc Ast.Nat }
-  (* a decimal literal is a Nat numeral: succ (succ ... 0) *)
-  | n = INT { Ast.numeral $loc n }
+  (* a decimal literal; expands to the registered nat's succ/zero in to_term *)
+  | n = INT { Ast.mk $loc (Ast.Numeral n) }
   (* () is the unit element, like OCaml; whitespace between the parens is
      fine since this is a grammar rule, not a lexeme *)
   | LPAREN; RPAREN { Ast.mk $loc Ast.MkUnit }

@@ -1,7 +1,7 @@
 Inductive type declarations: a former, its constructors, and a recursor.
 Constructors are qualified by their type (`Bool.true`, `List.cons`), as is the
-recursor (`T.rec`). (`Nat`/`succ`/`Eq` are keywords, so user inductives use
-other names.)
+recursor (`T.rec`). (The prelude already defines `Nat`, so the example below
+uses `MyNat` to avoid the clash; `Eq` is still a keyword.)
 
   $ cat > data.mtt <<'EOF'
   > inductive Bool : Type :=

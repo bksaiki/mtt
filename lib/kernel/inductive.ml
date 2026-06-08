@@ -92,16 +92,13 @@ let rec occurs name (t : Type.t) =
   | Rec h -> String.equal h.rind name
   | Var _
   | Sort _
-  | Nat
-  | Zero
   | Refl ->
       false
   | Fst a
   | Snd a
   | Proj (_, a)
   | Inl a
-  | Inr a
-  | Succ a ->
+  | Inr a ->
       occurs name a
   | Pi (_, a, b)
   | Lam (_, a, b)
@@ -113,6 +110,5 @@ let rec occurs name (t : Type.t) =
   | Eq (a, b, c)
   | J (a, b, c) ->
       occurs name a || occurs name b || occurs name c
-  | Case (a, b, c, d)
-  | NatRec (a, b, c, d) ->
+  | Case (a, b, c, d) ->
       occurs name a || occurs name b || occurs name c || occurs name d

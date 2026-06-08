@@ -55,38 +55,48 @@ def subst (A : Type) (P : A → Type) (x y : A) (p : Eq A x y) (h : P x) : P y :
 
 -- === Naturals === (arithmetic by recursion on the first argument)
 
+-- the naturals: an ordinary inductive. `@[notation nat]` registers it as the
+-- type whose constructors decimal literals abbreviate (`0`, `2`, …) and which
+-- the printer folds succ-chains back into; `Nat.succ`/`Nat.zero`/`Nat.rec` are
+-- the qualified constructor and recursor names.
+@[notation nat]
+inductive Nat : Type :=
+| zero : Nat
+| succ : Nat → Nat
+
 def add (m n : Nat) : Nat :=
-  natrec (λ x : Nat ⇒ Nat) n (λ k : Nat ⇒ λ ih : Nat ⇒ succ ih) m
+  Nat.rec (λ x : Nat ⇒ Nat) n (λ k : Nat ⇒ λ ih : Nat ⇒ Nat.succ ih) m
 
 def mul (m n : Nat) : Nat :=
-  natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ add n ih) m
+  Nat.rec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ add n ih) m
 
 def pred (n : Nat) : Nat :=
-  natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ k) n
+  Nat.rec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ k) n
 
 -- foundational lemmas. add recurses on its first argument, so add 0 n reduces
 -- to n (zero_add is refl) but add n 0 is stuck on n and needs induction.
 theorem zero_add (n : Nat) : Eq Nat (add 0 n) n := refl
 
 theorem add_zero (n : Nat) : Eq Nat (add n 0) n :=
-  natrec (λ m : Nat ⇒ Eq Nat (add m 0) m)
+  Nat.rec (λ m : Nat ⇒ Eq Nat (add m 0) m)
     refl
     (λ k : Nat ⇒ λ ih : Eq Nat (add k 0) k ⇒
-      cong Nat Nat (λ m : Nat ⇒ succ m) (add k 0) k ih)
+      cong Nat Nat (λ m : Nat ⇒ Nat.succ m) (add k 0) k ih)
     n
 
-theorem add_succ (n m : Nat) : Eq Nat (add n (succ m)) (succ (add n m)) :=
-  natrec (λ x : Nat ⇒ Eq Nat (add x (succ m)) (succ (add x m)))
+theorem add_succ (n m : Nat) : Eq Nat (add n (Nat.succ m)) (Nat.succ (add n m)) :=
+  Nat.rec (λ x : Nat ⇒ Eq Nat (add x (Nat.succ m)) (Nat.succ (add x m)))
     refl
-    (λ k : Nat ⇒ λ ih : Eq Nat (add k (succ m)) (succ (add k m)) ⇒
-      cong Nat Nat (λ z : Nat ⇒ succ z) (add k (succ m)) (succ (add k m)) ih)
+    (λ k : Nat ⇒ λ ih : Eq Nat (add k (Nat.succ m)) (Nat.succ (add k m)) ⇒
+      cong Nat Nat (λ z : Nat ⇒ Nat.succ z) (add k (Nat.succ m))
+        (Nat.succ (add k m)) ih)
     n
 
 theorem add_comm (m n : Nat) : Eq Nat (add m n) (add n m) :=
-  natrec (λ x : Nat ⇒ Eq Nat (add x n) (add n x))
+  Nat.rec (λ x : Nat ⇒ Eq Nat (add x n) (add n x))
     (sym Nat (add n 0) n (add_zero n))
     (λ k : Nat ⇒ λ ih : Eq Nat (add k n) (add n k) ⇒
-      trans Nat (add (succ k) n) (succ (add n k)) (add n (succ k))
-        (cong Nat Nat (λ z : Nat ⇒ succ z) (add k n) (add n k) ih)
-        (sym Nat (add n (succ k)) (succ (add n k)) (add_succ n k)))
+      trans Nat (add (Nat.succ k) n) (Nat.succ (add n k)) (add n (Nat.succ k))
+        (cong Nat Nat (λ z : Nat ⇒ Nat.succ z) (add k n) (add n k) ih)
+        (sym Nat (add n (Nat.succ k)) (Nat.succ (add n k)) (add_succ n k)))
     m

@@ -35,9 +35,6 @@ rule token = parse
   | "Eq" { EQ }
   | "refl" { REFL }
   | "J" { J }
-  | "Nat" { NAT }
-  | "succ" { SUCC }
-  | "natrec" { NATREC }
   | "prelude" { PRELUDE }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }

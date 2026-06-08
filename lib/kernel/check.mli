@@ -97,18 +97,6 @@
         subsingleton (like Empty), so eliminating into any sort is sound —
         this is what lets subst transport between types
 
-      ─────────────── (Nat)   ─────────────── (Zero)   Γ ⊢ n : Nat
-      Γ ⊢ Nat : Type          Γ ⊢ zero : Nat           ──────────────── (Succ)
-                                                        Γ ⊢ succ n : Nat
-
-      Γ ⊢ n : Nat    Γ ⊢ P : Nat → Sort j
-      Γ ⊢ pz ⇐ P zero    Γ ⊢ ps ⇐ Π (k : Nat) ⇒ P k → P (succ k)
-      ─────────────────────────────────────────────────────────── (NatRec)
-                      Γ ⊢ natrec P pz ps n : P n
-
-        the step's [P k] argument is the induction hypothesis; no
-        large-elimination restriction (Nat is in Type, not Prop)
-
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Pi)
           Γ ⊢ (x : A) -> B : Sort (imax i j)
@@ -190,10 +178,11 @@ val check : ctx -> Type.t -> Value.t -> unit
 val add_ind : Inductive.spec -> ctx -> ctx
 
 (** [register_notation role spec ctx] records that the inductive [spec] fills
-    the notation [role] (currently only ["unit"], for [()]), updating the
-    context's display config. Shape-checks that [spec] can play the role and
-    rejects re-registering an already-bound role. Raises {!Type_error}
-    otherwise. *)
+    the notation [role] (["unit"] for [()], ["nat"] for decimal literals),
+    updating the context's display config. Shape-checks that [spec] can play the
+    role (e.g. ["nat"] demands a nullary then a single-recursive-field
+    constructor) and rejects re-registering an already-bound role. Raises
+    {!Type_error} otherwise. *)
 val register_notation : string -> Inductive.spec -> ctx -> ctx
 
 (** [check_inductive ctx spec] validates an inductive declaration: kind-checks

@@ -29,16 +29,12 @@ and desc =
   | Eq of t * t * t  (** Eq A x y *)
   | Refl  (** refl *)
   | J of t * t * t  (** J P d p *)
-  | Nat  (** Nat *)
-  | Zero  (** 0 *)
-  | Succ of t  (** succ n *)
-  | NatRec of t * t * t * t  (** natrec P pz ps n *)
+  | Numeral of int
+      (** a decimal literal, e.g. [0], [5]; expands to succ-applications of the
+          [nat] notation's zero/succ *)
 
 (** [mk loc desc] is the node [desc] located at [loc] *)
 val mk : Loc.t -> desc -> t
-
-(** [numeral loc n] is the decimal literal [n] as [succ (... zero)] *)
-val numeral : Loc.t -> int -> t
 
 (** [lams loc groups body] wraps [body] in a lambda for every name of every
     binder group, e.g. [λ (x y : A) (z : B) ⇒ body]; the synthetic binder nodes

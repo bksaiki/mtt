@@ -38,8 +38,13 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
                   polymorphism for full parity (`b : Sort v`)
       - [x] `Unit`: a prelude record `inductive Unit : Type := unit`, `()`
             sugar for `Unit.unit`, η from the record rule
+      - [x] `Nat`: a prelude inductive `zero`/`succ` with `@[notation nat]`;
+            decimal literals expand to succ-chains and the printer folds them
+            back (the notation registry), `Nat.rec` replaces `natrec`. Deleted
+            the `Nat`/`Zero`/`Succ`/`NatRec` core nodes, `vnatrec`, `step_ty`,
+            and their eval/quote/conv/infer cases — the generic recursor
+            subsumes them
       - [ ] `Sum` (surfaces the implicit-argument question for `inl`/`inr`)
-      - [ ] `Nat` (needs numeral/printer "blessed inductive" support)
       - [ ] `Σ` (needs the surface `.i` projections + the `(a,b)`/`×`/`Σ`
             notation retargeted to the record)
       - [ ] `Eq` (needs indexed families, above)
@@ -79,17 +84,18 @@ the notation registry under Surface syntax; the two share that registry.
         Unit …`; registration is **one-shot** (no overwrite) and
         **shape-checked** (the `unit` role demands a single nullary constructor,
         `nat` demands `zero`/`succ`, …), so a malformed or duplicate binding is
-        rejected. *Done for the `unit` role* (`@[notation unit]`, the `@[ ]`
-        attribute surface, one-shot + shape check); `nat`/`sum`/`sigma`/`eq`
-        roles land with their respective builtin removals.
+        rejected. *Done for the `unit` and `nat` roles* (`@[notation unit]`/
+        `@[notation nat]`, the `@[ ]` attribute surface, one-shot + shape
+        check); `sum`/`sigma`/`eq` roles land with their respective builtin
+        removals.
       - **forward** (parser/`to_term`): `()`→`Unit.unit` *(done)*,
-        `2`→`succ (succ zero)`, `A × B`/`Σ`/`=`/`+` → the registered inductive
-        applied
+        `2`→`succ (succ zero)` *(done)*, `A × B`/`Σ`/`=`/`+` → the registered
+        inductive applied
       - **reverse** (a **delaborator** — the elaborator's mirror, core → surface;
         for now realized as the kernel printer parameterized by a generic
         notation config, not a separate rewriter): the registered unit ctor →
-        `()` *(done)*, succ-chains of the registered `Nat` → decimals, the
-        relevant inductives → infix `×`/`+`/`=`
+        `()` *(done)*, succ-chains of the registered `Nat` → decimals *(done)*,
+        the relevant inductives → infix `×`/`+`/`=`
       - the kernel printer stays **faithful/plain** (`Unit.unit`,
         `Nat.succ (… Nat.zero)`, qualified ctors); the delaborator applies sugar
         in the frontend. This forces a decision on error messages: either accept

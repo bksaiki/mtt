@@ -37,10 +37,6 @@ type t =
   | Eq of t * t * t (* Eq A x y: propositional equality of x, y : A *)
   | Refl (* the reflexivity proof; check-only *)
   | J of t * t * t (* J P d p: eliminates p : Eq A x y at motive P *)
-  | Nat (* the natural numbers *)
-  | Zero
-  | Succ of t
-  | NatRec of t * t * t * t (* natrec P pz ps n: recursion on n : Nat *)
   | Ind of string (* an inductive type former, applied to params via App *)
   | Ctor of ctor_head (* a constructor, applied to args via App *)
   | Rec of rec_head (* an inductive's recursor, applied to args via App *)
@@ -66,11 +62,6 @@ let rec occurs k = function
   | Eq (a, x, y) -> occurs k a || occurs k x || occurs k y
   | Refl -> false
   | J (p, d, pr) -> occurs k p || occurs k d || occurs k pr
-  | Nat
-  | Zero ->
-      false
-  | Succ t -> occurs k t
-  | NatRec (p, z, s, n) -> occurs k p || occurs k z || occurs k s || occurs k n
   (* inductive heads are closed: they carry no de Bruijn indices, only the
      skeleton; any arguments ride along as App nodes *)
   | Ind _
@@ -83,11 +74,29 @@ let rec occurs k = function
    notation-ignorant — it never names [Unit]/[Nat]; the frontend builds this
    config from the [@[notation ...]] registry and hands it to the printer (and,
    for the forward direction, to [Ast.to_term]). *)
-type notation = { unit_ctor : ctor_head option (* rendered as [()] *) }
+type notation =
+  { unit_ctor : ctor_head option (* rendered as [()] *)
+  ; nat : (ctor_head * ctor_head) option
+        (* (zero, succ): succ-chains ending in zero fold to decimal literals *)
+  }
 
-let no_notation = { unit_ctor = None }
+let no_notation = { unit_ctor = None; nat = None }
 
 let pp_in ?(notation = no_notation) names fmt t =
+  (* if [t] is a closed numeral built from the registered zero/succ, its
+     value *)
+  let nat_lit t =
+    match notation.nat with
+    | None -> None
+    | Some (zero, succ) ->
+        let rec count acc t =
+          match t with
+          | Ctor h when h = zero -> Some acc
+          | App (Ctor h, n) when h = succ -> count (acc + 1) n
+          | _ -> None
+        in
+        count 0 t
+  in
   (* makes the hint [x] distinct from every name in scope *)
   let freshen names x =
     let rec prime x =
@@ -141,6 +150,10 @@ let pp_in ?(notation = no_notation) names fmt t =
             Format.fprintf fmt "@[fun (%s : %a) =>@ %a@]" x (go 0 names) a
               (go 0 (x :: names))
               b)
+    (* a closed succ-chain folds to a decimal literal (an atom, never
+       parenthesized); otherwise an ordinary application spine *)
+    | App _ when nat_lit t <> None ->
+        Format.fprintf fmt "%d" (Option.get (nat_lit t))
     | App (f, a) ->
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[%a@ %a@]" (go 10 names) f (go 11 names) a)
@@ -197,32 +210,15 @@ let pp_in ?(notation = no_notation) names fmt t =
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[J@ %a@ %a@ %a@]" (go 11 names) p (go 11 names)
               d (go 11 names) pr)
-    | Nat -> Format.pp_print_string fmt "Nat"
-    | Zero -> Format.pp_print_string fmt "0"
-    | Succ t -> (
-        (* fold a closed succ-chain to a decimal literal; otherwise print the
-           prefix form succ ... *)
-        let rec count acc = function
-          | Zero -> Some acc
-          | Succ u -> count (acc + 1) u
-          | _ -> None
-        in
-        match count 1 t with
-        | Some k -> Format.fprintf fmt "%d" k
-        | None ->
-            paren_if (prec > 10) (fun fmt ->
-                Format.fprintf fmt "@[succ@ %a@]" (go 11 names) t))
-    | NatRec (p, z, s, n) ->
-        paren_if (prec > 10) (fun fmt ->
-            Format.fprintf fmt "@[natrec@ %a@ %a@ %a@ %a@]" (go 11 names) p
-              (go 11 names) z (go 11 names) s (go 11 names) n)
     (* inductive heads are atoms; their arguments print via the enclosing App
        nodes (so [Nat.rec P z s n] renders through application) *)
     | Ind name -> Format.pp_print_string fmt name
     (* the constructor registered for the [unit] notation prints as its [()]
-       sugar (mirroring the surface); other constructors and the recursor print
-       qualified by their type, matching how they are written *)
+       sugar, and the registered nat zero as [0] (mirroring the surface); other
+       constructors and the recursor print qualified by their type, matching how
+       they are written *)
     | Ctor h when notation.unit_ctor = Some h -> Format.pp_print_string fmt "()"
+    | Ctor h when nat_lit (Ctor h) = Some 0 -> Format.pp_print_string fmt "0"
     | Ctor h -> Format.fprintf fmt "%s.%s" h.ind h.cname
     | Rec h -> Format.fprintf fmt "%s.rec" h.rind
   in
