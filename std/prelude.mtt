@@ -1,6 +1,70 @@
 -- The mtt standard prelude. Brought into scope by the `prelude` keyword;
--- everything here is axiom-free (definable from the core).
+-- everything here is axiom-free (definable from the core). Because it is
+-- ordinary mtt, this file doubles as the reference for how the basics are
+-- built.
 
--- functions
+-- === Functions ===
+
 def id (A : Type) (x : A) : A := x
+
 def comp (A B C : Type) (g : B → C) (f : A → B) (x : A) : C := g (f x)
+
+-- === Logic ===
+
+-- negation; by the imax rule A → Empty is a proposition for any A, so `not`
+-- applies to data as well as propositions
+def not (A : Type) := A → Empty
+
+-- === Equality === (each lemma is one J at a chosen motive)
+
+-- congruence: equal arguments give equal images
+def cong (A B : Type) (f : A → B) (x y : A) (p : Eq A x y) : Eq B (f x) (f y) :=
+  J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl p
+
+def sym (A : Type) (x y : A) (p : Eq A x y) : Eq A y x :=
+  J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq A z x) refl p
+
+def trans (A : Type) (x y z : A) (p : Eq A x y) (q : Eq A y z) : Eq A x z :=
+  J (λ w : A ⇒ λ r : Eq A y w ⇒ Eq A x w) p q
+
+-- transport along an equality (large elimination: the motive lands in Type)
+def subst (A : Type) (P : A → Type) (x y : A) (p : Eq A x y) (h : P x) : P y :=
+  J (λ z : A ⇒ λ q : Eq A x z ⇒ P z) h p
+
+-- === Naturals === (arithmetic by recursion on the first argument)
+
+def add (m n : Nat) : Nat :=
+  natrec (λ x : Nat ⇒ Nat) n (λ k : Nat ⇒ λ ih : Nat ⇒ succ ih) m
+
+def mul (m n : Nat) : Nat :=
+  natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ add n ih) m
+
+def pred (n : Nat) : Nat :=
+  natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ k) n
+
+-- foundational lemmas. add recurses on its first argument, so add 0 n reduces
+-- to n (zero_add is refl) but add n 0 is stuck on n and needs induction.
+theorem zero_add (n : Nat) : Eq Nat (add 0 n) n := refl
+
+theorem add_zero (n : Nat) : Eq Nat (add n 0) n :=
+  natrec (λ m : Nat ⇒ Eq Nat (add m 0) m)
+    refl
+    (λ k : Nat ⇒ λ ih : Eq Nat (add k 0) k ⇒
+      cong Nat Nat (λ m : Nat ⇒ succ m) (add k 0) k ih)
+    n
+
+theorem add_succ (n m : Nat) : Eq Nat (add n (succ m)) (succ (add n m)) :=
+  natrec (λ x : Nat ⇒ Eq Nat (add x (succ m)) (succ (add x m)))
+    refl
+    (λ k : Nat ⇒ λ ih : Eq Nat (add k (succ m)) (succ (add k m)) ⇒
+      cong Nat Nat (λ z : Nat ⇒ succ z) (add k (succ m)) (succ (add k m)) ih)
+    n
+
+theorem add_comm (m n : Nat) : Eq Nat (add m n) (add n m) :=
+  natrec (λ x : Nat ⇒ Eq Nat (add x n) (add n x))
+    (sym Nat (add n 0) n (add_zero n))
+    (λ k : Nat ⇒ λ ih : Eq Nat (add k n) (add n k) ⇒
+      trans Nat (add (succ k) n) (succ (add n k)) (add n (succ k))
+        (cong Nat Nat (λ z : Nat ⇒ succ z) (add k n) (add n k) ih)
+        (sym Nat (add n (succ k)) (succ (add n k)) (add_succ n k)))
+    m

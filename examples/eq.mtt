@@ -1,49 +1,29 @@
--- Propositional equality, native. Eq A x y is the type of proofs that x
--- and y (both : A) are equal; refl is the only constructor and checks
--- exactly when the sides are definitionally equal; J is the eliminator
--- (based path induction). The standard lemmas are each one J at a chosen
--- motive. Compare church_eq.mtt, which encodes the same notion with Π.
+-- Building on the prelude's equality toolkit (sym/trans/cong/subst). This
+-- file demonstrates what is special about the native Eq: refl reifies the
+-- checker's own conversion, and UIP holds for free.
+prelude
 
 axiom A : Type
-axiom B : Type
-
--- refl reifies the checker's own conversion: it proves x = y precisely
--- when x ≡ y, so β/δ/η/cumulativity facts become first-class proofs
-def id (x : A) : A := x
 axiom a : A
-theorem id_refl : Eq A (id a) a := refl
+axiom b : A
+
+-- refl reifies conversion: it proves x = y precisely when x ≡ y, so β/δ/η
+-- facts become first-class proofs
+def idA (x : A) : A := x
+theorem id_refl : Eq A (idA a) a := refl
 theorem beta_refl : Eq A ((λ x : A ⇒ x) a) a := refl
 
--- symmetry: eliminate p : x = y with motive (z ↦ z = x); the diagonal
--- needs x = x, which is refl
-def sym (x y : A) (p : Eq A x y) : Eq A y x :=
-  J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq A z x) refl p
+-- the toolkit composes: sym (sym p) is p (both proofs of a = b — and equal
+-- anyway by UIP)
+axiom p : Eq A a b
+#check_equal (sym A b a (sym A a b p)) p
 
--- transitivity: eliminate the second proof, diagonal is the first
-def trans (x y z : A) (p : Eq A x y) (q : Eq A y z) : Eq A x z :=
-  J (λ w : A ⇒ λ r : Eq A y w ⇒ Eq A x w) p q
-
--- congruence: equals give equal images
-def cong (f : A → B) (x y : A) (p : Eq A x y) : Eq B (f x) (f y) :=
-  J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl p
-
--- subst / transport: this is *large* elimination — the motive lands in
--- Type, sound because Eq is a single-constructor subsingleton (like Empty)
-def subst (P : A → Type) (x y : A) (p : Eq A x y) (h : P x) : P y :=
-  J (λ z : A ⇒ λ q : Eq A x z ⇒ P z) h p
-
--- ι-reduction: transport along refl computes away to nothing
+-- ι: transport along refl computes away
 axiom P : A → Type
 axiom h : P a
-#check_equal (subst P a a refl h) h
+#check_equal (subst A P a a refl h) h
 
--- UIP comes for free: Eq lives in Prop, and proof irrelevance already
--- equates all inhabitants of a Prop — so any two proofs of an equation are
--- definitionally equal, no axiom needed
-axiom b : A
-axiom p1 : Eq A a b
+-- UIP for free: Eq lives in Prop, so proof irrelevance equates any two proofs
+-- of the same equation — no axiom needed
 axiom p2 : Eq A a b
-#check_equal p1 p2
-
--- ...and therefore sym (sym p) and p are equal too (both proofs of a = b)
-#check_equal (sym b a (sym a b p1)) p1
+#check_equal p p2

@@ -15,8 +15,9 @@
       eliminates into any sort)
 - [x] `Bool := Unit + Unit` — derived, not kernel (`examples/bool.mtt`);
       dependent elimination on it works via Unit-η
-- [ ] A prelude: definitions (Bool, elim, ...) preloaded into every
-      session, once an import mechanism exists
+- [x] A prelude: `prelude` keyword loads a standard library (`std/prelude.mtt`,
+      embedded at build time) — id/comp/not, the Eq toolkit, Nat arithmetic +
+      lemmas; `eq.mtt`/`nat.mtt` use it instead of redefining
 - [x] `Nat` (hand-rolled inductive: `0`/`succ`/`natrec` with the induction
       hypothesis, numeral literals, recursion + induction in `examples/nat.mtt`)
 - [ ] General inductive schema (one mechanism generating recursors + ι, with
