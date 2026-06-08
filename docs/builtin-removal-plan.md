@@ -16,6 +16,7 @@ inductive machinery this builds on.
    desugaring to it, the printer folding successor chains to decimals).
 4. **`Unit`, `Σ`** — need definitional η for single-constructor inductives
    ("records") + projections, else replacement silently weakens the theory.
+   See `record-eta-plan.md`.
 5. **`Eq`** — needs indexed inductive families; do last.
 
 ## Cross-cutting decision: availability under `prelude` opt-out

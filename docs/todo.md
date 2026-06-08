@@ -14,9 +14,9 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
       arguments (`(Nat -> T) -> T`); currently only direct recursive fields
       `T params` are allowed
 - [ ] Definitional η for single-constructor inductives ("records"): an η case in
-      `conv` (eta-expand to `mk (proj₁ x) ...`) plus named projections — the
+      `conv` (eta-expand to `mk (proj₁ x) ...`) plus positional projections — the
       self-contained step that lets `Unit` and `Σ` be replaced without losing
-      their definitional η
+      their definitional η. Plan in `record-eta-plan.md`
 - [ ] Universe polymorphism (level-polymorphic defs; see questions.md); also
       needed for inductive `Sum`/`Σ`/`Eq` to form at the max of their
       components' levels rather than one fixed level

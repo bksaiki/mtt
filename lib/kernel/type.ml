@@ -6,6 +6,7 @@ type ctor_head =
   ; cname : string (* the constructor's (globally unique) name *)
   ; cindex : int (* its position in the inductive's constructor list *)
   ; carity : int (* total arguments: leading parameters + fields *)
+  ; nparams : int (* leading parameters, so a projection can skip them *)
   }
 
 (* The skeleton of a recursor, enough to drive ι. [recs] has one entry per
@@ -30,6 +31,7 @@ type t =
   | Pair of t * t (* (a, b) *)
   | Fst of t (* p.1 *)
   | Snd of t (* p.2 *)
+  | Proj of int * t (* x.(i+1): the i-th field projection of a record *)
   | Sum of t * t (* A + B *)
   | Inl of t (* left injection *)
   | Inr of t (* right injection *)
@@ -60,6 +62,7 @@ let rec occurs k = function
   | Fst t
   | Snd t ->
       occurs k t
+  | Proj (_, t) -> occurs k t
   | Sum (a, b) -> occurs k a || occurs k b
   | Inl t
   | Inr t ->
@@ -168,6 +171,7 @@ let pp_in names fmt t =
           (a :: components b)
     | Fst t -> Format.fprintf fmt "%a.1" (go 11 names) t
     | Snd t -> Format.fprintf fmt "%a.2" (go 11 names) t
+    | Proj (i, t) -> Format.fprintf fmt "%a.%d" (go 11 names) t (i + 1)
     (* + is right-associative, between arrows and products *)
     | Sum (a, b) ->
         paren_if (prec > 2) (fun fmt ->

@@ -123,6 +123,17 @@ let minor_type ctx spec pvals pmot i =
 let ctor_type_val ctx (h : Type.ctor_head) =
   Value.eval [] (Inductive.ctor_type (lookup_ind ctx h.ind) h.cindex)
 
+(* the type of the [i]-th field of a record value [v] of type [Ind params]: the
+   field's declared type, instantiated by the parameters and by the earlier
+   projections of [v] (so a dependent field sees the values it depends on) *)
+let field_type spec params v i =
+  let c = List.nth spec.Inductive.ctors 0 in
+  let a = List.nth c.fields i in
+  let proj_env =
+    List.init i (fun j -> Value.vproj (i - 1 - j) v) @ List.rev params
+  in
+  Value.eval proj_env a.Inductive.aty
+
 (* the type of a stuck neutral, reconstructed by walking the spine *)
 let rec infer_neutral ctx (n : Value.neutral) : Value.t =
   match n with
@@ -139,6 +150,11 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       match infer_neutral ctx n with
       | Value.Sigma (_, _, c) ->
           Value.apply_closure c (Value.Neutral (Value.Fst n))
+      | _ -> assert false)
+  | Value.Proj (i, n) -> (
+      match infer_neutral ctx n with
+      | Value.VInd (name, params) ->
+          field_type (lookup_ind ctx name) params (Value.Neutral n) i
       | _ -> assert false)
   | Value.Case (p, n, _, _) -> Value.apply p (Value.Neutral n)
   (* J P d p : P y p; recover y from the stuck proof's type Eq A x y *)
@@ -231,17 +247,31 @@ let rec conv ctx ty v1 v2 =
       | Value.Neutral n1, Value.Neutral n2 ->
           Option.is_some (conv_neutral ctx n1 n2)
       | _ -> false)
-  (* an inductive type is positive, like Nat: same constructor with convertible
-     arguments (compared type-directedly along the constructor's type), or two
-     stuck values *)
-  | Value.VInd _ -> (
-      match (v1, v2) with
-      | Value.VCtor (h1, args1), Value.VCtor (h2, args2) ->
-          String.equal h1.cname h2.cname
-          && conv_spine ctx (ctor_type_val ctx h1) args1 args2
-      | Value.Neutral n1, Value.Neutral n2 ->
-          Option.is_some (conv_neutral ctx n1 n2)
-      | _ -> false)
+  | Value.VInd (name, params) -> (
+      let spec = lookup_ind ctx name in
+      if Inductive.is_record spec then
+        (* record η: equal iff every field projection is convertible (each at
+           its dependent field type); the 0-field case makes any two equal *)
+        let nfields = List.length (List.nth spec.Inductive.ctors 0).fields in
+        let rec go i =
+          i >= nfields
+          || conv ctx
+               (field_type spec params v1 i)
+               (Value.vproj i v1) (Value.vproj i v2)
+             && go (i + 1)
+        in
+        go 0
+      else
+        (* a positive inductive, like Nat: same constructor with convertible
+           arguments (compared type-directedly along the constructor's type), or
+           two stuck values *)
+          match (v1, v2) with
+        | Value.VCtor (h1, args1), Value.VCtor (h2, args2) ->
+            String.equal h1.cname h2.cname
+            && conv_spine ctx (ctor_type_val ctx h1) args1 args2
+        | Value.Neutral n1, Value.Neutral n2 ->
+            Option.is_some (conv_neutral ctx n1 n2)
+        | _ -> false)
   (* at a stuck type there are no intro forms: both sides are neutral *)
   | _ -> (
       match (v1, v2) with
@@ -337,6 +367,11 @@ and conv_neutral ctx n1 n2 : Value.t option =
       match conv_neutral ctx n1 n2 with
       | Some (Value.Sigma (_, _, c)) ->
           Some (Value.apply_closure c (Value.Neutral (Value.Fst n1)))
+      | _ -> None)
+  | Value.Proj (i1, m1), Value.Proj (i2, m2) when i1 = i2 -> (
+      match conv_neutral ctx m1 m2 with
+      | Some (Value.VInd (name, params)) ->
+          Some (field_type (lookup_ind ctx name) params (Value.Neutral m1) i1)
       | _ -> None)
   (* stuck cases: scrutinees, then motives (as type families at a fresh
      variable), then both branches at their Pi types built from the motive *)
@@ -588,6 +623,19 @@ let rec infer ctx t =
           Value.apply_closure c (Value.vfst (Value.eval ctx.env p))
       | ty ->
           type_error "expected a pair, but %s has type %s" (show_term ctx p)
+            (show ctx ty))
+  (* (Proj): the i-th field of a record, at its dependent field type *)
+  | Type.Proj (i, e) -> (
+      match infer ctx e with
+      | Value.VInd (name, params) ->
+          let spec = lookup_ind ctx name in
+          if not (Inductive.is_record spec) then
+            type_error "%s is not a record, so it has no field projections" name;
+          let nfields = List.length (List.nth spec.Inductive.ctors 0).fields in
+          if i >= nfields then type_error "%s has no field .%d" name (i + 1);
+          field_type spec params (Value.eval ctx.env e) i
+      | ty ->
+          type_error "expected a record, but %s has type %s" (show_term ctx e)
             (show ctx ty))
   (* (Eq): propositional equality is a proposition *)
   | Type.Eq (a, x, y) ->

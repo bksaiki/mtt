@@ -33,7 +33,15 @@ let ctor_head spec i =
   ; cname = c.cname
   ; cindex = i
   ; carity = nparams spec + List.length c.fields
+  ; nparams = nparams spec
   }
+
+(* a record is a single-constructor inductive with no recursive fields; it gets
+   field projections and definitional η *)
+let is_record spec =
+  match spec.ctors with
+  | [ c ] -> List.for_all (fun a -> not a.recursive) c.fields
+  | _ -> false
 
 (* the skeleton (see {!Type.rec_head}) of the recursor *)
 let rec_head spec =
@@ -92,6 +100,7 @@ let rec occurs name (t : Type.t) =
       false
   | Fst a
   | Snd a
+  | Proj (_, a)
   | Inl a
   | Inr a
   | Succ a ->

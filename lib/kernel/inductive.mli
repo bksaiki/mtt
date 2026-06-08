@@ -38,6 +38,10 @@ val ctor_head : spec -> int -> Type.ctor_head
 (** [rec_head spec] is the skeleton of the recursor *)
 val rec_head : spec -> Type.rec_head
 
+(** whether [spec] is a {e record}: a single constructor with no recursive
+    fields, so it has field projections and definitional η *)
+val is_record : spec -> bool
+
 (** [apply spec depth] is the inductive applied to its parameters as variables,
     read in a context of [depth] binders whose outermost {!nparams} are the
     parameters. This is what constructors return and the exact shape a direct

@@ -316,3 +316,83 @@ let%expect_test "a stuck recursor on a non-Prop scrutinee compares it" =
   in
   print_endline (conv_str ctx (Value.eval ctx.Check.env nat) v1 v2);
   [%expect {| not equal |}]
+
+(* --- records: projections + definitional η --- *)
+
+(* inductive DPair (A : Type) (B : A -> Type) : Type := mk : (a : A) -> B a ->
+   DPair A B a single-constructor non-recursive inductive, i.e. a (dependent)
+   record *)
+let dpair_spec =
+  { Inductive.name = "DPair"
+  ; params =
+      [ ("A", Type.Sort 1); ("B", Type.Pi ("_", Type.Var 0, Type.Sort 1)) ]
+  ; sort = 1
+  ; ctors =
+      [ { Inductive.cname = "mk"
+        ; fields =
+            [ { Inductive.aname = "a"
+              ; aty = Type.Var 1 (* A *)
+              ; recursive = false
+              }
+            ; { Inductive.aname = "b"
+              ; aty = Type.App (Type.Var 1 (* B *), Type.Var 0 (* a *))
+              ; recursive = false
+              }
+            ]
+        }
+      ]
+  }
+
+let dmk = Type.Ctor (Inductive.ctor_head dpair_spec 0)
+
+let nat_fam = Type.Lam ("_", Type.Nat, Type.Nat) (* fun _ : Nat => Nat *)
+
+(* mk Nat (fun _ => Nat) a b : DPair Nat (fun _ => Nat) *)
+let dmk_nat a b =
+  Type.App (Type.App (Type.App (Type.App (dmk, Type.Nat), nat_fam), a), b)
+
+let%expect_test "record projection computes (ι)" =
+  norm (Type.Proj (0, dmk_nat Type.Zero (Type.Succ Type.Zero)));
+  [%expect {| 0 |}];
+  norm (Type.Proj (1, dmk_nat Type.Zero (Type.Succ Type.Zero)));
+  [%expect {| 1 |}]
+
+let%expect_test "record η: a value equals the tuple of its projections" =
+  let ctx = Check.add_ind dpair_spec Check.empty in
+  let dty =
+    Value.eval [] (Type.App (Type.App (Type.Ind "DPair", Type.Nat), nat_fam))
+  in
+  let ctx = Check.bind "x" dty ctx in
+  let xv = Value.eval ctx.Check.env (Type.Var 0) in
+  (* mk Nat (fun _ => Nat) x.1 x.2 *)
+  let expanded =
+    Value.eval ctx.Check.env
+      (Type.App
+         ( Type.App
+             ( Type.App (Type.App (dmk, Type.Nat), nat_fam)
+             , Type.Proj (0, Type.Var 0) )
+         , Type.Proj (1, Type.Var 0) ))
+  in
+  print_endline (conv_str ctx dty xv expanded);
+  [%expect {| equal |}];
+  (* but a neutral is not equal to an arbitrary pair *)
+  let other = Value.eval ctx.Check.env (dmk_nat Type.Zero Type.Zero) in
+  print_endline (conv_str ctx dty xv other);
+  [%expect {| not equal |}]
+
+(* a 0-field record (Unit-like): η makes any two values equal *)
+let urec_spec =
+  { Inductive.name = "URec"
+  ; params = []
+  ; sort = 1
+  ; ctors = [ { Inductive.cname = "u"; fields = [] } ]
+  }
+
+let%expect_test "0-field record: any two values are equal (Unit-η)" =
+  let ctx = Check.add_ind urec_spec Check.empty in
+  let ctx = Check.bind "r1" (Value.VInd ("URec", [])) ctx in
+  let ctx = Check.bind "r2" (Value.VInd ("URec", [])) ctx in
+  let r1 = Value.eval ctx.Check.env (Type.Var 1) in
+  let r2 = Value.eval ctx.Check.env (Type.Var 0) in
+  print_endline (conv_str ctx (Value.VInd ("URec", [])) r1 r2);
+  [%expect {| equal |}]
