@@ -2,18 +2,18 @@ open Mtt
 
 (* parse and check against the prelude, so the standard types (Unit, Empty, ...)
    are in scope; print the inferred type (or the type error) *)
-let prelude = Prelude.load Check.empty
+let prelude = Prelude.load Stmt.initial
 
 let infer s =
   match
-    Check.infer prelude
-      (Parse.term_of_string_in prelude.Check.signature
-         ~notation:prelude.Check.notation s)
+    Check.infer prelude.ctx
+      (Parse.term_of_string_in prelude.ctx.signature ~notation:prelude.notation
+         s)
   with
-  | ty -> print_endline (Check.show prelude ty)
+  | ty -> print_endline (Notation.show prelude.notation prelude.ctx ty)
   | exception Check.Type_error frags ->
       Printf.printf "type error: %s\n"
-        (Notation.render_error prelude.Check.notation frags)
+        (Notation.render_error prelude.notation frags)
 
 let%expect_test "universe rules" =
   infer "Type";

@@ -2,22 +2,22 @@ open Mtt
 
 (* the standard prelude, loaded once: sessions start from it, as the REPL and
    file runner do, so the standard types (Unit, Empty, ...) are in scope *)
-let prelude = Prelude.load Check.empty
+let prelude = Prelude.load Stmt.initial
 
 (* feed lines through a toplevel session, printing each response *)
 let session lines =
-  let step ctx line =
-    match Stmt.run ctx (Parse.stmt_of_string line) with
-    | ctx, message ->
+  let step sess line =
+    match Stmt.run sess (Parse.stmt_of_string line) with
+    | sess, message ->
         Option.iter print_endline message;
-        ctx
+        sess
     | exception Ast.Unbound_variable (loc, x) ->
         Printf.printf "%s: unbound variable: %s\n" (Loc.to_string loc) x;
-        ctx
+        sess
     | exception Check.Type_error frags ->
         Printf.printf "type error: %s\n"
-          (Notation.render_error ctx.Check.notation frags);
-        ctx
+          (Notation.render_error sess.notation frags);
+        sess
   in
   ignore (List.fold_left step prelude lines)
 

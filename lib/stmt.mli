@@ -54,7 +54,18 @@ type t =
   ; desc : desc
   }
 
-(** [run ctx stmt] processes one statement, returning the extended context and
+(** the evolving frontend state threaded through a run of statements: the kernel
+    checking context plus the notation registry (which the kernel no longer
+    holds — notation is purely a frontend concern) *)
+type session =
+  { ctx : Check.ctx
+  ; notation : Type.notation
+  }
+
+(** the empty session: a bare context and no notation *)
+val initial : session
+
+(** [run sess stmt] processes one statement, returning the extended session and
     an output message, if the statement produces one. Raises
     {!Ast.Unbound_variable} or {!Check.Type_error}. *)
-val run : Check.ctx -> t -> Check.ctx * string option
+val run : session -> t -> session * string option

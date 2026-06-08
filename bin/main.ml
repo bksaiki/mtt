@@ -29,69 +29,72 @@ let help =
 (* print the bindings in scope, oldest first (the context lists are
    most-recent-first). Neutral levels are absolute, so every type renders
    correctly against the full set of names. *)
-let print_env (ctx : Check.ctx) =
+let print_env (sess : Stmt.session) =
+  let ctx = sess.ctx in
   match List.rev (List.combine ctx.names ctx.types) with
   | [] -> print_endline "(empty context)"
   | binds ->
       List.iter
-        (fun (x, ty) -> Printf.printf "%s : %s\n" x (Check.show ctx ty))
+        (fun (x, ty) ->
+          Printf.printf "%s : %s\n" x (Notation.show sess.notation ctx ty))
         binds
 
-(* REPL: run one statement, printing its message or error, returning the ctx *)
-let run_repl ctx (stmt : Stmt.t) =
-  match Stmt.run ctx stmt with
-  | ctx, message ->
+(* REPL: run one statement, printing its message or error, returning the
+   session *)
+let run_repl (sess : Stmt.session) (stmt : Stmt.t) =
+  match Stmt.run sess stmt with
+  | sess, message ->
       Option.iter print_endline message;
-      ctx
+      sess
   | exception Ast.Unbound_variable (loc, x) ->
       Printf.printf "%s: unbound variable: %s\n" (Loc.to_string loc) x;
-      ctx
+      sess
   | exception Check.Type_error frags ->
       (* the statement is the whole REPL line: a position adds nothing *)
       Printf.printf "type error: %s\n"
-        (Notation.render_error ctx.Check.notation frags);
-      ctx
+        (Notation.render_error sess.notation frags);
+      sess
 
-let rec repl ctx initialized =
+let rec repl sess initialized =
   if interactive then (
     print_string "mtt> ";
     flush stdout
   );
   match In_channel.input_line In_channel.stdin with
   | None -> if interactive then print_newline ()
-  | Some "" -> repl ctx initialized
+  | Some "" -> repl sess initialized
   (* REPL meta-commands: handled here, not in the grammar; they leave the
-     context (and the prelude-init decision) untouched *)
+     session (and the prelude-init decision) untouched *)
   | Some (":quit" | ":q") -> ()
   | Some (":help" | ":h") ->
       print_endline help;
-      repl ctx initialized
+      repl sess initialized
   | Some ":env" ->
       (* before the first statement the prelude has not loaded yet (it loads
          lazily, so a leading `prelude` can still opt out): say so rather than
          report a misleading empty context *)
       if initialized then
-        print_env ctx
+        print_env sess
       else
         print_endline
           "no bindings yet (the prelude loads on the first statement; \
            `prelude` opts out)";
-      repl ctx initialized
+      repl sess initialized
   | Some line -> (
       match Parse.stmt_of_string line with
       | exception Parse.Error (loc, msg) ->
           Printf.printf "%s: syntax error: %s\n" (Loc.to_string loc) msg;
-          repl ctx initialized
+          repl sess initialized
       | { desc = Stmt.Prelude; _ } when not initialized ->
           (* opt out: start from a bare environment *)
-          repl Check.empty true
+          repl Stmt.initial true
       | { desc = Stmt.Prelude; _ } ->
           print_endline "prelude must be the first statement";
-          repl ctx initialized
+          repl sess initialized
       | stmt when not initialized ->
           (* first real statement: auto-load the prelude, then run it *)
-          repl (run_repl (Prelude.load Check.empty) stmt) true
-      | stmt -> repl (run_repl ctx stmt) true)
+          repl (run_repl (Prelude.load Stmt.initial) stmt) true
+      | stmt -> repl (run_repl sess stmt) true)
 
 (* checks a whole file, stopping at the first error with a nonzero exit *)
 let run_file path =
@@ -110,30 +113,30 @@ let run_file path =
       (* auto-load the prelude unless the file opens with `prelude` *)
       let init, stmts =
         match stmts with
-        | { Stmt.desc = Stmt.Prelude; _ } :: rest -> (Check.empty, rest)
-        | _ -> (Prelude.load Check.empty, stmts)
+        | { Stmt.desc = Stmt.Prelude; _ } :: rest -> (Stmt.initial, rest)
+        | _ -> (Prelude.load Stmt.initial, stmts)
       in
-      let step ctx (stmt : Stmt.t) =
+      let step (sess : Stmt.session) (stmt : Stmt.t) =
         match stmt.desc with
         | Stmt.Prelude ->
             die "%s: prelude must be the first statement"
               (Loc.to_string stmt.loc)
         | _ -> (
-            match Stmt.run ctx stmt with
-            | ctx, message ->
+            match Stmt.run sess stmt with
+            | sess, message ->
                 Option.iter print_endline message;
-                ctx
+                sess
             | exception Ast.Unbound_variable (loc, x) ->
                 die "%s: unbound variable: %s" (Loc.to_string loc) x
             | exception Check.Type_error frags ->
                 die "%s: type error: %s" (Loc.to_string stmt.loc)
-                  (Notation.render_error ctx.Check.notation frags))
+                  (Notation.render_error sess.notation frags))
       in
       ignore (List.fold_left step init stmts)
 
 let () =
   match Sys.argv with
-  | [| _ |] -> repl Check.empty false
+  | [| _ |] -> repl Stmt.initial false
   | [| _; path |] -> run_file path
   | _ ->
       prerr_endline "usage: mtt [file]";

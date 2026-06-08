@@ -4,8 +4,8 @@
 (** the prelude source text *)
 val source : string
 
-(** [load ctx] type-checks the prelude and extends [ctx] with all of its
-    declarations. Raises {!Check.Type_error} / {!Ast.Unbound_variable} /
-    {!Parse.Error} if the prelude is ill-formed — i.e. only on a build-time bug,
-    since the prelude ships with the tool. *)
-val load : Check.ctx -> Check.ctx
+(** [load sess] type-checks the prelude and extends the session [sess] with all
+    of its declarations (its bindings and notation). Raises {!Check.Type_error}
+    / {!Ast.Unbound_variable} / {!Parse.Error} if the prelude is ill-formed —
+    i.e. only on a build-time bug, since the prelude ships with the tool. *)
+val load : Stmt.session -> Stmt.session

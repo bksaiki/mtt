@@ -22,17 +22,10 @@ type ctx =
   ; names : string list (* binder names, for error messages *)
   ; lvl : int (* binders in scope = next fresh de Bruijn level *)
   ; signature : Signature.t (* the inductive types declared so far *)
-  ; notation : Type.notation (* display sugar, from @[notation ...] decls *)
   }
 
 let empty =
-  { env = []
-  ; types = []
-  ; names = []
-  ; lvl = 0
-  ; signature = Signature.empty
-  ; notation = Type.no_notation
-  }
+  { env = []; types = []; names = []; lvl = 0; signature = Signature.empty }
 
 (* extends the context with [x : ty] whose value is [v] *)
 let extend x v ty ctx =
@@ -53,66 +46,20 @@ let define = extend
 (* registers an inductive declaration in the context's signature *)
 let add_ind spec ctx = { ctx with signature = Signature.add spec ctx.signature }
 
-(* Registers an inductive under a notation [role], after shape-checking that it
-   can actually play that role. Notation is the frontend's, but the printer (and
-   so the config) lives in the kernel, so this sets the context's display config
-   from a [@[notation role]] declaration. One-shot: re-registering a role is an
-   error. *)
-let register_notation role spec ctx =
-  match role with
-  | "unit" ->
-      if ctx.notation.Type.unit_ctor <> None then
-        type_error [ txt "the unit notation is already registered" ];
-      (match spec.Inductive.ctors with
-      | [ { Inductive.fields = []; _ } ] when Inductive.nparams spec = 0 -> ()
-      | _ ->
-          type_error
-            [ txt
-                "@[notation unit] needs a parameterless inductive with a \
-                 single nullary constructor"
-            ]);
-      { ctx with
-        notation =
-          { ctx.notation with
-            Type.unit_ctor = Some (Inductive.ctor_head spec 0)
-          }
-      }
-  | "nat" ->
-      if ctx.notation.Type.nat <> None then
-        type_error [ txt "the nat notation is already registered" ];
-      (match spec.Inductive.ctors with
-      | [ { Inductive.fields = []; _ }; { Inductive.fields = [ f ]; _ } ]
-        when Inductive.nparams spec = 0 && f.Inductive.recursive ->
-          ()
-      | _ ->
-          type_error
-            [ txt
-                "@[notation nat] needs a parameterless inductive with a \
-                 nullary constructor then a single-recursive-field constructor"
-            ]);
-      { ctx with
-        notation =
-          { ctx.notation with
-            Type.nat =
-              Some (Inductive.ctor_head spec 0, Inductive.ctor_head spec 1)
-          }
-      }
-  | _ ->
-      type_error [ txtf "unknown notation role %s (expected: unit, nat)" role ]
-
 (* the declared inductive [name], or a type error if it is unknown *)
 let lookup_ind ctx name =
   match Signature.find ctx.signature name with
   | Some spec -> spec
   | None -> type_error [ txtf "unknown inductive type %s" name ]
 
-(* renders values and terms with the context's binder names and notation; used
-   by the frontend for [#check]/[#eval] output (error messages instead carry
-   their terms, via [tm]/[vl], and are rendered by the frontend) *)
-let show ctx v =
-  Type.to_string_in ~notation:ctx.notation ctx.names (Value.quote ctx.lvl v)
+(* the kernel's faithful renderers (no notation): plain views of a value/term
+   against the context's binder names, for kernel-internal use and debugging.
+   User-facing output and error messages are rendered by the frontend, which
+   owns notation — output via its own renderer, errors from the [tm]/[vl]
+   fragments these build. *)
+let show ctx v = Type.to_string_in ctx.names (Value.quote ctx.lvl v)
 
-let show_term ctx t = Type.to_string_in ~notation:ctx.notation ctx.names t
+let show_term ctx t = Type.to_string_in ctx.names t
 
 (* error fragments for a term and a value, capturing the binder names they are
    read against (the value is quoted now, with no notation; rendering is the

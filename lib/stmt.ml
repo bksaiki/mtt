@@ -24,6 +24,15 @@ type t =
   ; desc : desc
   }
 
+(* the evolving frontend state as statements are processed: the kernel checking
+   context plus the notation registry (which the kernel no longer holds) *)
+type session =
+  { ctx : Check.ctx
+  ; notation : Type.notation
+  }
+
+let initial = { ctx = Check.empty; notation = Type.no_notation }
+
 (* Elaborates a surface inductive declaration into an {!Inductive.spec}:
    scope-checks the parameter telescope and the result sort, then each
    constructor's declared type. A constructor type is decomposed as a Π-spine
@@ -32,9 +41,9 @@ type t =
    and the result must be the inductive applied to its parameters (no indices).
    The former is registered provisionally so constructor types can mention
    it. *)
-let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
-  let sg = ctx.Check.signature in
-  let notation = ctx.Check.notation in
+let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
+  let sg = sess.ctx.Check.signature in
+  let notation = sess.notation in
   (* parameter telescope: each type is scope-checked under the earlier params *)
   let params, param_names =
     List.fold_left
@@ -90,8 +99,10 @@ let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
   in
   { Inductive.name = d.iname; params; sort; ctors }
 
-let run (ctx : Check.ctx) stmt =
-  let to_term = Ast.to_term ctx.signature ~notation:ctx.notation ctx.names in
+let run (sess : session) stmt =
+  let ctx = sess.ctx in
+  let notation = sess.notation in
+  let to_term = Ast.to_term ctx.signature ~notation ctx.names in
   (* scope-check and evaluate an annotation, requiring it to be a type *)
   let eval_ann sa =
     let a = to_term sa in
@@ -103,20 +114,21 @@ let run (ctx : Check.ctx) stmt =
       let t = to_term s in
       let ty = Check.infer ctx t in
       let nf = Value.quote ctx.lvl (Value.eval ctx.env t) in
-      ( ctx
+      ( sess
       , Some
-          (Printf.sprintf "%s : %s" (Check.show_term ctx nf) (Check.show ctx ty))
-      )
+          (Printf.sprintf "%s : %s"
+             (Notation.show_term notation ctx nf)
+             (Notation.show notation ctx ty)) )
   | Eval s ->
       let t = to_term s in
       (* still type-checked first: evaluation of ill-typed terms can get stuck
          on a non-function *)
       let _ = Check.infer ctx t in
       let nf = Value.quote ctx.lvl (Value.eval ctx.env t) in
-      (ctx, Some (Check.show_term ctx nf))
+      (sess, Some (Notation.show_term notation ctx nf))
   | Axiom (x, sa) ->
       let va = eval_ann sa in
-      (Check.bind x va ctx, None)
+      ({ sess with ctx = Check.bind x va ctx }, None)
   | Def (x, sa, st) ->
       let t = to_term st in
       let va =
@@ -128,12 +140,12 @@ let run (ctx : Check.ctx) stmt =
         | None -> Check.infer ctx t
       in
       let v = Value.eval ctx.env t in
-      (Check.define x v va ctx, None)
+      ({ sess with ctx = Check.define x v va ctx }, None)
   | Theorem (x, sa, st) ->
       let va = eval_ann sa in
       Check.check ctx (to_term st) va;
       (* opaque: the proof is checked, then forgotten *)
-      (Check.bind x va ctx, None)
+      ({ sess with ctx = Check.bind x va ctx }, None)
   | CheckEqual (st, su) ->
       let t = to_term st in
       let u = to_term su in
@@ -149,20 +161,20 @@ let run (ctx : Check.ctx) stmt =
           ; Check.txt " is not convertible with "
           ; Check.vl ctx vu
           ];
-      (ctx, None)
+      (sess, None)
   | Inductive d ->
-      let spec = elaborate_inductive ctx d in
+      let spec = elaborate_inductive sess d in
       Check.check_inductive ctx spec;
       let ctx = Check.add_ind spec ctx in
-      let ctx =
+      let notation =
         match d.iattr with
-        | None -> ctx
-        | Some ("notation", role) -> Check.register_notation role spec ctx
+        | None -> notation
+        | Some ("notation", role) -> Notation.register role spec notation
         | Some (name, _) ->
             Check.type_error [ Check.txtf "unknown attribute @@[%s ...]" name ]
       in
-      (ctx, None)
+      ({ ctx; notation }, None)
   (* the prelude directive only controls the driver's choice of starting context
      (auto-load vs. bare); it is handled there, so by the time a statement
      reaches [run] it is a no-op *)
-  | Prelude -> (ctx, None)
+  | Prelude -> (sess, None)

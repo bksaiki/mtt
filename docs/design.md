@@ -182,17 +182,28 @@ and the printer folds them back). Registration is **one-shot** and
 **shape-checked**: the role demands a particular constructor shape, and a
 malformed or duplicate binding is a type error.
 
-The registry (`Type.notation`, built in the frontend, carried in the checking
-context) is consulted in both directions: forward in `to_term` (`()` →
-`Unit.unit`, `5` → succ-chain of the registered `Nat`), reverse in the printer
-(those same constructors fold back to `()`/decimals). Crucially the kernel
-printer stays *generic* — it never names `Unit`/`Nat`, it only applies whatever
-config the frontend hands it. Carrying that config in the context (rather than
-keeping it purely frontend) is a deliberate, modest choice so that `#check`
-output *and* error messages render notation consistently; a future refactor can
-make `Type_error` carry terms and push all rendering to the frontend. The longer
-arc — a full **delaborator** (core → surface, the elaborator's mirror) sharing
-this registry, plus `×`/`+`/`=` notation — is tracked in `todo.md`.
+The registry is a `Type.notation` config consulted in both directions: forward
+in `to_term` (`()` → `Unit.unit`, `5` → succ-chain of the registered `Nat`),
+reverse in the printer (those same constructors fold back to `()`/decimals).
+
+**The kernel is notation-ignorant.** It never names `Unit`/`Nat` and holds no
+display config: the printer (`Type.pp_in`) is a *generic* utility that applies
+whatever config it is handed (default: none), and the checking context carries
+nothing about notation. Everything user-facing is rendered in the frontend (the
+`Notation` module), which owns the registry — threaded, alongside the kernel
+context, in a `Stmt.session`. So:
+- **output** (`#check`/`#eval`/`:env`) is rendered by `Notation.show`, with the
+  session's notation;
+- **errors** are structured: `Check.Type_error` carries message *fragments*
+  (`Text` | `Term of names × term`) with raw terms, never pre-rendered strings;
+  the kernel quotes the offending values and formats no notation, and
+  `Notation.render_error` applies notation when displaying. (`Check.show` remains
+  as the kernel's *plain* faithful view, used internally and in debugging.)
+
+This is the "faithful core printer + frontend delaborator" split: the kernel
+emits terms, the frontend delaborates. The longer arc — a full **delaborator**
+(core → surface, the elaborator's mirror) sharing this registry, plus `×`/`+`/`=`
+notation — is tracked in `todo.md`.
 
 ## Errors and locations
 

@@ -3,14 +3,14 @@ open Mtt
 (* parse, convert to de Bruijn, then pretty-print back. Resolves names against
    the prelude so the standard types (Unit, ...) and [()] are in scope, and uses
    its notation in both directions so [()] parses and prints. *)
-let prelude = Prelude.load Check.empty
+let prelude = Prelude.load Stmt.initial
 
-let notation = prelude.Check.notation
+let notation = prelude.notation
 
 let roundtrip s =
   print_endline
     (Type.to_string_in ~notation []
-       (Parse.term_of_string_in prelude.Check.signature ~notation s))
+       (Parse.term_of_string_in prelude.ctx.signature ~notation s))
 
 let%expect_test "universes" =
   roundtrip "Type";

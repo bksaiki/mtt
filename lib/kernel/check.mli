@@ -142,7 +142,6 @@ type ctx =
   ; names : string list  (** binder names, for error messages *)
   ; lvl : int  (** binders in scope = next fresh de Bruijn level *)
   ; signature : Signature.t  (** the inductive types declared so far *)
-  ; notation : Type.notation  (** display sugar, from [@[notation ...]] decls *)
   }
 
 val empty : ctx
@@ -157,13 +156,13 @@ val bind : string -> Value.t -> ctx -> ctx
     unfold during evaluation (δ-reduction) *)
 val define : string -> Value.t -> Value.t -> ctx -> ctx
 
-(** [show ctx v] renders a value with the context's binder names and notation;
-    used by the frontend for [#check]/[#eval] output. Error messages instead
-    carry their terms (via {!tm}/{!vl}) for the frontend to render. *)
+(** [show ctx v] renders a value against the context's binder names, {e without}
+    notation — the kernel's faithful/debug view. User-facing output and error
+    messages are rendered by the frontend, which owns notation. *)
 val show : ctx -> Value.t -> string
 
-(** [show_term ctx t] renders a term with the context's binder names and
-    notation *)
+(** [show_term ctx t] renders a term against the context's binder names, without
+    notation (see {!show}) *)
 val show_term : ctx -> Type.t -> string
 
 (** [tm ctx t] / [vl ctx v] are error fragments for a term / a value, capturing
@@ -200,14 +199,6 @@ val check : ctx -> Type.t -> Value.t -> unit
 (** [add_ind spec ctx] registers an inductive declaration in the context's
     signature, so its former, constructors and recursor can be referenced *)
 val add_ind : Inductive.spec -> ctx -> ctx
-
-(** [register_notation role spec ctx] records that the inductive [spec] fills
-    the notation [role] (["unit"] for [()], ["nat"] for decimal literals),
-    updating the context's display config. Shape-checks that [spec] can play the
-    role (e.g. ["nat"] demands a nullary then a single-recursive-field
-    constructor) and rejects re-registering an already-bound role. Raises
-    {!Type_error} otherwise. *)
-val register_notation : string -> Inductive.spec -> ctx -> ctx
 
 (** [check_inductive ctx spec] validates an inductive declaration: kind-checks
     the parameter telescope and each constructor's field types, and enforces
