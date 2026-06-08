@@ -8,8 +8,6 @@ type t =
   | Sort of int
   | Pi of string * t * closure
   | Lam of string * t * closure
-  | Sigma of string * t * closure
-  | Pair of t * t
   | Sum of t * t
   | Inl of t
   | Inr of t
@@ -30,8 +28,6 @@ type t =
 and neutral =
   | Var of int  (** de Bruijn level *)
   | App of neutral * t
-  | Fst of neutral  (** a stuck first projection *)
-  | Snd of neutral  (** a stuck second projection *)
   | Proj of int * neutral  (** a stuck record field projection *)
   | Case of t * neutral * t * t
       (** a stuck case: motive, stuck scrutinee, both branches *)
@@ -69,13 +65,6 @@ val apply_closure : closure -> t -> t
     scope. Levels convert to indices by [l - k - 1]; closures are quoted by
     applying them to a fresh stuck variable. *)
 val quote : int -> t -> Type.t
-
-(** [vfst v] projects a value's first component: reduction on a pair, a stuck
-    [Fst] frame on a neutral *)
-val vfst : t -> t
-
-(** [vsnd v] is the second-component counterpart of {!vfst} *)
-val vsnd : t -> t
 
 (** [vproj i v] projects the [i]-th field of a record value: the matching
     constructor argument (past the parameters), or a stuck {!neutral.Proj} *)

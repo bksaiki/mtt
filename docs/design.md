@@ -1,10 +1,11 @@
 # Design
 
-A small dependent type theory in the Calculus of Constructions family:
-Π and Σ types, binary sums, `Unit` and `Empty`, and an impredicative
-`Prop` under a predicative cumulative `Type` tower — checked bidirectionally
-with normalization by evaluation (NbE), type-directed conversion, and
-definitional proof irrelevance.
+A small dependent type theory in the Calculus of Constructions family: Π types
+and parameterized inductive types — with binary sums and propositional equality
+still built in, and `Σ`/`Unit`/`Empty`/`Nat` now ordinary inductive declarations
+in the prelude — under an impredicative `Prop` and a predicative cumulative
+`Type` tower, checked bidirectionally with normalization by evaluation (NbE),
+type-directed conversion, and definitional proof irrelevance.
 
 This file records *settled* decisions; open questions live in
 `questions.md`, agreed-on work in `todo.md`.
@@ -12,20 +13,25 @@ This file records *settled* decisions; open questions live in
 ## Pipeline
 
 ```
-string ─parse─▶ Ast.t ─to_term─▶ Type.t ─eval─▶ Value.t ─quote─▶ Type.t ─pp─▶ string
-       lexer.mll        scope             value.ml          value.ml         type.ml
-       parser.mly       check (ast.ml)
+string ─parse─▶ Ast.t ─elab─▶ Type.t ─eval─▶ Value.t ─quote─▶ Type.t ─pp─▶ string
+       lexer.mll        elab.ml         value.ml          value.ml         type.ml
+       parser.mly    (re-checked by check.ml)
 ```
 
-Type checking (`check.ml`) sits on `Type.t` and decides equality on
-`Value.t`.
+Elaboration (`elab.ml`) is a type-directed surface → core pass that fills in the
+arguments the kernel demands explicitly (e.g. a constructor's parameters), then
+`check.ml` **re-checks** the core it produces — so the elaborator is untrusted,
+in the Lean/Rocq tradition. Type checking sits on `Type.t` and decides equality
+on `Value.t`. A residual type-free `Ast.to_term` (scope resolution only) still
+backs inductive-declaration checking and the forms the elaborator does not yet
+handle specially.
 
 The trusted core — `type`/`value`/`check`/`inductive`/`signature`/`error` — is
 an isolated library under `lib/kernel/` (`mtt_kernel`, left unwrapped so its
 modules stay top-level). It is location-free, notation-free, and
-self-contained; the frontend in `lib/` (lexer, parser, `ast`, `notation`,
-`stmt`, `prelude`) depends on it, never the reverse — so the dependency arrow
-enforces the layering.
+self-contained; the frontend in `lib/` (lexer, parser, `ast`, `elab`,
+`notation`, `stmt`, `prelude`) depends on it, never the reverse — so the
+dependency arrow enforces the layering.
 
 ## Representations
 
@@ -69,13 +75,13 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **δ** — `def`s unfold eagerly: a defined name is bound in the env to its
   value, so evaluation replaces it (no `Const` constructor, no kernel
   lookup). Upgrade path if unfolded output hurts: glued evaluation.
-- **η for pairs** (surjective pairing) — at a Σ type, values are compared
-  by their projections, the second at the family instantiated by the
-  first; `p ≡ (p.1, p.2)` holds for neutral `p`.
-- **η for records** — the same, generalized to any single-constructor,
-  non-recursive inductive: two values are equal iff their field projections
-  are. The 0-field case makes any two values equal — this is now how `Unit`
-  (a prelude record, `()` = `Unit.unit`) gets its η.
+- **η for records** (surjective pairing, generalized) — at any
+  single-constructor, non-recursive inductive, two values are equal iff their
+  field projections are (the second compared at the family instantiated by the
+  first, etc.). The 0-field case makes any two values equal — this is how `Unit`
+  (a prelude record, `()` = `Unit.unit`) gets its η — and the dependent pair
+  `Σ`/`(a,b)` is just the two-field case, so `p ≡ (p.1, p.2)` for neutral `p`
+  falls out of the same rule.
 - **ι** — `case` on an injection picks the branch (`vcase`), `J` on `refl`
   picks the diagonal (`vj`), and a recursor on a constructor picks the matching
   minor premise (`vrec`), feeding each recursive field its induction hypothesis
@@ -87,12 +93,13 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **cumulativity** (subsumption rule only, via `sub`): `Sort i ≤ Sort j`
   when `i ≤ j` (Rocq-flavored: `Prop ≤ Type`); products invariant in
   domains, covariant in codomains. `infer` still returns principal types
-  (`Sort i : Sort (i+1)` exactly, Russell-style). Σ types are negative
-  (projections, η, no eliminator) and form at plain `max` — a Σ is a
-  proposition only when both components are. A bare pair infers at the
-  constant family (Lean-style: `(a, b) : A × B`); only checking against an
-  expected Σ produces a dependent pair, since the family is not recoverable
-  from the components
+  (`Sort i : Sort (i+1)` exactly, Russell-style). The dependent pair `Σ` is no
+  longer a kernel type — it is the prelude record `Sigma`, formed by the generic
+  inductive rule (fixed at `Type`, pending universe polymorphism). A bare pair
+  still infers at the constant family (Lean-style: `(a, b) : A × B`), but that —
+  like recovering the family by checking against an expected `Σ` — is now the
+  elaborator's job (`elab.ml`), since neither is recoverable by the type-free
+  scope pass
 
 ## Universes
 
@@ -143,24 +150,29 @@ name, beside the de Bruijn context.
   names need only be unique within a type. (`Eq` is still reserved for the
   remaining builtin.)
 - **Records.** A single-constructor, non-recursive inductive is a record: it
-  has positional field projections (`x.i`, generalizing `Fst`/`Snd`) and
-  definitional η (see "η for records" above). Projections are a *primitive*
-  node (`Proj`), not derived from the recursor — that is what buys definitional
-  η and a clean ι (this is how Lean/Coq do records too); `ctor_head` carries
-  `nparams` so `vproj` skips parameters, keeping the NbE core signature-free.
-  The stuck projection's field type is recovered by the checker from the
-  scrutinee's type, so the node needs only the index. The surface is positional
-  (`x.1`); named projection (`x.field`) awaits the elaborator. This is what lets
-  `Unit`/`Σ` become ordinary inductives.
+  has positional field projections (`x.i`) and definitional η (see "η for
+  records" above). Projections are a *primitive* node (`Proj`), not derived from
+  the recursor — that is what buys definitional η and a clean ι (this is how
+  Lean/Coq do records too); `ctor_head` carries `nparams` so `vproj` skips
+  parameters, keeping the NbE core signature-free. The stuck projection's field
+  type is recovered by the checker from the scrutinee's type, so the node needs
+  only the index. The surface is positional (`x.1`); named projection
+  (`x.field`) awaits the elaborator. This is what let `Unit` and the dependent
+  pair `Σ` become ordinary inductives (`Σ`'s `.1`/`.2` are now just `Proj`, and
+  the old primitive `Fst`/`Snd` are gone).
 - **Replacing the builtins.** Retired so far: `Empty` (`inductive Empty : Prop`,
   with `absurd` a prelude `def` over `Empty.rec`), `Unit` (a prelude record,
-  `()` sugar for `Unit.unit`, η from the record rule), and `Nat` (a prelude
+  `()` sugar for `Unit.unit`, η from the record rule), `Nat` (a prelude
   inductive; decimal literals and succ-chain printing go through the notation
   registry below, and `Nat.rec` replaces the bespoke `natrec` — deleting the
-  `Nat`/`Zero`/`Succ`/`NatRec` nodes and their eval/quote/conv/infer cases). The
-  remaining inductively-describable builtins (`Sum`/`Σ`/`Eq`) follow; `todo.md`
-  tracks the sequence and prerequisites (their introductions are gated on the
-  elaborator).
+  `Nat`/`Zero`/`Succ`/`NatRec` nodes and their eval/quote/conv/infer cases), and
+  `Σ` (a prelude record `Sigma (A : Type) (B : A → Type)` with `@[notation
+  sigma]`; `Σ`/`×`/`(a,b)` retarget to it, `.1`/`.2` become `Proj 0`/`Proj 1`,
+  and the `Sigma`/`Pair`/`Fst`/`Snd` nodes and `vfst`/`vsnd` are deleted —
+  **fixed at `Type`**, so a Σ over the universe or a proof-irrelevant pair of
+  Props no longer forms, pending universe polymorphism). The remaining
+  inductively-describable builtins (`Sum`/`Eq`) follow; `todo.md` tracks the
+  sequence and prerequisites (their introductions are gated on the elaborator).
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
   only as a *direct* recursive field `T params`, never under an arrow or nested
   (more conservative than full strict positivity, a later extension);
@@ -178,22 +190,28 @@ Surface sugar like `()` and decimal literals is *notation*, not kernel concern:
 it touches only parse and print, never checking or evaluation. A declaration
 opts an inductive into a notation **role** with an attribute,
 `@[notation <role>] inductive …` — `unit` (its sole nullary constructor abbreviates
-`()`) and `nat` (a `zero`/`succ` pair, so decimal literals expand to succ-chains
-and the printer folds them back). Registration is **one-shot** and
-**shape-checked**: the role demands a particular constructor shape, and a
-malformed or duplicate binding is a type error.
+`()`), `nat` (a `zero`/`succ` pair, so decimal literals expand to succ-chains
+and the printer folds them back), and `sigma` (a two-parameter record, so
+`Σ (x : A) ⇒ B` / `A × B` abbreviate the applied former and `(a, b)` its
+constructor). Registration is **one-shot** and **shape-checked**: the role
+demands a particular constructor shape, and a malformed or duplicate binding is
+a type error.
 
 **The kernel is notation-ignorant** — it never names `Unit`/`Nat` and holds no
 notation type at all. The registry lives entirely in the frontend (the
 `Notation` module): a `Notation.t` mapping each role to the constructors that
 fill it, threaded alongside the kernel context in a `Stmt.session`. It drives
 both directions:
-- **forward** — `Ast.to_term` reads it to resolve `()` → the unit constructor
-  and `5` → a succ-chain of the registered `Nat`;
-- **reverse** — `Notation.sugar` turns it into a `Type.t → string option` hook
-  that the kernel printer (`Type.pp_in`) consults to fold a subterm into a
-  surface atom (`()`, a decimal). The kernel prints only core syntax; it knows
-  nothing of what the hook folds.
+- **forward** — the parse pass (`Ast.to_term`, and `Elab` for the type-directed
+  cases) reads it to resolve `()` → the unit constructor, `5` → a succ-chain of
+  the registered `Nat`, and `Σ`/`×`/`(a,b)` → the registered `Sigma` former and
+  constructor (the pair's parameters recovered by the elaborator);
+- **reverse** — `Notation.sugar` is the hook the kernel printer (`Type.pp_in`)
+  consults to fold a subterm into surface notation. Atomic sugar (`()`, a
+  decimal) needs only the subterm, but infix/mixfix forms (`A × B`, a tuple)
+  need to render their pieces, so the hook takes a `recurse` callback (and the
+  binders in scope) and returns `(precedence, text)` — the kernel supplies the
+  recursion and parenthesizes the result, but knows nothing of what is folded.
 
 Everything user-facing is rendered in the frontend: `#check`/`#eval`/`:env`
 output via `Notation.show`, error messages via `Notation.render_error`. The
@@ -205,8 +223,8 @@ vocabulary itself lives in the small `Error` module.)
 
 This is the "faithful core printer + frontend delaborator" split: the kernel
 emits terms, the frontend delaborates. The longer arc — a full **delaborator**
-(core → surface, the elaborator's mirror) sharing this registry, plus `×`/`+`/`=`
-notation — is tracked in `todo.md`.
+(core → surface, the elaborator's mirror) sharing this registry, plus the
+remaining `+`/`=` notation — is tracked in `todo.md`.
 
 ## Errors and locations
 
@@ -216,9 +234,9 @@ in file mode — type errors are reported with `file:line:col` locations
 carry exact spans (every `Ast` node is `{ loc; desc }`, and each `Stmt.t`
 records its span); type errors are located at the failing *statement*, because the
 core language is deliberately location-free — the kernel doesn't care
-where a term came from. Finer-grained type-error positions arrive if/when
-an elaborator (with a located surface language) sits between `Ast` and the
-checker.
+where a term came from. An elaborator (`elab.ml`) now sits between `Ast` and the
+checker, but does not yet thread the surface locations through into type errors;
+finer-grained positions arrive when it does.
 
 ## Top-level declarations
 

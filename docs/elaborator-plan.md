@@ -90,15 +90,42 @@ Two deviations from the original sketch, both deferred rather than dropped:
 
 ### Phase 2 — Remove `Σ` and `Sum`
 
-Rides on Phase 1; resumes the kernel-shrink program. Likely two PRs.
+Rides on Phase 1; resumes the kernel-shrink program. Two PRs.
 
-- Declare `Sigma` (a record) and `Sum` as prelude inductives; retarget the
-  `×`/`+`/`(a,b)`/`inl`/`inr` notation to them; delete the builtin
-  `Sigma`/`Pair`/`Fst`/`Snd` and `Sum`/`Inl`/`Inr`/`Case` core nodes and all
-  their eval/quote/conv/infer machinery. (`.1`/`.2` become `Proj 0`/`Proj 1`;
-  `Proj` stays — it is the record-projection primitive.)
-- Mirrors the `Nat` removal: a real kernel shrink, with the current builtin
-  tests as the regression spec.
+#### Σ — **done**
+
+- `Sigma (A : Type) (B : A → Type)` is now a prelude record with
+  `@[notation sigma]`. The kernel's `Sigma`/`Pair`/`Fst`/`Snd` core+value nodes,
+  `vfst`/`vsnd`, and their eval/quote/conv/infer cases are gone; `.1`/`.2` are
+  the generic `Proj 0`/`Proj 1`, and η falls out of the record rule.
+- Notation retargets `Σ`/`×`/`(a,b)` to the record. This needed a **richer
+  printer hook**: the kernel's `sugar` callback now takes `recurse`/`names` and
+  returns `(prec, text)`, so the frontend can render infix `×`/`Σ` and flatten
+  tuples while the kernel stays notation-ignorant (it only provides recursion +
+  parenthesization).
+- Forward elaboration: pairs are the elaborator's job now (the type-free
+  `to_term` cannot recover the parameters). `Ast.Pair` checks against the
+  expected Σ (Phase-1 omission) or, inferring, defaults to the constant family
+  (the old Pair-infer rule); `Σ`/`×` desugar to the applied former; `.1`/`.2`
+  and pairs-under-them are handled in `Elab`. Consequently
+  **`Parse.term_of_string*` now routes through `Elab`** (the Phase-1 deferral),
+  in an empty closed-term context.
+- **Universe regression (accepted):** the inductive is fixed at `Type`, so the
+  builtin's `max`-rule cases are gone — `Σ (A : Type) ⇒ A` and a proof-relevant
+  `p × q : Prop` no longer form. Restoring them (and a Prop-level `And`) waits on
+  universe polymorphism. The sigma tests were rewritten accordingly.
+- **Known transient gap:** a *bare pair literal* directly inside a still-builtin
+  form that delegates to `to_term` (`Eq`/`inl`/`case`/`J` endpoints) raises
+  "a pair requires a known type"; those forms become elaborator-native as Sum
+  (next) and Eq (Phase 5) are removed. Not hit by the prelude or tests.
+
+#### Sum — todo
+
+- Declare `Sum` as a prelude inductive; retarget `+`/`inl`/`inr`/`case` to it;
+  delete the builtin `Sum`/`Inl`/`Inr`/`Case` core nodes and their machinery.
+  `case` desugars to `Sum.rec` (recovering the parameters, reordering the
+  scrutinee to the recursor's major position). Same `Type`-fixed universe
+  tradeoff as Σ (a proof-irrelevant `Or` awaits universe polymorphism).
 
 ### Phase 3 — Metavariables, unification, holes
 

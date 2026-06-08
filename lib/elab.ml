@@ -101,6 +101,10 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         in
         Type.Lam (x, a', go (Check.bind x va ctx) body_mode b)
     | Ast.App _ -> elab_app ctx mode s
+    (* the generic record projections; handled here (not delegated) so a literal
+       pair underneath — [(a, b).1] — still reaches the elaborator *)
+    | Ast.Fst t -> Type.Proj (0, go ctx Infer t)
+    | Ast.Snd t -> Type.Proj (1, go ctx Infer t)
     (* ascription is the typed identity: it forces a checking judgment for [t],
        and the redex evaporates under evaluation (as in {!Ast.to_term}) *)
     | Ast.Ascribe (t, a) ->
@@ -108,9 +112,37 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         let va = Value.eval ctx.Check.env a' in
         let t' = go ctx (Check va) t in
         Type.App (Type.Lam ("x", a', Type.Var 0), t')
-    (* the builtin formers and their intro/elim forms (and the [()]/numeral
-       sugar) carry no constructor inference yet; translate them syntactically,
-       exactly as {!Ast.to_term} does, against the current binder names *)
+    (* a pair is sugar for the dependent-pair record's constructor [mk]: checked
+       against the Σ it recovers the parameters (Phase-1 omission); inferred it
+       defaults to the constant family, as the old (Pair-infer) rule did *)
+    | Ast.Pair (a, b) -> (
+        match notation.Notation.sigma with
+        | None ->
+            Error.type_error
+              [ Error.txt "a pair requires the sigma notation to be registered"
+              ]
+        | Some mk -> (
+            match mode with
+            | Check (Value.VInd (name, [ pa; pb ]))
+              when String.equal name mk.Type.ind ->
+                checked_ctor ctx mk [ pa; pb ] [ a; b ]
+            | _ ->
+                let a' = go ctx Infer a and b' = go ctx Infer b in
+                let ta = Check.infer ctx a' and tb = Check.infer ctx b' in
+                let bfun =
+                  Type.Lam
+                    ( ""
+                    , Value.quote ctx.Check.lvl ta
+                    , Value.quote (ctx.Check.lvl + 1) tb )
+                in
+                List.fold_left
+                  (fun core x -> Type.App (core, x))
+                  (Type.Ctor mk)
+                  [ Value.quote ctx.Check.lvl ta; bfun; a'; b' ]))
+    (* the remaining builtin formers and their intro/elim forms (and the
+       [()]/numeral/Σ/× sugar) carry no constructor inference yet; translate
+       them syntactically, exactly as {!Ast.to_term} does, against the binder
+       names *)
     | _ -> Ast.to_term sg ~notation ctx.Check.names s
   (* an application spine [head arg…] *)
   and elab_app ctx mode s : Type.t =
@@ -129,24 +161,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
            recover them from the expected type and elaborate only the fields *)
         | Check (Value.VInd (name, pvals))
           when String.equal name h.Type.ind && List.length args = nfields ->
-            let head_core =
-              List.fold_left
-                (fun core p -> Type.App (core, Value.quote ctx.Check.lvl p))
-                (Type.Ctor h) pvals
-            in
-            (* the field telescope: the constructor's type with its parameter
-               binders instantiated by the recovered parameter values (a Pi is a
-               type, so we walk its closures rather than [Value.apply]) *)
-            let cty = Value.eval [] (Inductive.ctor_type spec h.Type.cindex) in
-            let rec instantiate ty = function
-              | [] -> ty
-              | p :: rest -> (
-                  match ty with
-                  | Value.Pi (_, _, c) ->
-                      instantiate (Value.apply_closure c p) rest
-                  | _ -> ty)
-            in
-            elab_spine ctx head_core (instantiate cty pvals) args
+            checked_ctor ctx h pvals args
         (* otherwise the parameters are explicit (or we are inferring): walk the
            constructor's full type *)
         | _ ->
@@ -174,6 +189,31 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           | _ -> walk (Type.App (core, go ctx Infer a)) ty rest)
     in
     walk head_core head_ty args
+  (* a constructor [h] whose [pvals] parameters are recovered (from an expected
+     inductive type, or inferred for a pair) and prepended, then its remaining
+     fields [args] elaborated against the instantiated field telescope *)
+  and checked_ctor ctx (h : Type.ctor_head) pvals args : Type.t =
+    let spec =
+      match Signature.find sg h.Type.ind with
+      | Some s -> s
+      | None -> assert false
+    in
+    let head_core =
+      List.fold_left
+        (fun core p -> Type.App (core, Value.quote ctx.Check.lvl p))
+        (Type.Ctor h) pvals
+    in
+    (* a Pi is a type, so instantiate its parameter binders by walking the
+       closures, not by [Value.apply] *)
+    let cty = Value.eval [] (Inductive.ctor_type spec h.Type.cindex) in
+    let rec instantiate ty = function
+      | [] -> ty
+      | p :: rest -> (
+          match ty with
+          | Value.Pi (_, _, c) -> instantiate (Value.apply_closure c p) rest
+          | _ -> ty)
+    in
+    elab_spine ctx head_core (instantiate cty pvals) args
   in
   go ctx0 mode0 s0
 

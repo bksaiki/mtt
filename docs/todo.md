@@ -45,8 +45,15 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
             and their eval/quote/conv/infer cases — the generic recursor
             subsumes them
       - [ ] `Sum` (surfaces the implicit-argument question for `inl`/`inr`)
-      - [ ] `Σ` (needs the surface `.i` projections + the `(a,b)`/`×`/`Σ`
-            notation retargeted to the record)
+      - [x] `Σ`: a prelude record `inductive Sigma (A : Type) (B : A → Type)`
+            with `@[notation sigma]`; `(a,b)`/`×`/`Σ` retarget to it (the
+            elaborator recovers the parameters), `.1`/`.2` become the generic
+            `Proj 0`/`Proj 1`, and η comes from the record rule. Deleted the
+            `Sigma`/`Pair`/`Fst`/`Snd` core and value nodes, `vfst`/`vsnd`, and
+            their eval/quote/conv/infer cases. **Fixed at `Type`**: a Σ ranging
+            over the universe (`Σ (A : Type) ⇒ A`) or a proof-irrelevant pair of
+            Props (`p × q : Prop`) no longer forms — that needs universe
+            polymorphism (above), as does a Prop-level `And`
       - [ ] `Eq` (needs indexed families, above)
 
 ## Elaborator (type-directed surface → core)

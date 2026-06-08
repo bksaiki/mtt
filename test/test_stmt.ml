@@ -213,15 +213,20 @@ let%expect_test "Empty: irrelevance and stuck absurd" =
     ];
   [%expect {| fun (A : Prop) => A -> Empty : Prop -> Prop |}]
 
-let%expect_test "sigma: beta, eta, dependent pairs, irrelevance" =
+(* Σ is the prelude record [Sigma]: pairs check against it (recovering the
+   parameters), projections are the generic record projections, and η comes from
+   the record rule. Fixed at Type, so the old "a pair of props is an irrelevant
+   Prop" no longer holds (it awaits universe polymorphism). *)
+let%expect_test "sigma: beta, eta, dependent pairs" =
   session
     [ "axiom N : Type"
     ; "axiom zero : N"
-    ; (* beta: projections of a literal pair *)
+    ; (* beta: projecting a literal pair *)
       "def p : N × N := (zero, zero)"
     ; "#check_equal p.1 zero"
-    ; (* a dependent pair: the type of the package depends on its head *)
-      "def package : Σ (A : Type) ⇒ A := (Unit, ())"
+    ; (* a dependent pair, recovered by checking against the Σ; its second
+         component's type mentions the first *)
+      "def package : Σ (n : Nat) ⇒ Eq Nat n n := (0, refl)"
     ; "#check package.2"
     ; (* eta (surjective pairing) on a neutral pair *)
       "axiom q : N × N"
@@ -229,13 +234,8 @@ let%expect_test "sigma: beta, eta, dependent pairs, irrelevance" =
     ; (* eta and unit-eta compose: any two pairs of units are equal *)
       "axiom r : Unit × Unit"
     ; "#check_equal r ((), ())"
-    ; (* proof pairs are props, hence irrelevant *)
-      "axiom a : Prop"
-    ; "axiom c1 : a × a"
-    ; "axiom c2 : a × a"
-    ; "#check_equal c1 c2"
     ];
-  [%expect {| () : Unit |}]
+  [%expect {| refl : Eq Nat 0 0 |}]
 
 let%expect_test "sums: iota, stuck cases, irrelevance" =
   session

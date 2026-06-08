@@ -29,8 +29,10 @@
     codomains. {!infer} still returns principal types: Sort i : Sort (i+1)
     exactly.
 
-    The typing rules ({!infer} synthesizes; (Refl), (Pair-check), (Inl), (Inr)
-    are checking rules):
+    The typing rules ({!infer} synthesizes; (Refl), (Inl), (Inr) are checking
+    rules). The dependent pair Σ/(a,b)/.1/.2 is no longer primitive — it is the
+    prelude record [Sigma], reached through the generic inductive rules below
+    and the record projection (Proj); only (Proj) is shown here:
 
     {v
       (x : A) ∈ Γ
@@ -40,26 +42,9 @@
       ──────────────────────── (Sort)
       Γ ⊢ Sort i : Sort (i+1)
 
-      Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
-      ──────────────────────────────────────── (Sigma)
-         Γ ⊢ Σ (x : A) ⇒ B : Sort (max i j)
-
-        plain max: a Σ is a proposition only when both components are
-
-      Γ ⊢ a ⇐ A    Γ ⊢ b ⇐ B[a/x]
-      ────────────────────────────── (Pair-check)
-        Γ ⊢ (a, b) ⇐ Σ (x : A) ⇒ B
-
-      Γ ⊢ a : A    Γ ⊢ b : B
-      ──────────────────────── (Pair-infer)
-        Γ ⊢ (a, b) : A × B
-
-        inference defaults to the constant family, as in Lean; a pair
-        only gets a dependent Σ type by checking against one
-
-      Γ ⊢ p : Σ (x : A) ⇒ B          Γ ⊢ p : Σ (x : A) ⇒ B
-      ────────────────────── (Fst)   ─────────────────────── (Snd)
-          Γ ⊢ p.1 : A                  Γ ⊢ p.2 : B[p.1/x]
+      Γ ⊢ e : T p̄    T a single-constructor inductive with fields F₀ … Fₙ
+      ──────────────────────────────────────────────────────────────────── (Proj)
+        Γ ⊢ e.(i+1) : Fᵢ[p̄, e.1 … e.i]   (earlier projections substituted)
 
       Γ ⊢ A : Sort i    Γ ⊢ B : Sort j
       ───────────────────────────────── (Sum)
@@ -152,12 +137,12 @@ val vl : ctx -> Value.t -> Error.frag
 (** [conv ctx ty v1 v2] decides definitional equality of the values [v1] and
     [v2] at the type [ty], which both must inhabit. Type-directed: at a Prop,
     true by proof irrelevance; at a Pi, both sides are applied to a fresh
-    variable (η, so lambda annotations are never compared); at a Σ, by comparing
-    projections (surjective pairing); at a record (single-constructor) inductive
-    likewise by its projections (η — the 0-field case makes any two values
-    equal); at a sum or other positive inductive, constructors compare
-    componentwise and there is no η; at a sort, the values are types and are
-    compared structurally. *)
+    variable (η, so lambda annotations are never compared); at a record
+    (single-constructor) inductive by comparing field projections (η, surjective
+    pairing — the dependent pair is one such record, and the 0-field case makes
+    any two values equal); at a sum or other positive inductive, constructors
+    compare componentwise and there is no η; at a sort, the values are types and
+    are compared structurally. *)
 val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
 
 (** [infer ctx t] synthesizes the type of [t] as a value, by the typing rules in

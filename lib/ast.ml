@@ -56,6 +56,16 @@ let var_spine t =
 exception Unbound_variable of Loc.t * string
 
 let to_term sg ?(notation = Notation.empty) names s =
+  (* the inductive registered for the [sigma] role, that [Σ]/[×] desugar to *)
+  let sigma_former loc =
+    match notation.Notation.sigma with
+    | Some mk -> mk.Type.ind
+    | None ->
+        raise (Unbound_variable (loc, "Σ/× (no sigma notation registered)"))
+  in
+  let sigma_app loc a bfun =
+    Type.App (Type.App (Type.Ind (sigma_former loc), a), bfun)
+  in
   let rec go env s =
     match s.desc with
     (* a bare name is a local binder (de Bruijn) first, otherwise a global
@@ -101,12 +111,23 @@ let to_term sg ?(notation = Notation.empty) names s =
         | None ->
             raise (Unbound_variable (s.loc, "() (no unit notation registered)"))
         )
-    | Sigma (x, a, b) -> Type.Sigma (x, go env a, go (x :: env) b)
-    (* non-dependent product: same dummy-binder trick as Arrow *)
-    | Prod (a, b) -> Type.Sigma ("", go env a, go ("" :: env) b)
-    | Pair (a, b) -> Type.Pair (go env a, go env b)
-    | Fst t -> Type.Fst (go env t)
-    | Snd t -> Type.Snd (go env t)
+    (* Σ/× desugar to the registered dependent-pair former applied to [A] and
+       the family [λ x : A ⇒ B] (a dummy binder when non-dependent), so the
+       kernel needs no Σ of its own *)
+    | Sigma (x, a, b) ->
+        let a' = go env a in
+        sigma_app s.loc a' (Type.Lam (x, a', go (x :: env) b))
+    | Prod (a, b) ->
+        let a' = go env a in
+        sigma_app s.loc a' (Type.Lam ("", a', go ("" :: env) b))
+    (* projections are the generic record projections *)
+    | Fst t -> Type.Proj (0, go env t)
+    | Snd t -> Type.Proj (1, go env t)
+    (* a pair needs the expected Σ type to recover its parameters, so it is the
+       elaborator's job ({!Elab}); this type-free pass cannot build it *)
+    | Pair _ ->
+        Error.type_error
+          [ Error.txt "a pair requires a known type (elaborate it in context)" ]
     | Sum (a, b) -> Type.Sum (go env a, go env b)
     | Inl t -> Type.Inl (go env t)
     | Inr t -> Type.Inr (go env t)

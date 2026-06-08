@@ -124,16 +124,22 @@ let%expect_test "Unit and its element" =
   infer "Unit -> Unit";
   [%expect {| Type |}]
 
-let%expect_test "sigma formation sorts" =
-  infer {|Σ (A : Type) ⇒ A|};
-  [%expect {| Type 1 |}];
+(* Σ is now the prelude record [Sigma], fixed at Type (the kernel has no Σ of
+   its own). A universe-polymorphic Σ that forms at the max of its components —
+   in particular one ranging over [Type] itself, or one of two Props landing
+   back in Prop — awaits universe polymorphism. *)
+let%expect_test "sigma formation sorts (Type-fixed inductive)" =
   infer "Unit × Unit";
   [%expect {| Type |}];
-  (* plain max: a pair of props is a prop, data never hides in Prop *)
-  infer "(p : Prop) -> (q : Prop) -> (p × q : Prop) -> Unit";
-  [%expect {| Type |}];
   infer "Unit × Nat";
-  [%expect {| Type |}]
+  [%expect {| Type |}];
+  (* a dependent Σ whose components live in Type (the proof component is a Prop,
+     included into Type by cumulativity) *)
+  infer {|Σ (n : Nat) ⇒ Eq Nat n n|};
+  [%expect {| Type |}];
+  (* fixed at Type: a Σ ranging over the universe itself no longer forms *)
+  infer {|Σ (A : Type) ⇒ A|};
+  [%expect {| type error: this term has type Type 1 but Type was expected |}]
 
 let%expect_test "pair inference defaults to the constant family (Lean-style)" =
   infer "((), ())";
@@ -141,18 +147,16 @@ let%expect_test "pair inference defaults to the constant family (Lean-style)" =
   (* the components' types may mention bound variables *)
   infer {|λ (A : Type) (x : A) ⇒ (x, x)|};
   [%expect {| (A : Type) -> A -> A × A |}];
-  (* the constant family is the default; a dependent type needs checking *)
-  infer "(Unit, ())";
-  [%expect {| Type × Unit |}];
-  infer {|((Unit, ()) : Σ (A : Type) ⇒ A)|};
-  [%expect {| Σ (A : Type) ⇒ A |}];
+  (* a dependent type is recovered by checking against the Σ *)
   infer {|(((), ()) : Unit × Unit)|};
   [%expect {| Unit × Unit |}];
-  (* dependent: the second projection's type mentions the first *)
-  infer {|λ p : (Σ (A : Type) ⇒ A) ⇒ p.2|};
-  [%expect {| (p : Σ (A : Type) ⇒ A) -> p.1 |}];
+  infer {|((0, refl) : Σ (n : Nat) ⇒ Eq Nat n n)|};
+  [%expect {| Σ (n : Nat) ⇒ Eq Nat n n |}];
+  (* the second projection's type mentions the first *)
+  infer {|λ p : (Σ (n : Nat) ⇒ Eq Nat n n) ⇒ p.2|};
+  [%expect {| (p : Σ (n : Nat) ⇒ Eq Nat n n) -> Eq Nat p.1 p.1 |}];
   infer "λ u : Unit ⇒ u.1";
-  [%expect {| type error: expected a pair, but u has type Unit |}]
+  [%expect {| type error: Unit has no field .1 |}]
 
 let%expect_test "sum formation sorts" =
   infer "Unit + Unit";

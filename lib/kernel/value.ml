@@ -2,8 +2,6 @@ type t =
   | Sort of int
   | Pi of string * t * closure
   | Lam of string * t * closure
-  | Sigma of string * t * closure
-  | Pair of t * t
   | Sum of t * t
   | Inl of t
   | Inr of t
@@ -23,8 +21,6 @@ type t =
 and neutral =
   | Var of int (* de Bruijn level *)
   | App of neutral * t
-  | Fst of neutral (* a stuck first projection *)
-  | Snd of neutral (* a stuck second projection *)
   | Proj of int * neutral (* a stuck record field projection *)
   | Case of t * neutral * t * t (* a stuck case: motive, scrutinee, branches *)
   | J of t * t * neutral (* a stuck J: motive, diagonal, stuck proof *)
@@ -48,10 +44,6 @@ let rec eval env t =
   | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
   | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
-  | Type.Sigma (x, a, b) -> Sigma (x, eval env a, { env; body = b })
-  | Type.Pair (a, b) -> Pair (eval env a, eval env b)
-  | Type.Fst t -> vfst (eval env t)
-  | Type.Snd t -> vsnd (eval env t)
   | Type.Proj (i, t) -> vproj i (eval env t)
   | Type.Sum (a, b) -> Sum (eval env a, eval env b)
   | Type.Inl t -> Inl (eval env t)
@@ -138,18 +130,6 @@ and vrec h args =
   | Neutral n -> Neutral (Rec (h, params @ (motive :: minors), n))
   | _ -> assert false
 
-(* projections: reduce on a pair, get stuck on a neutral. Anything else is
-   ill-typed (unreachable for checked terms). *)
-and vfst = function
-  | Pair (a, _) -> a
-  | Neutral n -> Neutral (Fst n)
-  | _ -> assert false
-
-and vsnd = function
-  | Pair (_, b) -> b
-  | Neutral n -> Neutral (Snd n)
-  | _ -> assert false
-
 (* the [i]-th field projection of a record: on a constructor, the matching
    argument (skipping the [nparams] leading parameters); a stuck frame on a
    neutral *)
@@ -185,8 +165,6 @@ let rec quote l v =
   | Refl -> Type.Refl
   | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
   | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
-  | Sigma (x, a, c) -> Type.Sigma (x, quote l a, quote_closure l c)
-  | Pair (a, b) -> Type.Pair (quote l a, quote l b)
   | VInd (name, args) -> quote_spine l (Type.Ind name) args
   | VCtor (h, args) -> quote_spine l (Type.Ctor h) args
   | VRec (h, args) -> quote_spine l (Type.Rec h) args
@@ -204,8 +182,6 @@ and quote_neutral l = function
      binders, is index l - k - 1 *)
   | Var k -> Type.Var (l - k - 1)
   | App (n, a) -> Type.App (quote_neutral l n, quote l a)
-  | Fst n -> Type.Fst (quote_neutral l n)
-  | Snd n -> Type.Snd (quote_neutral l n)
   | Proj (i, n) -> Type.Proj (i, quote_neutral l n)
   | Case (p, n, u, v) ->
       Type.Case (quote l p, quote_neutral l n, quote l u, quote l v)

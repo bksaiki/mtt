@@ -134,15 +134,6 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       match infer_neutral ctx m with
       | Value.Pi (_, _, c) -> Value.apply_closure c a
       | _ -> assert false (* values are well-typed by invariant *))
-  | Value.Fst n -> (
-      match infer_neutral ctx n with
-      | Value.Sigma (_, a, _) -> a
-      | _ -> assert false)
-  | Value.Snd n -> (
-      match infer_neutral ctx n with
-      | Value.Sigma (_, _, c) ->
-          Value.apply_closure c (Value.Neutral (Value.Fst n))
-      | _ -> assert false)
   | Value.Proj (i, n) -> (
       match infer_neutral ctx n with
       | Value.VInd (name, params) ->
@@ -167,12 +158,7 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.Pi (x, a, c) ->
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
       imax (sort_of ctx a) j
-  (* plain max, no imax: a Σ is a proposition only when both components are, so
-     data can never hide inside a Prop *)
-  | Value.Sigma (x, a, c) ->
-      let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
-      max (sort_of ctx a) j
-  (* plain max, like sigma: a sum is a proposition only when both sides are *)
+  (* plain max: a sum is a proposition only when both sides are *)
   | Value.Sum (a, b) -> max (sort_of ctx a) (sort_of ctx b)
   | Value.Eq _ -> 0 (* Eq : Prop *)
   | Value.Neutral n -> (
@@ -185,7 +171,6 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.VCtor _
   | Value.VRec _
   | Value.Lam _
-  | Value.Pair _
   | Value.Inl _
   | Value.Inr _
   | Value.Refl ->
@@ -207,12 +192,6 @@ let rec conv ctx ty v1 v2 =
         (Value.apply v2 v)
   (* at a sort, the values are types: compare strictly *)
   | Value.Sort _ -> conv_ty ~cumul:false ctx v1 v2
-  (* η for pairs (surjective pairing): compare the projections, the second at
-     the instantiated component type *)
-  | Value.Sigma (_, a, c) ->
-      let f1 = Value.vfst v1 in
-      conv ctx a f1 (Value.vfst v2)
-      && conv ctx (Value.apply_closure c f1) (Value.vsnd v1) (Value.vsnd v2)
   (* at a sum type there is no η: injections compare componentwise, and a stuck
      value equals nothing but another stuck value *)
   | Value.Sum (a, b) -> (
@@ -269,15 +248,7 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
       let v = fresh ctx in
       conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
         (Value.apply_closure c2 v)
-  (* sigma: unlike pi there is no contravariant position, so both components are
-     covariant under cumulativity *)
-  | Value.Sigma (x, a1, c1), Value.Sigma (_, a2, c2) ->
-      conv_ty ~cumul ctx a1 a2
-      &&
-      let v = fresh ctx in
-      conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
-        (Value.apply_closure c2 v)
-  (* sum: covariant in both sides, like sigma *)
+  (* sum: covariant in both sides *)
   | Value.Sum (a1, b1), Value.Sum (a2, b2) ->
       conv_ty ~cumul ctx a1 a2 && conv_ty ~cumul ctx b1 b2
   (* equality: invariant in the type, and the endpoints are compared at it.
@@ -331,15 +302,6 @@ and conv_neutral ctx n1 n2 : Value.t option =
             Some (Value.apply_closure c a1)
           else
             None
-      | _ -> None)
-  | Value.Fst n1, Value.Fst n2 -> (
-      match conv_neutral ctx n1 n2 with
-      | Some (Value.Sigma (_, a, _)) -> Some a
-      | _ -> None)
-  | Value.Snd n1, Value.Snd n2 -> (
-      match conv_neutral ctx n1 n2 with
-      | Some (Value.Sigma (_, _, c)) ->
-          Some (Value.apply_closure c (Value.Neutral (Value.Fst n1)))
       | _ -> None)
   | Value.Proj (i1, m1), Value.Proj (i2, m2) when i1 = i2 -> (
       match conv_neutral ctx m1 m2 with
@@ -570,43 +532,6 @@ let rec infer ctx t =
             ; Error.txt " has type "
             ; vl ctx ty
             ])
-  (* (Sigma): plain max — no imax, see sort_of *)
-  | Type.Sigma (x, a, b) ->
-      let i = infer_univ ctx a in
-      let j = infer_univ (bind x (Value.eval ctx.env a) ctx) b in
-      Value.Sort (max i j)
-  (* (Pair-infer): a bare pair infers at the constant family — the components
-     cannot determine a dependent one, so like Lean we default to (type of a) ×
-     (type of b); dependent pairs arrive via checking. Quoting [tb] one level up
-     weakens it across the closure's binder. *)
-  | Type.Pair (a, b) ->
-      let ta = infer ctx a in
-      let tb = infer ctx b in
-      Value.Sigma
-        ("", ta, { env = ctx.env; body = Value.quote (ctx.lvl + 1) tb })
-  (* (Fst) *)
-  | Type.Fst p -> (
-      match infer ctx p with
-      | Value.Sigma (_, a, _) -> a
-      | ty ->
-          Error.type_error
-            [ Error.txt "expected a pair, but "
-            ; tm ctx p
-            ; Error.txt " has type "
-            ; vl ctx ty
-            ])
-  (* (Snd): the result type instantiates the family at the first projection *)
-  | Type.Snd p -> (
-      match infer ctx p with
-      | Value.Sigma (_, _, c) ->
-          Value.apply_closure c (Value.vfst (Value.eval ctx.env p))
-      | ty ->
-          Error.type_error
-            [ Error.txt "expected a pair, but "
-            ; tm ctx p
-            ; Error.txt " has type "
-            ; vl ctx ty
-            ])
   (* (Proj): the i-th field of a record, at its dependent field type *)
   | Type.Proj (i, e) -> (
       match infer ctx e with
@@ -833,11 +758,6 @@ and check ctx t expected =
   (* (Inl)/(Inr): an injection checks against a sum *)
   | Type.Inl a, Value.Sum (va, _) -> check ctx a va
   | Type.Inr b, Value.Sum (_, vb) -> check ctx b vb
-  (* (Pair): check the components, the second against the family instantiated at
-     the first *)
-  | Type.Pair (a, b), Value.Sigma (_, dom, c) ->
-      check ctx a dom;
-      check ctx b (Value.apply_closure c (Value.eval ctx.env a))
   (* (Refl): reflexivity proves x = y exactly when x ≡ y *)
   | Type.Refl, Value.Eq (va, vx, vy) ->
       if not (conv ctx va vx vy) then
