@@ -304,8 +304,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
 (* the cumulativity relation t1 ≤ t2 on types, used by subsumption *)
 let sub ctx t1 t2 = conv_ty ~cumul:true ctx t1 t2
 
-(* the rule markers below refer to the typing rules spelled out on [infer] in
-   check.mli *)
+(* the rule markers below refer to the typing rules in check.mli's header *)
 let rec infer ctx t =
   match t with
   | Type.Unit -> Value.Sort 1 (* (Unit): Unit : Type *)
