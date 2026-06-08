@@ -9,6 +9,34 @@ let interactive = Unix.isatty Unix.stdin
    the first statement — so an opted-out file never pays for it. A `prelude`
    directive anywhere but first is an error. *)
 
+let help =
+  String.concat "\n"
+    [ "mtt REPL — enter one statement per line. Commands:"
+    ; "  :help, :h        show this help"
+    ; "  :env             list the bindings in scope"
+    ; "  :quit, :q        exit (or Ctrl-D)"
+    ; ""
+    ; "  #check t         report the normal form and type of t"
+    ; "  #eval t          report just the normal form of t"
+    ; "  #check_equal t u assert t and u are definitionally equal"
+    ; "  axiom x : A      postulate x of type A"
+    ; "  def x [: A] := t define x (annotation optional)"
+    ; "  theorem x : A := t  prove A with t (opaque)"
+    ; "  prelude          start without the standard prelude (only valid for \
+       first line)"
+    ]
+
+(* print the bindings in scope, oldest first (the context lists are
+   most-recent-first). Neutral levels are absolute, so every type renders
+   correctly against the full set of names. *)
+let print_env (ctx : Check.ctx) =
+  match List.rev (List.combine ctx.names ctx.types) with
+  | [] -> print_endline "(empty context)"
+  | binds ->
+      List.iter
+        (fun (x, ty) -> Printf.printf "%s : %s\n" x (Check.show ctx ty))
+        binds
+
 (* REPL: run one statement, printing its message or error, returning the ctx *)
 let run_repl ctx (stmt : Stmt.t) =
   match Stmt.run ctx stmt with
@@ -31,6 +59,23 @@ let rec repl ctx initialized =
   match In_channel.input_line In_channel.stdin with
   | None -> if interactive then print_newline ()
   | Some "" -> repl ctx initialized
+  (* REPL meta-commands: handled here, not in the grammar; they leave the
+     context (and the prelude-init decision) untouched *)
+  | Some (":quit" | ":q") -> ()
+  | Some (":help" | ":h") ->
+      print_endline help;
+      repl ctx initialized
+  | Some ":env" ->
+      (* before the first statement the prelude has not loaded yet (it loads
+         lazily, so a leading `prelude` can still opt out): say so rather than
+         report a misleading empty context *)
+      if initialized then
+        print_env ctx
+      else
+        print_endline
+          "no bindings yet (the prelude loads on the first statement; \
+           `prelude` opts out)";
+      repl ctx initialized
   | Some line -> (
       match Parse.stmt_of_string line with
       | exception Parse.Error (loc, msg) ->

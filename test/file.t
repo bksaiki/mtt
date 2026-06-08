@@ -1,45 +1,34 @@
-Checking a file: declarations may span lines; only #check/#eval print.
+Checking a file: declarations may span lines, only #check/#eval print, and
+the prelude (with Nat, add, ...) is available by default.
 
   $ cat > demo.mtt <<EOF
-  > axiom Nat : Type
-  > axiom zero : Nat
-  > axiom suc : Nat -> Nat
-  > 
-  > def id = fun (A : Type) => fun (x : A) => x
-  > 
-  > def two : (Nat -> Nat) -> Nat -> Nat =
-  >   fun (f : Nat -> Nat) => fun (x : Nat) =>
-  >     f (f x)
-  > 
-  > theorem t : Nat = id Nat (suc zero)
-  > 
-  > #check two
-  > #eval two suc zero
+  > def twice (f : Nat → Nat) (n : Nat) : Nat :=
+  >   f (f n)
+  > #check twice
+  > #eval twice (λ n : Nat ⇒ succ n) 0
   > EOF
   $ mtt demo.mtt
-  demo.mtt:1:7: syntax error: unexpected token
-  [1]
+  fun (f : Nat -> Nat) => fun (n : Nat) => f (f n) : (Nat -> Nat) -> Nat -> Nat
+  2
 
-A type error stops checking with a nonzero exit:
+A type error stops checking with a nonzero exit, located at the statement:
 
   $ cat > bad.mtt <<EOF
-  > axiom Nat : Type
-  > theorem bogus : Nat = Nat
-  > #check bogus
+  > axiom A : Type
+  > def oops : A := Type
   > EOF
   $ mtt bad.mtt
-  bad.mtt:1:7: syntax error: unexpected token
+  bad.mtt:2:1: type error: this term has type Type 1 but A was expected
   [1]
 
-Bare terms are not allowed in files. Beware: since juxtaposition is
-application, a stray term is absorbed into the preceding declaration's last
-term (here the axiom's annotation becomes "Type Nat"), so the failure shows
-up as a downstream error rather than a parse error:
+There are no statement terminators, so a stray term is absorbed into the
+preceding declaration as an application — the failure then surfaces
+downstream rather than as a clean parse error:
 
-  $ cat > bare.mtt <<EOF
-  > axiom Nat : Type
-  > Nat
+  $ cat > stray.mtt <<EOF
+  > axiom A : Type
+  > B
   > EOF
-  $ mtt bare.mtt
-  bare.mtt:1:7: syntax error: unexpected token
+  $ mtt stray.mtt
+  stray.mtt:2:1: unbound variable: B
   [1]

@@ -1,6 +1,7 @@
-(** Top-level statements: declarations, or a bare term to evaluate. A program is
-    a telescope of declarations, each scoping over the rest, so processing a
-    statement just extends the checking context:
+(** Top-level statements: A program is a set of declarations, that are processed
+    in order. Each declaration extends the checking context, so later
+    declarations can refer to earlier ones. The following statements are
+    supported:
 
     - [axiom x : A] — binds [x] to a fresh neutral (a stuck constant)
     - [def x [: A] = t] — binds [x] to the value of [t]; occurrences unfold
@@ -12,11 +13,10 @@
     - [#eval t] — type checks and normalizes [t], reporting just [nf]
     - [#check_equal t u] — asserts that [t] and [u] are definitionally equal
 
-    Only [#check] and [#eval] produce output; a bare term is checked silently,
-    and [#check_equal] succeeds silently or fails with a type error. *)
+    Only [#check] and [#eval] produce output; the rest are silent, and
+    [#check_equal] / a failed [theorem] raise a type error. *)
 
 type desc =
-  | Expr of Ast.t  (** a bare term: type-checked, no output *)
   | Check of Ast.t  (** [#check t]: reports the normal form and type *)
   | Eval of Ast.t  (** [#eval t]: reports the normal form *)
   | Axiom of string * Ast.t  (** [axiom x : A] *)
