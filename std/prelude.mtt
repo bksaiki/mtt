@@ -1,0 +1,6 @@
+-- The mtt standard prelude. Brought into scope by the `prelude` keyword;
+-- everything here is axiom-free (definable from the core).
+
+-- functions
+def id (A : Type) (x : A) : A := x
+def comp (A B C : Type) (g : B → C) (f : A → B) (x : A) : C := g (f x)

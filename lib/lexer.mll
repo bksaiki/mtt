@@ -41,6 +41,7 @@ rule token = parse
   | "Nat" { NAT }
   | "succ" { SUCC }
   | "natrec" { NATREC }
+  | "prelude" { PRELUDE }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }
   | "#eval" { EVAL }

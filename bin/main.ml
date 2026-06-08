@@ -3,6 +3,13 @@ open Mtt
 (* only prompt when interactive, so piped input produces clean output *)
 let interactive = Unix.isatty Unix.stdin
 
+(* runs one statement, expanding the prelude directive (which [Stmt.run] cannot
+   — only the driver can reach the [Prelude] module) *)
+let run_stmt ctx (stmt : Stmt.t) =
+  match stmt.desc with
+  | Stmt.Prelude -> (Prelude.load ctx, None)
+  | _ -> Stmt.run ctx stmt
+
 (* processes one line, returning the (possibly extended) context *)
 let process ctx line =
   match Parse.stmt_of_string line with
@@ -10,7 +17,7 @@ let process ctx line =
       Printf.printf "%s: syntax error: %s\n" (Loc.to_string loc) msg;
       ctx
   | stmt -> (
-      match Stmt.run ctx stmt with
+      match run_stmt ctx stmt with
       | ctx, message ->
           Option.iter print_endline message;
           ctx
@@ -47,7 +54,7 @@ let run_file path =
       die "%s: syntax error: %s" (Loc.to_string loc) msg
   | stmts ->
       let step ctx (stmt : Stmt.t) =
-        match Stmt.run ctx stmt with
+        match run_stmt ctx stmt with
         | ctx, message ->
             Option.iter print_endline message;
             ctx

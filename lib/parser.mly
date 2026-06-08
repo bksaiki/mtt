@@ -1,7 +1,7 @@
 %token <string> ID
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES PLUS INL INR CASE EQ REFL J NAT SUCC NATREC COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
+%token FUN PI SIGMA TYPE PROP UNIT EMPTY ABSURD TIMES PLUS INL INR CASE EQ REFL J NAT SUCC NATREC COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM PRELUDE LPAREN RPAREN COLON ARROW DARROW EQUALS EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -41,6 +41,8 @@ decl_desc:
   | THEOREM; x = ID; bs = list(binder_group); COLON; a = term; EQUALS; t = term
     { Stmt.Theorem (x, Ast.pis $loc bs a, Ast.lams $loc bs t) }
   | CHECK_EQUAL; t = atom; u = atom { Stmt.CheckEqual (t, u) }
+  (* a directive that brings the standard prelude into scope *)
+  | PRELUDE { Stmt.Prelude }
 
 (* a binder group: one annotation shared by one or more names *)
 binder_group:

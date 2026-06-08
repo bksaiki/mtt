@@ -5,3 +5,18 @@
 
 (menhir
  (modules parser))
+
+; embed std/prelude.mtt as a string constant so the binary is self-contained
+; (no runtime path lookup); the {prelude_src| ... |prelude_src} delimiter
+; needs no escaping as long as the prelude text never contains |prelude_src}
+
+(rule
+ (target prelude_data.ml)
+ (deps ../std/prelude.mtt)
+ (action
+  (with-stdout-to
+   prelude_data.ml
+   (progn
+    (echo "let contents = {prelude_src|")
+    (cat ../std/prelude.mtt)
+    (echo "|prelude_src}")))))
