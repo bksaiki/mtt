@@ -52,6 +52,9 @@ let branch_ty ctx p x inj comp =
   let pq = Value.quote (ctx.lvl + 1) p in
   Value.Pi (x, comp, { env = ctx.env; body = Type.App (pq, inj (Type.Var 0)) })
 
+(* a J motive [p] applied to an endpoint [y] and a proof [pr], i.e. [P y pr] *)
+let motive_at p y pr = Value.apply (Value.apply p y) pr
+
 (* the type of a stuck neutral, reconstructed by walking the spine *)
 let rec infer_neutral ctx (n : Value.neutral) : Value.t =
   match n with
@@ -74,7 +77,7 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
   (* J P d p : P y p; recover y from the stuck proof's type Eq A x y *)
   | Value.J (p, _, n) -> (
       match infer_neutral ctx n with
-      | Value.Eq (_, _, y) -> Value.apply (Value.apply p y) (Value.Neutral n)
+      | Value.Eq (_, _, y) -> motive_at p y (Value.Neutral n)
       | _ -> assert false)
 
 (* [sort_of ctx ty] is the i such that [ty : Sort i] *)
@@ -239,12 +242,11 @@ and conv_neutral ctx n1 n2 : Value.t option =
           let ctx2 = bind "p" (Value.Eq (a, x, yv)) ctx1 in
           if
             conv_ty ~cumul:false ctx t1 t2
-            && conv_ty ~cumul:false ctx2
-                 (Value.apply (Value.apply p1 yv) pv)
-                 (Value.apply (Value.apply p2 yv) pv)
-            && conv ctx (Value.apply (Value.apply p1 x) Value.Refl) d1 d2
+            && conv_ty ~cumul:false ctx2 (motive_at p1 yv pv)
+                 (motive_at p2 yv pv)
+            && conv ctx (motive_at p1 x Value.Refl) d1 d2
           then
-            Some (Value.apply (Value.apply p1 y) (Value.Neutral n1))
+            Some (motive_at p1 y (Value.Neutral n1))
           else
             None
       | _ -> assert false)
@@ -426,9 +428,9 @@ let rec infer ctx t =
                 (show_term ctx p) (show ctx ty));
           let vp = Value.eval ctx.env p in
           (* the diagonal proves P x refl *)
-          check ctx d (Value.apply (Value.apply vp vx) Value.Refl);
+          check ctx d (motive_at vp vx Value.Refl);
           (* result: P y p *)
-          Value.apply (Value.apply vp vy) (Value.eval ctx.env pr)
+          motive_at vp vy (Value.eval ctx.env pr)
       | ty ->
           type_error "expected an equality proof, but %s has type %s"
             (show_term ctx pr) (show ctx ty))
