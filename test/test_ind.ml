@@ -197,7 +197,7 @@ let%expect_test "strict positivity rejects a non-recursive occurrence" =
   in
   (try Check.check_inductive Check.empty bad with
   | Error.Type_error frags ->
-      print_endline (Mtt.Notation.render_error Type.no_notation frags));
+      print_endline (Mtt.Notation.render_error Mtt.Notation.empty frags));
   [%expect
     {| constructor mk: Bad may occur only as a direct recursive field, not inside Bad -> Bad (strict positivity) |}]
 
@@ -248,7 +248,7 @@ let%expect_test "Prop large-elimination restriction" =
   in
   (try ignore (Check.infer pbool_ctx into_type) with
   | Error.Type_error frags ->
-      print_endline (Mtt.Notation.render_error Type.no_notation frags));
+      print_endline (Mtt.Notation.render_error Mtt.Notation.empty frags));
   [%expect
     {| cannot eliminate the proposition PBool into Type 1: only a subsingleton (at most one constructor, all fields proofs) may eliminate large |}];
   (* but a subsingleton Prop may: PUnit.rec (fun _ => Type) Prop pstar : Type *)

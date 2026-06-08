@@ -28,10 +28,10 @@ type t =
    context plus the notation registry (which the kernel no longer holds) *)
 type session =
   { ctx : Check.ctx
-  ; notation : Type.notation
+  ; notation : Notation.t
   }
 
-let initial = { ctx = Check.empty; notation = Type.no_notation }
+let initial = { ctx = Check.empty; notation = Notation.empty }
 
 (* Elaborates a surface inductive declaration into an {!Inductive.spec}:
    scope-checks the parameter telescope and the result sort, then each

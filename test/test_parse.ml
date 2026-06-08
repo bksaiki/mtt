@@ -9,7 +9,7 @@ let notation = prelude.notation
 
 let roundtrip s =
   print_endline
-    (Type.to_string_in ~notation []
+    (Type.to_string_in ~sugar:(Notation.sugar notation) []
        (Parse.term_of_string_in prelude.ctx.signature ~notation s))
 
 let%expect_test "universes" =

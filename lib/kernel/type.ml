@@ -69,34 +69,12 @@ let rec occurs k = function
   | Rec _ ->
       false
 
-(* Display notation: which constructors the printer should render with surface
-   sugar instead of their plain qualified form. The kernel itself stays
-   notation-ignorant — it never names [Unit]/[Nat]; the frontend builds this
-   config from the [@[notation ...]] registry and hands it to the printer (and,
-   for the forward direction, to [Ast.to_term]). *)
-type notation =
-  { unit_ctor : ctor_head option (* rendered as [()] *)
-  ; nat : (ctor_head * ctor_head) option
-        (* (zero, succ): succ-chains ending in zero fold to decimal literals *)
-  }
-
-let no_notation = { unit_ctor = None; nat = None }
-
-let pp_in ?(notation = no_notation) names fmt t =
-  (* if [t] is a closed numeral built from the registered zero/succ, its
-     value *)
-  let nat_lit t =
-    match notation.nat with
-    | None -> None
-    | Some (zero, succ) ->
-        let rec count acc t =
-          match t with
-          | Ctor h when h = zero -> Some acc
-          | App (Ctor h, n) when h = succ -> count (acc + 1) n
-          | _ -> None
-        in
-        count 0 t
-  in
+(* [sugar t] optionally renders the subterm [t] as a complete surface atom (a
+   string needing no parentheses), letting a caller fold notation the kernel
+   knows nothing about — e.g. the registered unit constructor as [()], or a
+   succ-chain as a decimal. The kernel only consults the hook; the frontend
+   supplies it (see [Notation.sugar]). *)
+let pp_in ?(sugar = fun _ -> None) names fmt t =
   (* makes the hint [x] distinct from every name in scope *)
   let freshen names x =
     let rec prime x =
@@ -121,6 +99,10 @@ let pp_in ?(notation = no_notation) names fmt t =
   (* precedence: 0 = binders, 1 = arrow, 2 = sum, 3 = product, 10 = application,
      11 = atom *)
   let rec go prec names fmt t =
+    match sugar t with
+    | Some s -> Format.pp_print_string fmt s
+    | None -> go_struct prec names fmt t
+  and go_struct prec names fmt t =
     match t with
     | Var i -> (
         match List.nth_opt names i with
@@ -150,10 +132,6 @@ let pp_in ?(notation = no_notation) names fmt t =
             Format.fprintf fmt "@[fun (%s : %a) =>@ %a@]" x (go 0 names) a
               (go 0 (x :: names))
               b)
-    (* a closed succ-chain folds to a decimal literal (an atom, never
-       parenthesized); otherwise an ordinary application spine *)
-    | App _ when nat_lit t <> None ->
-        Format.fprintf fmt "%d" (Option.get (nat_lit t))
     | App (f, a) ->
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[%a@ %a@]" (go 10 names) f (go 11 names) a)
@@ -211,14 +189,10 @@ let pp_in ?(notation = no_notation) names fmt t =
             Format.fprintf fmt "@[J@ %a@ %a@ %a@]" (go 11 names) p (go 11 names)
               d (go 11 names) pr)
     (* inductive heads are atoms; their arguments print via the enclosing App
-       nodes (so [Nat.rec P z s n] renders through application) *)
+       nodes (so [Nat.rec P z s n] renders through application). Constructors
+       and the recursor print qualified by their type; surface sugar like [()]
+       or decimals is applied by [sugar] above, not here. *)
     | Ind name -> Format.pp_print_string fmt name
-    (* the constructor registered for the [unit] notation prints as its [()]
-       sugar, and the registered nat zero as [0] (mirroring the surface); other
-       constructors and the recursor print qualified by their type, matching how
-       they are written *)
-    | Ctor h when notation.unit_ctor = Some h -> Format.pp_print_string fmt "()"
-    | Ctor h when nat_lit (Ctor h) = Some 0 -> Format.pp_print_string fmt "0"
     | Ctor h -> Format.fprintf fmt "%s.%s" h.ind h.cname
     | Rec h -> Format.fprintf fmt "%s.rec" h.rind
   in
@@ -226,7 +200,7 @@ let pp_in ?(notation = no_notation) names fmt t =
 
 let pp fmt t = pp_in [] fmt t
 
-let to_string_in ?(notation = no_notation) names t =
-  Format.asprintf "%a" (pp_in ~notation names) t
+let to_string_in ?(sugar = fun _ -> None) names t =
+  Format.asprintf "%a" (pp_in ~sugar names) t
 
 let to_string t = to_string_in [] t

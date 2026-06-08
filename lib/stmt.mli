@@ -59,7 +59,7 @@ type t =
     holds — notation is purely a frontend concern) *)
 type session =
   { ctx : Check.ctx
-  ; notation : Type.notation
+  ; notation : Notation.t
   }
 
 (** the empty session: a bare context and no notation *)

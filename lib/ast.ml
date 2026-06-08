@@ -55,7 +55,7 @@ let var_spine t =
 
 exception Unbound_variable of Loc.t * string
 
-let to_term sg ?(notation = Type.no_notation) names s =
+let to_term sg ?(notation = Notation.empty) names s =
   let rec go env s =
     match s.desc with
     (* a bare name is a local binder (de Bruijn) first, otherwise a global
@@ -96,7 +96,7 @@ let to_term sg ?(notation = Type.no_notation) names s =
        notation (the prelude's [Unit.unit]); the unit type itself is an ordinary
        inductive, resolved as a [Var] above *)
     | MkUnit -> (
-        match notation.Type.unit_ctor with
+        match notation.Notation.unit_ctor with
         | Some h -> Type.Ctor h
         | None ->
             raise (Unbound_variable (s.loc, "() (no unit notation registered)"))
@@ -116,7 +116,7 @@ let to_term sg ?(notation = Type.no_notation) names s =
     | J (p, d, pr) -> Type.J (go env p, go env d, go env pr)
     (* a numeral expands to succ-applications of the registered nat zero/succ *)
     | Numeral n -> (
-        match notation.Type.nat with
+        match notation.Notation.nat with
         | Some (zero, succ) ->
             let rec build k =
               if k = 0 then

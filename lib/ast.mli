@@ -59,9 +59,8 @@ exception Unbound_variable of Loc.t * string
     top-level declarations. A bare name not bound locally resolves to an
     inductive former in the signature [sg]; qualified [T.c] / [T.rec] resolve to
     a constructor or the recursor of [T]. [()] resolves to the constructor
-    registered for the [unit] notation (default {!Type.no_notation}, under which
+    registered for the [unit] notation (default {!Notation.empty}, under which
     [()] is unbound). Ascriptions [(t : A)] elaborate to the typed identity
     [(fun (x : A) => x) t]. Raises {!Unbound_variable}, with the offending
     location, if a name is not in scope. *)
-val to_term :
-  Signature.t -> ?notation:Type.notation -> string list -> t -> Type.t
+val to_term : Signature.t -> ?notation:Notation.t -> string list -> t -> Type.t

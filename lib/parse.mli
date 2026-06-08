@@ -6,10 +6,9 @@ exception Error of Loc.t * string
 
 (** [term_of_string_in sg s] parses and scope-checks the closed term [s],
     resolving inductive names against the signature [sg], and [()] against the
-    [unit] notation (default {!Type.no_notation}, under which it is unbound).
+    [unit] notation (default {!Notation.empty}, under which it is unbound).
     Raises {!Error} or {!Ast.Unbound_variable}. *)
-val term_of_string_in :
-  Signature.t -> ?notation:Type.notation -> string -> Type.t
+val term_of_string_in : Signature.t -> ?notation:Notation.t -> string -> Type.t
 
 (** [term_of_string s] is {!term_of_string_in} with the empty signature. *)
 val term_of_string : string -> Type.t
