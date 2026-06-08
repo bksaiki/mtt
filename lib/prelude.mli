@@ -5,7 +5,7 @@
 val source : string
 
 (** [load sess] type-checks the prelude and extends the session [sess] with all
-    of its declarations (its bindings and notation). Raises {!Check.Type_error}
+    of its declarations (its bindings and notation). Raises {!Error.Type_error}
     / {!Ast.Unbound_variable} / {!Parse.Error} if the prelude is ill-formed —
     i.e. only on a build-time bug, since the prelude ships with the tool. *)
 val load : Stmt.session -> Stmt.session

@@ -11,7 +11,7 @@ let infer s =
          s)
   with
   | ty -> print_endline (Notation.show prelude.notation prelude.ctx ty)
-  | exception Check.Type_error frags ->
+  | exception Error.Type_error frags ->
       Printf.printf "type error: %s\n"
         (Notation.render_error prelude.notation frags)
 

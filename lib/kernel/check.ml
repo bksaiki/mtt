@@ -1,21 +1,3 @@
-(* An error message as renderable fragments: literal [Text], or a core [Term] to
-   be rendered (with the binder names it is read against) by the frontend, which
-   owns notation. The kernel formats no notation itself — it quotes the
-   offending values to terms and lets the frontend delaborate them. *)
-type frag =
-  | Text of string
-  | Term of string list * Type.t
-
-exception Type_error of frag list
-
-let type_error frags = raise (Type_error frags)
-
-(* literal text; [txtf] is the printf-style variant for non-term parts (names,
-   counts, sorts) that never carry notation *)
-let txt s = Text s
-
-let txtf fmt = Format.kasprintf (fun s -> Text s) fmt
-
 type ctx =
   { env : Value.env (* values of bound variables, for evaluation *)
   ; types : Value.t list (* their types, index-aligned with [env] *)
@@ -37,11 +19,9 @@ let extend x v ty ctx =
   }
 
 (* a variable bound to a fresh neutral, so under the binder it blocks reduction
-   instead of disappearing *)
+   instead of disappearing. [extend] (above) is the counterpart that binds a
+   real value, so occurrences unfold (δ-reduction). *)
 let bind x ty ctx = extend x (Value.Neutral (Value.Var ctx.lvl)) ty ctx
-
-(* a defined variable bound to its value, so occurrences unfold (δ-reduction) *)
-let define = extend
 
 (* registers an inductive declaration in the context's signature *)
 let add_ind spec ctx = { ctx with signature = Signature.add spec ctx.signature }
@@ -50,23 +30,22 @@ let add_ind spec ctx = { ctx with signature = Signature.add spec ctx.signature }
 let lookup_ind ctx name =
   match Signature.find ctx.signature name with
   | Some spec -> spec
-  | None -> type_error [ txtf "unknown inductive type %s" name ]
+  | None -> Error.type_error [ Error.txtf "unknown inductive type %s" name ]
 
-(* the kernel's faithful renderers (no notation): plain views of a value/term
-   against the context's binder names, for kernel-internal use and debugging.
+(* the kernel's faithful renderer (no notation): a plain view of a value against
+   the context's binder names, for kernel-internal use and debugging.
    User-facing output and error messages are rendered by the frontend, which
    owns notation — output via its own renderer, errors from the [tm]/[vl]
    fragments these build. *)
 let show ctx v = Type.to_string_in ctx.names (Value.quote ctx.lvl v)
 
-let show_term ctx t = Type.to_string_in ctx.names t
-
 (* error fragments for a term and a value, capturing the binder names they are
    read against (the value is quoted now, with no notation; rendering is the
-   frontend's, later) *)
-let tm ctx (t : Type.t) = Term (ctx.names, t)
+   frontend's, later). [tm] is kernel-internal; [vl] is also used by the
+   driver. *)
+let tm ctx (t : Type.t) = Error.Term (ctx.names, t)
 
-let vl ctx (v : Value.t) = Term (ctx.names, Value.quote ctx.lvl v)
+let vl ctx (v : Value.t) = Error.Term (ctx.names, Value.quote ctx.lvl v)
 
 (* imax i 0 = 0: a product into a proposition is a proposition *)
 let imax i j =
@@ -517,10 +496,10 @@ let rec infer ctx t =
               check ctx a dom;
               Value.apply_closure c (Value.eval ctx.env a)
           | ty ->
-              type_error
-                [ txt "expected a function, but "
+              Error.type_error
+                [ Error.txt "expected a function, but "
                 ; tm ctx f
-                ; txt " has type "
+                ; Error.txt " has type "
                 ; vl ctx ty
                 ]))
   (* (Sum): plain max, like sigma *)
@@ -532,8 +511,8 @@ let rec infer ctx t =
      checked, not inferred *)
   | Type.Inl _
   | Type.Inr _ ->
-      type_error
-        [ txt
+      Error.type_error
+        [ Error.txt
             "cannot infer the type of an injection: ascribe it, e.g. (inl a : \
              A + B)"
         ]
@@ -549,46 +528,46 @@ let rec infer ctx t =
             match infer ctx p with
             | Value.Pi (_, dom, c) -> (
                 if not (conv_ty ~cumul:false ctx dom sty) then
-                  type_error
-                    [ txt "the motive's domain "
+                  Error.type_error
+                    [ Error.txt "the motive's domain "
                     ; vl ctx dom
-                    ; txt " does not match the scrutinee's type "
+                    ; Error.txt " does not match the scrutinee's type "
                     ; vl ctx sty
                     ];
                 match Value.apply_closure c (fresh ctx) with
                 | Value.Sort j -> j
                 | cod ->
-                    type_error
-                      [ txt "the motive must land in a sort, not "
+                    Error.type_error
+                      [ Error.txt "the motive must land in a sort, not "
                       ; vl (bind "s" sty ctx) cod
                       ])
             | ty ->
-                type_error
-                  [ txt "expected a motive from "
+                Error.type_error
+                  [ Error.txt "expected a motive from "
                   ; vl ctx sty
-                  ; txt " into a sort, but "
+                  ; Error.txt " into a sort, but "
                   ; tm ctx p
-                  ; txt " has type "
+                  ; Error.txt " has type "
                   ; vl ctx ty
                   ]
           in
           if sort_of ctx sty = 0 && j <> 0 then
-            type_error
-              [ txt "cannot eliminate a proof of "
+            Error.type_error
+              [ Error.txt "cannot eliminate a proof of "
               ; vl ctx sty
-              ; txt " into "
+              ; Error.txt " into "
               ; tm ctx (Type.Sort j)
-              ; txt ": a case on a proposition must target Prop"
+              ; Error.txt ": a case on a proposition must target Prop"
               ];
           let vp = Value.eval ctx.env p in
           check ctx u (branch_ty ctx vp "x" (fun t -> Type.Inl t) va);
           check ctx v (branch_ty ctx vp "y" (fun t -> Type.Inr t) vb);
           Value.apply vp (Value.eval ctx.env s)
       | ty ->
-          type_error
-            [ txt "expected a sum, but "
+          Error.type_error
+            [ Error.txt "expected a sum, but "
             ; tm ctx s
-            ; txt " has type "
+            ; Error.txt " has type "
             ; vl ctx ty
             ])
   (* (Sigma): plain max — no imax, see sort_of *)
@@ -610,10 +589,10 @@ let rec infer ctx t =
       match infer ctx p with
       | Value.Sigma (_, a, _) -> a
       | ty ->
-          type_error
-            [ txt "expected a pair, but "
+          Error.type_error
+            [ Error.txt "expected a pair, but "
             ; tm ctx p
-            ; txt " has type "
+            ; Error.txt " has type "
             ; vl ctx ty
             ])
   (* (Snd): the result type instantiates the family at the first projection *)
@@ -622,10 +601,10 @@ let rec infer ctx t =
       | Value.Sigma (_, _, c) ->
           Value.apply_closure c (Value.vfst (Value.eval ctx.env p))
       | ty ->
-          type_error
-            [ txt "expected a pair, but "
+          Error.type_error
+            [ Error.txt "expected a pair, but "
             ; tm ctx p
-            ; txt " has type "
+            ; Error.txt " has type "
             ; vl ctx ty
             ])
   (* (Proj): the i-th field of a record, at its dependent field type *)
@@ -634,17 +613,19 @@ let rec infer ctx t =
       | Value.VInd (name, params) ->
           let spec = lookup_ind ctx name in
           if not (Inductive.is_record spec) then
-            type_error
-              [ txtf "%s is not a record, so it has no field projections" name ];
+            Error.type_error
+              [ Error.txtf "%s is not a record, so it has no field projections"
+                  name
+              ];
           let nfields = List.length (List.nth spec.Inductive.ctors 0).fields in
           if i >= nfields then
-            type_error [ txtf "%s has no field .%d" name (i + 1) ];
+            Error.type_error [ Error.txtf "%s has no field .%d" name (i + 1) ];
           field_type spec params (Value.eval ctx.env e) i
       | ty ->
-          type_error
-            [ txt "expected a record, but "
+          Error.type_error
+            [ Error.txt "expected a record, but "
             ; tm ctx e
-            ; txt " has type "
+            ; Error.txt " has type "
             ; vl ctx ty
             ])
   (* (Eq): propositional equality is a proposition *)
@@ -656,8 +637,8 @@ let rec infer ctx t =
       Value.Sort 0
   (* refl does not determine its endpoints: it is checked, not inferred *)
   | Type.Refl ->
-      type_error
-        [ txt
+      Error.type_error
+        [ Error.txt
             "cannot infer the type of refl: ascribe it, e.g. (refl : Eq A x x)"
         ]
   (* (J): based path induction. The motive abstracts over the endpoint and the
@@ -671,10 +652,10 @@ let rec infer ctx t =
           (match infer ctx p with
           | Value.Pi (_, dom1, c1) -> (
               if not (conv_ty ~cumul:false ctx dom1 va) then
-                type_error
-                  [ txt "the motive should take an endpoint of type "
+                Error.type_error
+                  [ Error.txt "the motive should take an endpoint of type "
                   ; vl ctx va
-                  ; txt ", but takes "
+                  ; Error.txt ", but takes "
                   ; vl ctx dom1
                   ];
               let yv = fresh ctx in
@@ -683,31 +664,31 @@ let rec infer ctx t =
               | Value.Pi (_, dom2, c2) -> (
                   let expected = Value.Eq (va, vx, yv) in
                   if not (conv_ty ~cumul:false ctx1 dom2 expected) then
-                    type_error
-                      [ txt "the motive should take a proof of "
+                    Error.type_error
+                      [ Error.txt "the motive should take a proof of "
                       ; vl ctx1 expected
-                      ; txt ", but takes "
+                      ; Error.txt ", but takes "
                       ; vl ctx1 dom2
                       ];
                   match Value.apply_closure c2 (fresh ctx1) with
                   | Value.Sort _ -> ()
                   | cod ->
-                      type_error
-                        [ txt "the motive must land in a sort, not "
+                      Error.type_error
+                        [ Error.txt "the motive must land in a sort, not "
                         ; vl ctx1 cod
                         ])
               | cod ->
-                  type_error
-                    [ txt
+                  Error.type_error
+                    [ Error.txt
                         "the motive must also take the equality proof, but its \
                          body is "
                     ; vl ctx1 cod
                     ])
           | ty ->
-              type_error
-                [ txt "expected a motive, but "
+              Error.type_error
+                [ Error.txt "expected a motive, but "
                 ; tm ctx p
-                ; txt " has type "
+                ; Error.txt " has type "
                 ; vl ctx ty
                 ]);
           let vp = Value.eval ctx.env p in
@@ -716,10 +697,10 @@ let rec infer ctx t =
           (* result: P y p *)
           motive_at vp vy (Value.eval ctx.env pr)
       | ty ->
-          type_error
-            [ txt "expected an equality proof, but "
+          Error.type_error
+            [ Error.txt "expected an equality proof, but "
             ; tm ctx pr
-            ; txt " has type "
+            ; Error.txt " has type "
             ; vl ctx ty
             ])
   (* an inductive type former and its constructors have fixed (non-polymorphic)
@@ -730,8 +711,8 @@ let rec infer ctx t =
   (* a bare recursor is motive-polymorphic; only a saturated application (caught
      in (App)) can be typed *)
   | Type.Rec _ ->
-      type_error
-        [ txt
+      Error.type_error
+        [ Error.txt
             "cannot infer the type of a bare recursor; apply it to its \
              parameters, motive, minor premises and target"
         ]
@@ -741,8 +722,12 @@ and infer_univ ctx t =
   match infer ctx t with
   | Value.Sort i -> i
   | ty ->
-      type_error
-        [ txt "expected a type, but "; tm ctx t; txt " has type "; vl ctx ty ]
+      Error.type_error
+        [ Error.txt "expected a type, but "
+        ; tm ctx t
+        ; Error.txt " has type "
+        ; vl ctx ty
+        ]
 
 (* checks a parameter spine against the parameter telescope, returning the
    parameter values (so later parameter types and the motive can be
@@ -755,7 +740,9 @@ and check_telescope ctx params tms =
         check ctx tm (Value.eval env pty);
         let v = Value.eval ctx.env tm in
         v :: go (v :: env) ps rest
-    | _ -> type_error [ txt "wrong number of parameters for the inductive" ]
+    | _ ->
+        Error.type_error
+          [ Error.txt "wrong number of parameters for the inductive" ]
   in
   go [] params tms
 
@@ -770,9 +757,9 @@ and infer_rec ctx rh args =
   let nctors = List.length rh.Type.recs in
   let expected = m + 1 + nctors + 1 in
   if List.length args <> expected then
-    type_error
-      [ txtf "%s.rec expects %d arguments but got %d" rh.Type.rind expected
-          (List.length args)
+    Error.type_error
+      [ Error.txtf "%s.rec expects %d arguments but got %d" rh.Type.rind
+          expected (List.length args)
       ];
   let param_tms = List.take m args in
   let motive_tm = List.nth args m in
@@ -789,34 +776,34 @@ and infer_rec ctx rh args =
     match infer ctx motive_tm with
     | Value.Pi (_, dom, c) -> (
         if not (conv_ty ~cumul:false ctx dom ind_ty) then
-          type_error
-            [ txt "the motive's domain "
+          Error.type_error
+            [ Error.txt "the motive's domain "
             ; vl ctx dom
-            ; txt " does not match the target type "
+            ; Error.txt " does not match the target type "
             ; vl ctx ind_ty
             ];
         match Value.apply_closure c (fresh ctx) with
         | Value.Sort j -> j
         | cod ->
-            type_error
-              [ txt "the motive must land in a sort, not "
+            Error.type_error
+              [ Error.txt "the motive must land in a sort, not "
               ; vl (bind "x" ind_ty ctx) cod
               ])
     | ty ->
-        type_error
-          [ txt "expected a motive from "
+        Error.type_error
+          [ Error.txt "expected a motive from "
           ; vl ctx ind_ty
-          ; txt " into a sort, but "
+          ; Error.txt " into a sort, but "
           ; tm ctx motive_tm
-          ; txt " has type "
+          ; Error.txt " has type "
           ; vl ctx ty
           ]
   in
   if spec.Inductive.sort = 0 && j <> 0 && not (subsingleton ctx spec) then
-    type_error
-      [ txtf "cannot eliminate the proposition %s into " rh.Type.rind
+    Error.type_error
+      [ Error.txtf "cannot eliminate the proposition %s into " rh.Type.rind
       ; tm ctx (Type.Sort j)
-      ; txt
+      ; Error.txt
           ": only a subsingleton (at most one constructor, all fields proofs) \
            may eliminate large"
       ];
@@ -835,10 +822,10 @@ and check ctx t expected =
       let _ = infer_univ ctx a in
       let va = Value.eval ctx.env a in
       if not (conv_ty ~cumul:false ctx va dom) then
-        type_error
-          [ txt "the annotation "
+        Error.type_error
+          [ Error.txt "the annotation "
           ; vl ctx va
-          ; txt " does not match the expected domain "
+          ; Error.txt " does not match the expected domain "
           ; vl ctx dom
           ];
       check (bind x va ctx) b
@@ -854,10 +841,10 @@ and check ctx t expected =
   (* (Refl): reflexivity proves x = y exactly when x ≡ y *)
   | Type.Refl, Value.Eq (va, vx, vy) ->
       if not (conv ctx va vx vy) then
-        type_error
-          [ txt "refl requires the sides to be equal, but "
+        Error.type_error
+          [ Error.txt "refl requires the sides to be equal, but "
           ; vl ctx vx
-          ; txt " is not "
+          ; Error.txt " is not "
           ; vl ctx vy
           ]
   (* subsumption: infer and compare up to definitional equality (βδη plus proof
@@ -865,12 +852,12 @@ and check ctx t expected =
   | _ ->
       let ty = infer ctx t in
       if not (sub ctx ty expected) then
-        type_error
-          [ txt "this term has type "
+        Error.type_error
+          [ Error.txt "this term has type "
           ; vl ctx ty
-          ; txt " but "
+          ; Error.txt " but "
           ; vl ctx expected
-          ; txt " was expected"
+          ; Error.txt " was expected"
           ]
 
 (* Validates an inductive declaration: kind-checks the parameter telescope, then
@@ -899,26 +886,27 @@ let check_inductive ctx spec =
              let s = infer_univ ctx_cur a.aty in
              if a.recursive then
                begin if a.aty <> Inductive.apply spec (m + j) then
-                 type_error
-                   [ txtf "constructor %s: a recursive field must have type "
+                 Error.type_error
+                   [ Error.txtf
+                       "constructor %s: a recursive field must have type "
                        c.cname
                    ; tm ctx_cur (Inductive.apply spec (m + j))
                    ]
              end
              else if Inductive.occurs name a.aty then
-               type_error
-                 [ txtf
+               Error.type_error
+                 [ Error.txtf
                      "constructor %s: %s may occur only as a direct recursive \
                       field, not inside "
                      c.cname name
                  ; tm ctx_cur a.aty
-                 ; txt " (strict positivity)"
+                 ; Error.txt " (strict positivity)"
                  ];
              if spec.Inductive.sort <> 0 && s > spec.Inductive.sort then
-               type_error
-                 [ txtf "constructor %s: a field of sort " c.cname
+               Error.type_error
+                 [ Error.txtf "constructor %s: a field of sort " c.cname
                  ; tm ctx_cur (Type.Sort s)
-                 ; txt " does not fit the inductive's sort "
+                 ; Error.txt " does not fit the inductive's sort "
                  ; tm ctx_cur (Type.Sort spec.Inductive.sort)
                  ];
              (bind a.aname (Value.eval ctx_cur.env a.aty) ctx_cur, j + 1))

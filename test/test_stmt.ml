@@ -14,7 +14,7 @@ let session lines =
     | exception Ast.Unbound_variable (loc, x) ->
         Printf.printf "%s: unbound variable: %s\n" (Loc.to_string loc) x;
         sess
-    | exception Check.Type_error frags ->
+    | exception Error.Type_error frags ->
         Printf.printf "type error: %s\n"
           (Notation.render_error sess.notation frags);
         sess

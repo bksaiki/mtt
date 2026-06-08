@@ -55,8 +55,8 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
     match Ast.to_term sg ~notation param_names d.isort with
     | Type.Sort k -> k
     | _ ->
-        Check.type_error
-          [ Check.txt
+        Error.type_error
+          [ Error.txt
               "the result of an inductive must be a sort (Type, Prop, or Type \
                n)"
           ]
@@ -71,8 +71,8 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
     List.map
       (fun (cname, cty) ->
         if String.equal cname "rec" then
-          Check.type_error
-            [ Check.txt
+          Error.type_error
+            [ Error.txt
                 "a constructor may not be named 'rec' (reserved for the \
                  recursor T.rec)"
             ];
@@ -89,8 +89,8 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
           decompose 0 (Ast.to_term sg ~notation param_names cty)
         in
         if not (is_self (m + List.length fields) result) then
-          Check.type_error
-            [ Check.txtf
+          Error.type_error
+            [ Error.txtf
                 "constructor %s must construct %s applied to its parameters"
                 cname d.iname
             ];
@@ -140,7 +140,7 @@ let run (sess : session) stmt =
         | None -> Check.infer ctx t
       in
       let v = Value.eval ctx.env t in
-      ({ sess with ctx = Check.define x v va ctx }, None)
+      ({ sess with ctx = Check.extend x v va ctx }, None)
   | Theorem (x, sa, st) ->
       let va = eval_ann sa in
       Check.check ctx (to_term st) va;
@@ -155,10 +155,10 @@ let run (sess : session) stmt =
       let vt = Value.eval ctx.env t in
       let vu = Value.eval ctx.env u in
       if not (Check.conv ctx ty vt vu) then
-        Check.type_error
-          [ Check.txt "#check_equal failed: "
+        Error.type_error
+          [ Error.txt "#check_equal failed: "
           ; Check.vl ctx vt
-          ; Check.txt " is not convertible with "
+          ; Error.txt " is not convertible with "
           ; Check.vl ctx vu
           ];
       (sess, None)
@@ -171,7 +171,7 @@ let run (sess : session) stmt =
         | None -> notation
         | Some ("notation", role) -> Notation.register role spec notation
         | Some (name, _) ->
-            Check.type_error [ Check.txtf "unknown attribute @@[%s ...]" name ]
+            Error.type_error [ Error.txtf "unknown attribute @@[%s ...]" name ]
       in
       ({ ctx; notation }, None)
   (* the prelude directive only controls the driver's choice of starting context

@@ -67,5 +67,5 @@ val initial : session
 
 (** [run sess stmt] processes one statement, returning the extended session and
     an output message, if the statement produces one. Raises
-    {!Ast.Unbound_variable} or {!Check.Type_error}. *)
+    {!Ast.Unbound_variable} or {!Error.Type_error}. *)
 val run : session -> t -> session * string option

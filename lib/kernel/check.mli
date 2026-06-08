@@ -9,7 +9,7 @@
       survive evaluation (application of a closure extends its environment).
     - η: [f ≡ fun (x : A) => f x] for [f] of Pi type. At a Pi type, {!conv}
       compares both sides applied to a fresh variable.
-    - δ: a [def]ined name unfolds to its body. Performed eagerly: {!define}
+    - δ: a [def]ined name unfolds to its body. Performed eagerly: {!extend}
       binds the name directly to its evaluated value, so occurrences are
       replaced during evaluation. Axioms and theorems are {!bind}ed to fresh
       neutrals instead — theorems are opaque: the proof is checked, then
@@ -115,25 +115,6 @@
 
     In (App), the substitution [B[a/x]] is closure application. *)
 
-(** An error message as renderable fragments: literal [Text], or a core [Term]
-    paired with the binder names it is read against. The kernel formats no
-    notation itself — it carries the offending terms and lets the frontend
-    (which owns the notation registry) render them. *)
-type frag =
-  | Text of string
-  | Term of string list * Type.t
-
-exception Type_error of frag list
-
-(** [type_error frags] raises {!Type_error} with the given message fragments *)
-val type_error : frag list -> 'a
-
-(** [txt s] is a literal-text fragment; [txtf] is its printf-style variant, for
-    non-term parts (names, counts, sorts) that never carry notation *)
-val txt : string -> frag
-
-val txtf : ('a, Format.formatter, unit, frag) format4 -> 'a
-
 (** the typing context: the local binders (index-aligned), plus the global
     inductive signature *)
 type ctx =
@@ -151,26 +132,22 @@ val empty : ctx
     disappearing *)
 val bind : string -> Value.t -> ctx -> ctx
 
-(** [define x v ty ctx] extends the context with a {e defined} variable [x] of
-    type [ty]: bound to its value [v] rather than a neutral, so occurrences
-    unfold during evaluation (δ-reduction) *)
-val define : string -> Value.t -> Value.t -> ctx -> ctx
+(** [extend x v ty ctx] extends the context with a variable [x] of type [ty]
+    bound to the value [v] rather than a neutral, so occurrences unfold during
+    evaluation (δ-reduction). This is how a [def] is added; {!bind} is the
+    fresh-neutral counterpart. *)
+val extend : string -> Value.t -> Value.t -> ctx -> ctx
 
 (** [show ctx v] renders a value against the context's binder names, {e without}
     notation — the kernel's faithful/debug view. User-facing output and error
     messages are rendered by the frontend, which owns notation. *)
 val show : ctx -> Value.t -> string
 
-(** [show_term ctx t] renders a term against the context's binder names, without
-    notation (see {!show}) *)
-val show_term : ctx -> Type.t -> string
-
-(** [tm ctx t] / [vl ctx v] are error fragments for a term / a value, capturing
-    the binder names they are read against (the value is quoted now, notation
-    applied later by the frontend) *)
-val tm : ctx -> Type.t -> frag
-
-val vl : ctx -> Value.t -> frag
+(** [vl ctx v] is an {!Error} fragment for a value, capturing the binder names
+    it is read against (the value is quoted now, notation applied later by the
+    frontend). Used by the driver to build [#check_equal] errors; the term
+    counterpart [tm] stays internal to the checker. *)
+val vl : ctx -> Value.t -> Error.frag
 
 (** [conv ctx ty v1 v2] decides definitional equality of the values [v1] and
     [v2] at the type [ty], which both must inhabit. Type-directed: at a Prop,
@@ -203,6 +180,6 @@ val add_ind : Inductive.spec -> ctx -> ctx
 (** [check_inductive ctx spec] validates an inductive declaration: kind-checks
     the parameter telescope and each constructor's field types, and enforces
     strict positivity (the inductive may appear only as a direct recursive
-    field) and predicativity. Raises {!Type_error} on an ill-formed declaration.
-    Does not modify [ctx] — register the spec with {!add_ind}. *)
+    field) and predicativity. Raises {!Error.Type_error} on an ill-formed
+    declaration. Does not modify [ctx] — register the spec with {!add_ind}. *)
 val check_inductive : ctx -> Inductive.spec -> unit

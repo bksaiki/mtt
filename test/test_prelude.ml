@@ -6,7 +6,7 @@ let%expect_test "prelude is well-typed and its defs are usable" =
   let check line =
     match Stmt.run sess (Parse.stmt_of_string line) with
     | _, msg -> Option.iter print_endline msg
-    | exception Check.Type_error frags ->
+    | exception Error.Type_error frags ->
         print_endline
           ("type error: " ^ Notation.render_error sess.notation frags)
   in
