@@ -14,8 +14,6 @@ and desc =
   | Ascribe of t * t (* (t : A) *)
   | Unit
   | MkUnit
-  | Empty
-  | Absurd of t * t (* absurd A h *)
   | Sigma of string * t * t (* Σ (x : A) ⇒ B *)
   | Prod of t * t (* A × B *)
   | Pair of t * t (* (a, b) *)
@@ -118,8 +116,6 @@ let to_term sg names s =
     | App (f, a) -> Type.App (go env f, go env a)
     | Unit -> Type.Unit
     | MkUnit -> Type.MkUnit
-    | Empty -> Type.Empty
-    | Absurd (a, h) -> Type.Absurd (go env a, go env h)
     | Sigma (x, a, b) -> Type.Sigma (x, go env a, go (x :: env) b)
     (* non-dependent product: same dummy-binder trick as Arrow *)
     | Prod (a, b) -> Type.Sigma ("", go env a, go ("" :: env) b)

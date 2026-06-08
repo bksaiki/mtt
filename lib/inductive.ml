@@ -87,7 +87,6 @@ let rec occurs name (t : Type.t) =
   | Sort _
   | Unit
   | MkUnit
-  | Empty
   | Nat
   | Zero
   | Refl ->
@@ -103,8 +102,7 @@ let rec occurs name (t : Type.t) =
   | Sigma (_, a, b)
   | App (a, b)
   | Pair (a, b)
-  | Sum (a, b)
-  | Absurd (a, b) ->
+  | Sum (a, b) ->
       occurs name a || occurs name b
   | Eq (a, b, c)
   | J (a, b, c) ->

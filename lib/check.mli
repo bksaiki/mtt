@@ -43,16 +43,6 @@
       ─────────────── (Unit)      ───────────── (MkUnit)
       Γ ⊢ Unit : Type             Γ ⊢ () : Unit
 
-      ──────────────── (Empty)
-      Γ ⊢ Empty : Prop
-
-      Γ ⊢ A : Sort i    Γ ⊢ h : Empty
-      ───────────────────────────────── (Absurd)
-            Γ ⊢ absurd A h : A
-
-        ex falso at any sort: subsingleton elimination, sound because
-        Empty has no introduction forms
-
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Sigma)
          Γ ⊢ Σ (x : A) ⇒ B : Sort (max i j)

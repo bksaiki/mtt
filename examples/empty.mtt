@@ -1,7 +1,7 @@
--- The empty type: no elements, living in Prop — it is falsity. absurd is
--- ex falso: from a proof of Empty anything follows, in any sort
--- (subsingleton elimination). Unlike Unit there is no η law: Empty's
--- content is logical rather than equational.
+-- The empty type: no elements, living in Prop — it is falsity. It is the
+-- prelude inductive `inductive Empty : Prop` (no constructors), so its recursor
+-- `Empty.rec` is ex falso; the prelude wraps it as `absurd A h`. Unlike Unit
+-- there is no η law: Empty's content is logical rather than equational.
 
 def negate (A : Prop) := A → Empty
 

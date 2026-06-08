@@ -30,8 +30,6 @@ rule token = parse
   | "Type" { TYPE }
   | "Prop" { PROP }
   | "Unit" { UNIT }
-  | "Empty" { EMPTY }
-  | "absurd" { ABSURD }
   | "inl" { INL }
   | "inr" { INR }
   | "case" { CASE }

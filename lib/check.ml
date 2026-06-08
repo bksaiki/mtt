@@ -137,7 +137,6 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       match infer_neutral ctx m with
       | Value.Pi (_, _, c) -> Value.apply_closure c a
       | _ -> assert false (* values are well-typed by invariant *))
-  | Value.Absurd (a, _) -> a (* the motive is the type *)
   | Value.Fst n -> (
       match infer_neutral ctx n with
       | Value.Sigma (_, a, _) -> a
@@ -169,7 +168,6 @@ let rec sort_of ctx (ty : Value.t) : int =
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
       imax (sort_of ctx a) j
   | Value.Unit -> 1 (* Unit : Type *)
-  | Value.Empty -> 0 (* Empty : Prop *)
   (* plain max, no imax: a Σ is a proposition only when both components are, so
      data can never hide inside a Prop *)
   | Value.Sigma (x, a, c) ->
@@ -273,7 +271,6 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
       conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
         (Value.apply_closure c2 v)
   | Value.Unit, Value.Unit -> true
-  | Value.Empty, Value.Empty -> true
   (* sigma: unlike pi there is no contravariant position, so both components are
      covariant under cumulativity *)
   | Value.Sigma (x, a1, c1), Value.Sigma (_, a2, c2) ->
@@ -442,13 +439,6 @@ and conv_neutral ctx n1 n2 : Value.t option =
         Some (Value.apply motive1 (Value.Neutral n1))
       else
         None
-  (* stuck ex falso: the motives must agree; the proofs are of type Empty, a
-     Prop, so by irrelevance they need not be compared at all *)
-  | Value.Absurd (a1, _), Value.Absurd (a2, _) ->
-      if conv_ty ~cumul:false ctx a1 a2 then
-        Some a1
-      else
-        None
   | _ -> None
 
 (* the cumulativity relation t1 ≤ t2 on types, used by subsumption *)
@@ -497,7 +487,6 @@ let rec infer ctx t =
   match t with
   | Type.Unit -> Value.Sort 1 (* (Unit): Unit : Type *)
   | Type.MkUnit -> Value.Unit (* (MkUnit) *)
-  | Type.Empty -> Value.Sort 0 (* (Empty): Empty : Prop *)
   | Type.Var i -> List.nth ctx.types i (* (Var) *)
   | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
   (* (Pi) *)
@@ -527,12 +516,6 @@ let rec infer ctx t =
           | ty ->
               type_error "expected a function, but %s has type %s"
                 (show_term ctx f) (show ctx ty)))
-  (* (Absurd): subsingleton elimination — the motive may live in any sort, even
-     though Empty is a Prop, because Empty has no introduction forms *)
-  | Type.Absurd (a, h) ->
-      let _ = infer_univ ctx a in
-      check ctx h Value.Empty;
-      Value.eval ctx.env a
   (* (Sum): plain max, like sigma *)
   | Type.Sum (a, b) ->
       let i = infer_univ ctx a in

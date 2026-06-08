@@ -13,6 +13,16 @@ def comp (A B C : Type) (g : B → C) (f : A → B) (x : A) : C := g (f x)
 
 -- === Logic ===
 
+-- falsity: an inductive with no constructors. Empty.rec is ex falso — with no
+-- minor premises it eliminates a proof of Empty into any motive (subsingleton
+-- elimination, sound because there are no introduction forms)
+inductive Empty : Prop
+
+-- ex falso quodlibet: from a proof of Empty, anything follows. Fixed at Type
+-- (so it also covers Prop by cumulativity); a universe-polymorphic version
+-- awaits universe polymorphism
+def absurd (A : Type) (h : Empty) : A := Empty.rec (fun (_ : Empty) => A) h
+
 -- negation; by the imax rule A → Empty is a proposition for any A, so `not`
 -- applies to data as well as propositions
 def not (A : Type) := A → Empty

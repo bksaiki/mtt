@@ -10,7 +10,6 @@ type t =
   | Lam of string * t * closure
   | Unit
   | MkUnit
-  | Empty
   | Sigma of string * t * closure
   | Pair of t * t
   | Sum of t * t
@@ -36,7 +35,6 @@ type t =
 and neutral =
   | Var of int  (** de Bruijn level *)
   | App of neutral * t
-  | Absurd of t * neutral  (** a stuck ex falso: motive and stuck proof *)
   | Fst of neutral  (** a stuck first projection *)
   | Snd of neutral  (** a stuck second projection *)
   | Case of t * neutral * t * t

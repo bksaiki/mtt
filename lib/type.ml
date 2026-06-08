@@ -21,14 +21,11 @@ type rec_head =
 type t =
   | Unit (* the unit type *)
   | MkUnit (* the element of Unit *)
-  | Empty (* the empty type: falsity *)
   | Var of int (* de Bruijn index *)
   | Sort of int (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of string * t * t (* Π (x : A). B, B binds index 0 *)
   | Lam of string * t * t (* λ (x : A). b *)
   | App of t * t
-  | Absurd of
-      t * t (* absurd A h: ex falso, eliminating h : Empty at motive A *)
   | Sigma of string * t * t (* Σ (x : A) ⇒ B, B binds index 0 *)
   | Pair of t * t (* (a, b) *)
   | Fst of t (* p.1 *)
@@ -50,8 +47,7 @@ type t =
 
 let rec occurs k = function
   | Unit
-  | MkUnit
-  | Empty ->
+  | MkUnit ->
       false
   | Var i -> i = k
   | Sort _ -> false
@@ -59,7 +55,6 @@ let rec occurs k = function
   | Lam (_, a, b) ->
       occurs k a || occurs (k + 1) b
   | App (f, a) -> occurs k f || occurs k a
-  | Absurd (a, h) -> occurs k a || occurs k h
   | Sigma (_, a, b) -> occurs k a || occurs (k + 1) b
   | Pair (a, b) -> occurs k a || occurs k b
   | Fst t
@@ -113,7 +108,6 @@ let pp_in names fmt t =
     match t with
     | Unit -> Format.pp_print_string fmt "Unit"
     | MkUnit -> Format.pp_print_string fmt "()"
-    | Empty -> Format.pp_print_string fmt "Empty"
     | Var i -> (
         match List.nth_opt names i with
         | Some x -> Format.pp_print_string fmt x
@@ -145,10 +139,6 @@ let pp_in names fmt t =
     | App (f, a) ->
         paren_if (prec > 10) (fun fmt ->
             Format.fprintf fmt "@[%a@ %a@]" (go 10 names) f (go 11 names) a)
-    | Absurd (a, h) ->
-        paren_if (prec > 10) (fun fmt ->
-            Format.fprintf fmt "@[absurd@ %a@ %a@]" (go 11 names) a
-              (go 11 names) h)
     | Sigma (x, a, b) ->
         if occurs 0 b then
           let x = freshen names x in
