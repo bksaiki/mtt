@@ -11,7 +11,9 @@ let infer s =
          ~notation:prelude.Check.notation s)
   with
   | ty -> print_endline (Check.show prelude ty)
-  | exception Check.Type_error msg -> Printf.printf "type error: %s\n" msg
+  | exception Check.Type_error frags ->
+      Printf.printf "type error: %s\n"
+        (Notation.render_error prelude.Check.notation frags)
 
 let%expect_test "universe rules" =
   infer "Type";

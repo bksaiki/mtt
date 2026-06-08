@@ -115,10 +115,24 @@
 
     In (App), the substitution [B[a/x]] is closure application. *)
 
-exception Type_error of string
+(** An error message as renderable fragments: literal [Text], or a core [Term]
+    paired with the binder names it is read against. The kernel formats no
+    notation itself — it carries the offending terms and lets the frontend
+    (which owns the notation registry) render them. *)
+type frag =
+  | Text of string
+  | Term of string list * Type.t
 
-(** [type_error fmt ...] raises {!Type_error} with a formatted message *)
-val type_error : ('a, Format.formatter, unit, 'b) format4 -> 'a
+exception Type_error of frag list
+
+(** [type_error frags] raises {!Type_error} with the given message fragments *)
+val type_error : frag list -> 'a
+
+(** [txt s] is a literal-text fragment; [txtf] is its printf-style variant, for
+    non-term parts (names, counts, sorts) that never carry notation *)
+val txt : string -> frag
+
+val txtf : ('a, Format.formatter, unit, frag) format4 -> 'a
 
 (** the typing context: the local binders (index-aligned), plus the global
     inductive signature *)
@@ -143,11 +157,21 @@ val bind : string -> Value.t -> ctx -> ctx
     unfold during evaluation (δ-reduction) *)
 val define : string -> Value.t -> Value.t -> ctx -> ctx
 
-(** [show ctx v] renders a value with the context's binder names *)
+(** [show ctx v] renders a value with the context's binder names and notation;
+    used by the frontend for [#check]/[#eval] output. Error messages instead
+    carry their terms (via {!tm}/{!vl}) for the frontend to render. *)
 val show : ctx -> Value.t -> string
 
-(** [show_term ctx t] renders a term with the context's binder names *)
+(** [show_term ctx t] renders a term with the context's binder names and
+    notation *)
 val show_term : ctx -> Type.t -> string
+
+(** [tm ctx t] / [vl ctx v] are error fragments for a term / a value, capturing
+    the binder names they are read against (the value is quoted now, notation
+    applied later by the frontend) *)
+val tm : ctx -> Type.t -> frag
+
+val vl : ctx -> Value.t -> frag
 
 (** [conv ctx ty v1 v2] decides definitional equality of the values [v1] and
     [v2] at the type [ty], which both must inhabit. Type-directed: at a Prop,

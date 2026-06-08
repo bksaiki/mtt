@@ -6,7 +6,9 @@ let%expect_test "prelude is well-typed and its defs are usable" =
   let check line =
     match Stmt.run ctx (Parse.stmt_of_string line) with
     | _, msg -> Option.iter print_endline msg
-    | exception Check.Type_error m -> print_endline ("type error: " ^ m)
+    | exception Check.Type_error frags ->
+        print_endline
+          ("type error: " ^ Notation.render_error ctx.Check.notation frags)
   in
   check "#check id";
   [%expect {| fun (A : Type) => fun (x : A) => x : (A : Type) -> A -> A |}];

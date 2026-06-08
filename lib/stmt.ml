@@ -47,7 +47,10 @@ let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
     | Type.Sort k -> k
     | _ ->
         Check.type_error
-          "the result of an inductive must be a sort (Type, Prop, or Type n)"
+          [ Check.txt
+              "the result of an inductive must be a sort (Type, Prop, or Type \
+               n)"
+          ]
   in
   let provisional = { Inductive.name = d.iname; params; sort; ctors = [] } in
   let sg = Signature.add provisional sg in
@@ -60,8 +63,10 @@ let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
       (fun (cname, cty) ->
         if String.equal cname "rec" then
           Check.type_error
-            "a constructor may not be named 'rec' (reserved for the recursor \
-             T.rec)";
+            [ Check.txt
+                "a constructor may not be named 'rec' (reserved for the \
+                 recursor T.rec)"
+            ];
         let rec decompose j ty =
           match (ty : Type.t) with
           | Pi (x, a, b) ->
@@ -76,8 +81,10 @@ let elaborate_inductive (ctx : Check.ctx) (d : ind_decl) : Inductive.spec =
         in
         if not (is_self (m + List.length fields) result) then
           Check.type_error
-            "constructor %s must construct %s applied to its parameters" cname
-            d.iname;
+            [ Check.txtf
+                "constructor %s must construct %s applied to its parameters"
+                cname d.iname
+            ];
         { Inductive.cname; fields })
       d.ictors
   in
@@ -136,8 +143,12 @@ let run (ctx : Check.ctx) stmt =
       let vt = Value.eval ctx.env t in
       let vu = Value.eval ctx.env u in
       if not (Check.conv ctx ty vt vu) then
-        Check.type_error "#check_equal failed: %s is not convertible with %s"
-          (Check.show ctx vt) (Check.show ctx vu);
+        Check.type_error
+          [ Check.txt "#check_equal failed: "
+          ; Check.vl ctx vt
+          ; Check.txt " is not convertible with "
+          ; Check.vl ctx vu
+          ];
       (ctx, None)
   | Inductive d ->
       let spec = elaborate_inductive ctx d in
@@ -147,7 +158,8 @@ let run (ctx : Check.ctx) stmt =
         match d.iattr with
         | None -> ctx
         | Some ("notation", role) -> Check.register_notation role spec ctx
-        | Some (name, _) -> Check.type_error "unknown attribute @@[%s ...]" name
+        | Some (name, _) ->
+            Check.type_error [ Check.txtf "unknown attribute @@[%s ...]" name ]
       in
       (ctx, None)
   (* the prelude directive only controls the driver's choice of starting context

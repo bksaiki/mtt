@@ -46,9 +46,10 @@ let run_repl ctx (stmt : Stmt.t) =
   | exception Ast.Unbound_variable (loc, x) ->
       Printf.printf "%s: unbound variable: %s\n" (Loc.to_string loc) x;
       ctx
-  | exception Check.Type_error msg ->
+  | exception Check.Type_error frags ->
       (* the statement is the whole REPL line: a position adds nothing *)
-      Printf.printf "type error: %s\n" msg;
+      Printf.printf "type error: %s\n"
+        (Notation.render_error ctx.Check.notation frags);
       ctx
 
 let rec repl ctx initialized =
@@ -124,8 +125,9 @@ let run_file path =
                 ctx
             | exception Ast.Unbound_variable (loc, x) ->
                 die "%s: unbound variable: %s" (Loc.to_string loc) x
-            | exception Check.Type_error msg ->
-                die "%s: type error: %s" (Loc.to_string stmt.loc) msg)
+            | exception Check.Type_error frags ->
+                die "%s: type error: %s" (Loc.to_string stmt.loc)
+                  (Notation.render_error ctx.Check.notation frags))
       in
       ignore (List.fold_left step init stmts)
 
