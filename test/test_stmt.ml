@@ -323,3 +323,35 @@ let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
     fun (h : P x) => J (fun (z : A) => fun (q : Eq A x z) => P z) h p : (P : A -> Type) -> (x : A) -> (y : A) -> Eq A x y -> P x -> P y
     J (fun (z : A) => fun (q' : Eq A a z) => Eq A z a) refl q : Eq A b a
     |}]
+
+let%expect_test "Nat: computation by recursion, and induction" =
+  session
+    [ "def add (m n : Nat) : Nat :="
+      ^ " natrec (λ x : Nat ⇒ Nat) n (λ k : Nat ⇒ λ ih : Nat ⇒ succ ih) m"
+    ; "def mul (m n : Nat) : Nat :="
+      ^ " natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ add n ih) m"
+    ; (* ι-reduction computes closed numerals *)
+      "#eval add 2 3"
+    ; "#eval mul 2 3"
+    ; "#check_equal (add 2 3) 5"
+    ; (* add zero on the left reduces definitionally; on the right it is stuck,
+         so 0 + n = n holds by computation but n + 0 = n needs induction *)
+      "def cong (A B : Type) (f : A → B) (x y : A) (p : Eq A x y)"
+      ^ " : Eq B (f x) (f y) :="
+      ^ " J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl p"
+    ; "theorem add_zero (n : Nat) : Eq Nat (add n 0) n :="
+      ^ " natrec (λ m : Nat ⇒ Eq Nat (add m 0) m) refl"
+      ^ " (λ k : Nat ⇒ λ ih : Eq Nat (add k 0) k ⇒"
+      ^ " cong Nat Nat (λ m : Nat ⇒ succ m) (add k 0) k ih) n"
+    ; "#check add_zero"
+    ];
+  [%expect
+    {|
+    5
+    6
+    add_zero : (n : Nat) ->
+    Eq Nat
+    (natrec (fun (x : Nat) => Nat) 0 (fun (k : Nat) => fun (ih : Nat) => succ ih)
+     n)
+    n
+    |}]

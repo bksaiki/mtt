@@ -1,5 +1,7 @@
 -- Church numerals: a natural number is its own iterator, applying a
--- function n times to a starting point.
+-- function n times to a starting point. This is the *encoded* counterpart
+-- to the native inductive Nat (see nat.mtt); the names here are lowercase
+-- nat / csucc to leave the Nat and succ keywords free.
 def nat := Π (A : Type) ⇒ (A → A) → A → A
 
 def zero (A : Type) (f : A → A) (x : A) : A := x

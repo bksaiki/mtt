@@ -17,8 +17,11 @@
       dependent elimination on it works via Unit-η
 - [ ] A prelude: definitions (Bool, elim, ...) preloaded into every
       session, once an import mechanism exists
-- [ ] Inductive types / naturals with eliminator (replaces Church encodings;
-      sums + Σ + unit/empty are the warm-up)
+- [x] `Nat` (hand-rolled inductive: `0`/`succ`/`natrec` with the induction
+      hypothesis, numeral literals, recursion + induction in `examples/nat.mtt`)
+- [ ] General inductive schema (one mechanism generating recursors + ι, with
+      strict positivity; subsumes the hand-rolled Nat/Σ/sum/Eq/Unit/Empty —
+      those become the regression spec). The big one.
 - [x] Identity type (`Eq A x y` / `refl` / `J`) — explicit type arg for now
       (`=` infix awaits an elaborator); `sym`/`trans`/`cong`/`subst` and UIP
       in `examples/eq.mtt`

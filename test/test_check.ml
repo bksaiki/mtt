@@ -223,3 +223,29 @@ let%expect_test "equality formation and refl" =
   (* the endpoints must share the type A *)
   infer "Eq Unit () Type";
   [%expect {| type error: this term has type Type 1 but Unit was expected |}]
+
+let%expect_test "Nat formation and constructors" =
+  infer "Nat";
+  [%expect {| Type |}];
+  infer "0";
+  [%expect {| Nat |}];
+  infer "succ (succ 0)";
+  [%expect {| Nat |}];
+  (* succ infers (its argument is Nat), but the argument must check *)
+  infer "succ Type";
+  [%expect {| type error: this term has type Type 1 but Nat was expected |}]
+
+let%expect_test "natrec: typing, large elimination, errors" =
+  (* recursion into Type is fine — Nat is not a Prop, no restriction *)
+  infer
+    {|λ n : Nat ⇒ natrec (λ x : Nat ⇒ Type) Unit (λ k : Nat ⇒ λ ih : Type ⇒ ih) n|};
+  [%expect {| Nat -> Type |}];
+  (* the motive must take a Nat *)
+  infer {|natrec (λ x : Unit ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ ih) 0|};
+  [%expect {| type error: the motive should take a Nat, but takes Unit |}];
+  (* the base case must prove P zero *)
+  infer {|natrec (λ x : Nat ⇒ Nat) Type (λ k : Nat ⇒ λ ih : Nat ⇒ ih) 0|};
+  [%expect {| type error: this term has type Type 1 but Nat was expected |}];
+  (* the scrutinee must be a Nat *)
+  infer {|natrec (λ x : Nat ⇒ Nat) 0 (λ k : Nat ⇒ λ ih : Nat ⇒ ih) Unit|};
+  [%expect {| type error: this term has type Type but Nat was expected |}]

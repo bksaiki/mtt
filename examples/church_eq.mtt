@@ -1,7 +1,7 @@
--- Leibniz (Church-style) equality: x equals y when y satisfies every
--- predicate x does. This is the *encoded* equality; mtt also has a native
--- Eq (see eq.mtt) — this file is kept as the encoding counterpart, with the
--- encoded operator written LEq to avoid the Eq keyword.
+-- Church-encoded (Leibniz) equality: x equals y when y satisfies every
+-- predicate x does. This is the *encoded* counterpart to the native
+-- inductive Eq (see eq.mtt); the operator is written LEq to leave the Eq
+-- keyword free.
 def LEq (A : Type) (x y : A) :=
   Π (P : A → Type) ⇒ P x → P y
 
