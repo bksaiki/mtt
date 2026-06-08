@@ -57,7 +57,7 @@ grammar; :quit ends the session, so the line after it never runs:
     axiom x : A      postulate x of type A
     def x [: A] := t define x (annotation optional)
     theorem x : A := t  prove A with t (opaque)
-    prelude          first line only: start without the standard prelude
+    prelude          start without the standard prelude (only valid for first line)
 
 
 :env lists the bindings in scope, oldest first. Opting out of the prelude

@@ -22,7 +22,8 @@ let help =
     ; "  axiom x : A      postulate x of type A"
     ; "  def x [: A] := t define x (annotation optional)"
     ; "  theorem x : A := t  prove A with t (opaque)"
-    ; "  prelude          start without the standard prelude (only valid for first line)"
+    ; "  prelude          start without the standard prelude (only valid for \
+       first line)"
     ]
 
 (* print the bindings in scope, oldest first (the context lists are
