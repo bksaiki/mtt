@@ -1,3 +1,5 @@
+prelude
+
 -- Church numerals: a natural number is its own iterator, applying a
 -- function n times to a starting point. This is the *encoded* counterpart
 -- to the native inductive Nat (see nat.mtt); the names here are lowercase

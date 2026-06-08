@@ -1,7 +1,6 @@
 -- Building on the prelude (Nat, add/mul, the equality toolkit). This file
 -- demonstrates what the prelude does NOT include: computation by recursion,
 -- and constructor disjointness via large elimination.
-prelude
 
 -- ι-reduction: closed numerals compute
 #check_equal (add 2 3) 5

@@ -24,9 +24,11 @@ type desc =
   | Theorem of string * Ast.t * Ast.t  (** [theorem x : A = t], opaque *)
   | CheckEqual of Ast.t * Ast.t  (** [#check_equal t u] *)
   | Prelude
-      (** the [prelude] directive: brings the standard prelude into scope.
-          Expanded by the driver via {!Prelude.load} ([Stmt] cannot reach that
-          module without a cycle), so {!run} treats it as a no-op. *)
+      (** the [prelude] directive: opt out of the auto-loaded standard prelude
+          (the file is prelude-level / wants a bare environment). Must be the
+          first statement. The driver acts on it when choosing the starting
+          context — [Stmt] cannot reach {!Prelude} without a cycle — so {!run}
+          treats it as a no-op. *)
 
 (** a statement with the source location of the whole declaration, for
     statement-level error reporting (type errors carry no finer position: the

@@ -1,3 +1,5 @@
+prelude
+
 -- Church-encoded booleans: a boolean is its own eliminator, choosing
 -- between two alternatives of any type.
 def Bool := Π (A : Type) ⇒ A → A → A

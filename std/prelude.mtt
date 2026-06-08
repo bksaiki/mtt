@@ -1,3 +1,5 @@
+prelude
+
 -- The mtt standard prelude. Brought into scope by the `prelude` keyword;
 -- everything here is axiom-free (definable from the core). Because it is
 -- ordinary mtt, this file doubles as the reference for how the basics are

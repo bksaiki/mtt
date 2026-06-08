@@ -6,7 +6,7 @@ type desc =
   | Def of string * Ast.t option * Ast.t (* def x [: A] = t, transparent *)
   | Theorem of string * Ast.t * Ast.t (* theorem x : A = t, opaque *)
   | CheckEqual of Ast.t * Ast.t (* #check_equal t u *)
-  | Prelude (* bring the standard prelude into scope (expanded by the driver) *)
+  | Prelude (* opt out of the auto-loaded prelude (handled by the driver) *)
 
 type t =
   { loc : Loc.t
@@ -72,7 +72,7 @@ let run (ctx : Check.ctx) stmt =
         Check.type_error "#check_equal failed: %s is not convertible with %s"
           (Check.show ctx vt) (Check.show ctx vu);
       (ctx, None)
-  (* the prelude directive is expanded by the driver (which can reach the
-     [Prelude] module — [Stmt] cannot, on pain of a cycle); reaching here means
-     no prelude was wired, so it is a harmless no-op *)
+  (* the prelude directive only controls the driver's choice of starting context
+     (auto-load vs. bare); it is handled there, so by the time a statement
+     reaches [run] it is a no-op *)
   | Prelude -> (ctx, None)

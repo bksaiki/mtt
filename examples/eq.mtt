@@ -1,7 +1,6 @@
 -- Building on the prelude's equality toolkit (sym/trans/cong/subst). This
 -- file demonstrates what is special about the native Eq: refl reifies the
 -- checker's own conversion, and UIP holds for free.
-prelude
 
 axiom A : Type
 axiom a : A

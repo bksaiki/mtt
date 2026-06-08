@@ -127,19 +127,24 @@ the statement type and its processor, per the module-per-concept convention):
 - `def x [: A] = t` — `define`: bound to `t`'s value, unfolds (δ)
 - `theorem x : A = t` — proof checked, then `bind`: opaque (Qed-style);
   a theorem behaves exactly like an axiom whose obligation was discharged
-- `prelude` — a directive that loads the standard library into the current
-  context
+- `prelude` — a directive (first statement only) that opts *out* of the
+  auto-loaded standard library; see the Prelude section
 
 ## Prelude
 
 `std/prelude.mtt` is a standard library written in mtt (functions, `not`, the
 Eq toolkit `sym`/`trans`/`cong`/`subst`, Nat arithmetic and lemmas — all
 axiom-free). A dune rule embeds it into the binary as a string constant
-(`prelude_data.ml`), so there is no runtime path lookup. The `prelude`
-keyword loads it: parse the embedded source and fold `Stmt.run` over it,
-extending the context. The directive is expanded by the *driver* (`main.ml`),
-not `Stmt.run` — `Stmt` sits below `Parse`/`Prelude`, so it would be a cycle;
-`Stmt.run` treats the `Prelude` marker as a no-op fallback.
+(`prelude_data.ml`), so there is no runtime path lookup. It is loaded
+**automatically** (`Prelude.load` folds `Stmt.run` over the
+parsed source into the starting context). A file/REPL opts out by opening
+with the `prelude` directive — a bare environment, for the prelude's own
+source and from-scratch encodings (the examples in `church_*`, `logic`).
+Loading is lazy: the *driver* (`main.ml`) inspects the first statement and
+only loads when it is not `prelude`, so an opted-out file never pays for it;
+a `prelude` anywhere but first is an error. (`Stmt` sits below
+`Parse`/`Prelude`, so it cannot load — hence the driver owns this, and
+`Stmt.run` treats the `Prelude` marker as a no-op.)
 
 ## Conventions
 
