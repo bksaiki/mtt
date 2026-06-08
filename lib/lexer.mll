@@ -32,6 +32,9 @@ rule token = parse
   | "inl" { INL }
   | "inr" { INR }
   | "case" { CASE }
+  | "Eq" { EQ }
+  | "refl" { REFL }
+  | "J" { J }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }
   | "#eval" { EVAL }

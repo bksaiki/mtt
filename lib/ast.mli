@@ -28,6 +28,9 @@ and desc =
   | Inl of t  (** inl a *)
   | Inr of t  (** inr b *)
   | Case of t * t * t * t  (** case P s u v *)
+  | Eq of t * t * t  (** Eq A x y *)
+  | Refl  (** refl *)
+  | J of t * t * t  (** J P d p *)
 
 (** [mk loc desc] is the node [desc] located at [loc] *)
 val mk : Loc.t -> desc -> t
