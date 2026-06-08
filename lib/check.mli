@@ -149,6 +149,18 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
         subsingleton (like Empty), so eliminating into any sort is sound —
         this is what lets subst transport between types
 
+      ─────────────── (Nat)   ─────────────── (Zero)   Γ ⊢ n : Nat
+      Γ ⊢ Nat : Type          Γ ⊢ zero : Nat           ──────────────── (Succ)
+                                                        Γ ⊢ succ n : Nat
+
+      Γ ⊢ n : Nat    Γ ⊢ P : Nat → Sort j
+      Γ ⊢ pz ⇐ P zero    Γ ⊢ ps ⇐ Π (k : Nat) ⇒ P k → P (succ k)
+      ─────────────────────────────────────────────────────────── (NatRec)
+                      Γ ⊢ natrec P pz ps n : P n
+
+        the step's [P k] argument is the induction hypothesis; no
+        large-elimination restriction (Nat is in Type, not Prop)
+
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Pi)
           Γ ⊢ (x : A) -> B : Sort (imax i j)

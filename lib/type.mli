@@ -35,6 +35,14 @@ type t =
       (** [J (P, d, p)]: the eliminator (based path induction) — eliminates
           [p : Eq A x y] at motive [P : Π (y : A) ⇒ Eq A x y → Sort j], given
           the diagonal case [d : P x refl]; yields [P y p] *)
+  | Nat  (** the natural numbers *)
+  | Zero
+  | Succ of t
+  | NatRec of t * t * t * t
+      (** [NatRec (P, pz, ps, n)]: the recursor — eliminates [n : Nat] at motive
+          [P : Nat → Sort j], given [pz : P zero] and the step
+          [ps : Π (k : Nat) ⇒ P k → P (succ k)] (whose [P k] argument is the
+          induction hypothesis); yields [P n] *)
 
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool
