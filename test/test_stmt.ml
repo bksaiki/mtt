@@ -330,6 +330,37 @@ let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
     J (fun (z : A) => fun (q' : Eq A a z) => Eq A z a) refl q : Eq A b a
     |}]
 
+let%expect_test "constructor parameters may be omitted in checking position" =
+  session
+    [ "inductive Box (A : Type) : Type := | wrap : A -> Box A"
+    ; (* checked against [Box A], so the parameter [A] is recovered from the
+         expected type and the constructor application drops it *)
+      "def b1 (A : Type) (a : A) : Box A := Box.wrap a"
+    ; "#check b1"
+    ; (* the elaborated core is identical to spelling the parameter out *)
+      "def b2 (A : Type) (a : A) : Box A := Box.wrap A a"
+    ; "#check_equal b1 b2"
+    ; (* omission also reaches into a lambda body checked against a Pi ... *)
+      "def b3 (A : Type) : A -> Box A := fun (a : A) => Box.wrap a"
+    ; (* ... and into a function argument checked against its domain *)
+      "def use (A : Type) (x : Box A) : Box A := x"
+    ; "def b4 (A : Type) (a : A) : Box A := use A (Box.wrap a)"
+    ; "#check_equal b3 (fun (A : Type) => fun (a : A) => b4 A a)"
+    ; (* a second parameter is recovered just the same *)
+      "inductive Prod2 (A B : Type) : Type := | mk : A -> B -> Prod2 A B"
+    ; "def p (A B : Type) (a : A) (b : B) : Prod2 A B := Prod2.mk a b"
+    ; "#check p"
+    ; (* inference position is unchanged: the parameters stay explicit *)
+      "#check Prod2.mk"
+    ];
+  [%expect
+    {|
+    fun (A : Type) => fun (a : A) => Box.wrap A a : (A : Type) -> A -> Box A
+    fun (A : Type) =>
+    fun (B : Type) => fun (a : A) => fun (b : B) => Prod2.mk A B a b : (A : Type) -> (B : Type) -> A -> B -> Prod2 A B
+    Prod2.mk : (A : Type) -> (B : Type) -> A -> B -> Prod2 A B
+    |}]
+
 let%expect_test "Nat: computation by recursion, and induction" =
   session
     [ "def add (m n : Nat) : Nat :="

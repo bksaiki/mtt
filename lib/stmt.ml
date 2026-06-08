@@ -102,16 +102,23 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
 let run (sess : session) stmt =
   let ctx = sess.ctx in
   let notation = sess.notation in
-  let to_term = Ast.to_term ctx.signature ~notation ctx.names in
-  (* scope-check and evaluate an annotation, requiring it to be a type *)
+  (* elaborate (surface → explicit core) then have the kernel re-check: the
+     elaborator is untrusted, so [Check] stays the sole authority *)
+  let infer s = Elab.infer notation ctx s in
+  let check_against s va =
+    let t = Elab.check notation ctx s va in
+    Check.check ctx t va;
+    t
+  in
+  (* elaborate and evaluate an annotation, requiring it to be a type *)
   let eval_ann sa =
-    let a = to_term sa in
+    let a = infer sa in
     let _ = Check.infer_univ ctx a in
     Value.eval ctx.env a
   in
   match stmt.desc with
   | Check s ->
-      let t = to_term s in
+      let t = infer s in
       let ty = Check.infer ctx t in
       let nf = Value.quote ctx.lvl (Value.eval ctx.env t) in
       ( sess
@@ -120,7 +127,7 @@ let run (sess : session) stmt =
              (Notation.show_term notation ctx.names nf)
              (Notation.show notation ctx.names ctx.lvl ty)) )
   | Eval s ->
-      let t = to_term s in
+      let t = infer s in
       (* still type-checked first: evaluation of ill-typed terms can get stuck
          on a non-function *)
       let _ = Check.infer ctx t in
@@ -130,28 +137,27 @@ let run (sess : session) stmt =
       let va = eval_ann sa in
       ({ sess with ctx = Check.bind x va ctx }, None)
   | Def (x, sa, st) ->
-      let t = to_term st in
-      let va =
+      let t, va =
         match sa with
         | Some sa ->
             let va = eval_ann sa in
-            Check.check ctx t va;
-            va
-        | None -> Check.infer ctx t
+            (check_against st va, va)
+        | None ->
+            let t = infer st in
+            (t, Check.infer ctx t)
       in
       let v = Value.eval ctx.env t in
       ({ sess with ctx = Check.extend x v va ctx }, None)
   | Theorem (x, sa, st) ->
       let va = eval_ann sa in
-      Check.check ctx (to_term st) va;
+      let _ = check_against st va in
       (* opaque: the proof is checked, then forgotten *)
       ({ sess with ctx = Check.bind x va ctx }, None)
   | CheckEqual (st, su) ->
-      let t = to_term st in
-      let u = to_term su in
+      let t = infer st in
       (* definitional equality is typed: both sides at the same type *)
       let ty = Check.infer ctx t in
-      Check.check ctx u ty;
+      let u = check_against su ty in
       let vt = Value.eval ctx.env t in
       let vu = Value.eval ctx.env u in
       if not (Check.conv ctx ty vt vu) then

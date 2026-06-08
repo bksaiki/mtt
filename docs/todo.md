@@ -55,6 +55,8 @@ Inference that sits above the kernel, turning concise surface terms into fully
 explicit core terms. Its mirror — the delaborator (core → surface) — lives with
 the notation registry under Surface syntax; the two share that registry.
 
+The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
+
 - [ ] Implicit arguments: infer the type arguments the kernel demands
       explicitly — gives `x = y` infix over `Eq A x y`, motive inference for
       `case`/`J`/`T.rec`, and lets `inl a` / `refl` / `(a, b)` and inductive
