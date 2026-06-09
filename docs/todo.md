@@ -68,19 +68,47 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 
 Inference that sits above the kernel, turning concise surface terms into fully
 explicit core terms. Its mirror — the delaborator (core → surface) — lives with
-the notation registry under Surface syntax; the two share that registry.
-
-The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
+the notation registry under Surface syntax; the two share that registry. The
+settled architecture is in `design.md` (Elaboration); what is done and what
+remains is below.
 
 - [x] Constructor-argument inference in *checking* position: a constructor
       application checked against its inductive omits the leading parameters
       (`Box.wrap a`, `(a, b)`, `Sum.inl a`), recovered from the expected type —
       the metavariable-free core of the elaborator (Phase 1)
-- [ ] Implicit arguments: infer the type arguments the kernel demands
-      explicitly — gives `x = y` infix over `Eq A x y`, motive inference for
-      `J`/`T.rec`, and lets `refl` / inference-position intros omit their
-      type/endpoint arguments (the remaining, unification-based half)
-- [ ] Holes / metavariables (the unification engine the above is built on)
+- [x] Holes / metavariables (the unification engine): a surface `_` becomes a
+      metavariable solved by unification and zonked away before the kernel
+      re-checks (Phase 3). The kernel stays pristine — an inert `Meta` node only;
+      the metacontext, `unify`, and `zonk` live in a functional `lib/meta.ml`
+      threaded by `Elab` (which does its own meta-aware type synthesis).
+      Non-contextual + scope-checked; only unapplied metas solved so far
+- [x] Implicit arguments (Phase 4): `{x : A}` binders, with visibility a
+      kernel-inert `icit` flag on `Pi`/`Lam` (carried but ignored by conv/infer,
+      like the binder name — the Lean design). The elaborator inserts a fresh
+      metavariable for each leading implicit binder when an explicit argument
+      follows, solving it by unification; the prelude's `cong`/`sym`/`trans`/
+      `subst` now take their type/endpoint arguments implicitly. No `@f` escape
+      or trailing/expected-type-driven insertion yet (a bare `refl` whose
+      endpoints only implicits would fix must be ascribed)
+- [x] `x = y` infix over `Eq` (Phase 5): a new `eq_term` parser level (looser
+      than `+`/`×`, tighter than `->`, non-associative) producing `Ast.EqInfix`;
+      the elaborator synthesizes the type from the left side, and the
+      delaborator prints `Eq A x y` as `x = y`. `:=` is now the sole
+      definition/inductive separator (`=` is equality)
+- [x] Motive inference for `J`/`T.rec` (Phase 5): a hole `_` in the motive
+      position, in checking mode, is inferred by **abstracting the scrutinee out
+      of the goal** — the proof's endpoint for `J` (`P := λ z q ⇒ goal[y↦z]`),
+      the major premise for a recursor (`P := λ x ⇒ goal[major↦x]`). One
+      core `abstract`/`lift` primitive (occurrence generalization on normal
+      forms); no higher-order unifier needed. The whole prelude (`cong`/`sym`/
+      `trans`/`subst`, `add`/`mul`/`pred`, the Nat lemmas, `absurd`) now writes
+      `_` for its motives. Inference position (no goal) still needs an explicit
+      motive
+- [ ] Remaining surface inference: inference-position intros (`Sum.inl a` /
+      `refl` with no expected type), named projections `x.field` (currently only
+      positional `.1`/`.2`), and an `@f` escape to pass implicit arguments
+      explicitly. With these (and `Eq` retired) the type-free `Ast.to_term`
+      catch-all can go, leaving `Elab` the sole surface → core pass
 - [ ] `match` expressions — pure surface sugar that compiles to recursor
       (`T.rec`) applications; the kernel never sees it. Needs an equation
       compiler (nested/multiple/overlapping patterns → nested single-level
@@ -106,17 +134,19 @@ The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
         `nat` demands `zero`/`succ`, …), so a malformed or duplicate binding is
         rejected. *Done for the `unit` and `nat` roles* (`@[notation unit]`/
         `@[notation nat]`, the `@[ ]` attribute surface, one-shot + shape
-        check). *Done for `unit`/`nat`/`sigma`/`sum`*; the `eq` role lands with
-        the `Eq` removal.
+        check). *Done for `unit`/`nat`/`sigma`/`sum`*. `=` is handled directly
+        (not via a role) while `Eq` is still a kernel builtin; it moves to an
+        `eq` role when `Eq` becomes an inductive.
       - **forward** (parser/`to_term`/`Elab`): `()`→`Unit.unit` *(done)*,
         `2`→`succ (succ zero)` *(done)*, `A × B`/`Σ`/`+` → the registered
-        inductive applied *(done)*; `=` → `Eq` still to come
+        inductive applied *(done)*; `x = y` → `Eq _ x y` (type inferred) *(done,
+        via `Ast.EqInfix` in the elaborator)*
       - **reverse** (a **delaborator** — the elaborator's mirror, core → surface;
         for now realized as the kernel printer parameterized by a generic
         notation config, not a separate rewriter): the registered unit ctor →
         `()` *(done)*, succ-chains of the registered `Nat` → decimals *(done)*,
         applied `Sigma`/`Sum` formers → infix `×`/`Σ`/`+` and tuples *(done)*;
-        `Eq` → infix `=` still to come
+        `Eq A x y` → infix `x = y` *(done)*
       - the kernel printer stays **faithful/plain** (`Unit.unit`,
         `Nat.succ (… Nat.zero)`, qualified ctors); the delaborator applies sugar
         in the frontend. This forces a decision on error messages: either accept

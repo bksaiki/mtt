@@ -7,12 +7,13 @@ type t =
 
 let empty = { unit_ctor = None; nat = None; sigma = None; sum = None }
 
-(* renders a subterm as surface notation if it matches a registered role: the
-   unit constructor as [()], a closed succ-chain as a decimal; otherwise None,
-   so the kernel prints it plainly. This is the hook the kernel printer
-   ({!Type.pp_in}) consults — all notation knowledge lives here. Returns [(prec,
-   text)] so the printer can parenthesize; atoms use precedence 11. [recurse] /
-   [names] are unused for the (atomic) unit and nat roles. *)
+(* renders a subterm as surface notation, or None to let the kernel print it
+   plainly: the unit constructor as [()], a succ-chain as a decimal, an applied
+   Σ/Sum former as [×]/[Σ]/[+], a tuple, and native equality [Eq A x y] as infix
+   [x = y]. This is the hook the kernel printer ({!Type.pp_in}) consults — all
+   notation knowledge lives here. Returns [(prec, text)] so the printer can
+   parenthesize (atoms use precedence 11); [recurse] renders a subterm at a
+   given precedence for the infix forms. *)
 let sugar n ~recurse names term =
   let nat_lit term =
     match n.nat with
@@ -40,11 +41,15 @@ let sugar n ~recurse names term =
   in
   match term with
   | Type.Ctor h when n.unit_ctor = Some h -> Some (11, "()")
+  (* the native equality prints infix, with its type argument dropped: [Eq A x
+     y] → [x = y] (non-associative, looser than + and ×, tighter than ->) *)
+  | Type.Eq (_, x, y) ->
+      Some (2, Printf.sprintf "%s = %s" (recurse 3 names x) (recurse 3 names y))
   | _ -> (
       match peel term with
       (* an applied [Sigma] former: dependent → [Σ (x : A) ⇒ B], else → [A ×
          B] *)
-      | Type.Ind name, [ a; Type.Lam (x, _, b) ]
+      | Type.Ind name, [ a; Type.Lam (_, x, _, b) ]
         when match n.sigma with
              | Some mk -> String.equal name mk.Type.ind
              | None -> false ->
@@ -56,13 +61,13 @@ let sugar n ~recurse names term =
                   (recurse 0 (x :: names) b) )
           else
             Some
-              ( 3
-              , Printf.sprintf "%s × %s" (recurse 4 names a)
-                  (recurse 3 ("" :: names) b) )
+              ( 4
+              , Printf.sprintf "%s × %s" (recurse 5 names a)
+                  (recurse 4 ("" :: names) b) )
       (* an applied [Sum] former → [A + B] (right-associative) *)
       | Type.Ind name, [ a; b ] when n.sum = Some name ->
           Some
-            (2, Printf.sprintf "%s + %s" (recurse 3 names a) (recurse 2 names b))
+            (3, Printf.sprintf "%s + %s" (recurse 4 names a) (recurse 3 names b))
       | _ -> (
           match pair_components term with
           (* tuples right-nest: flatten the right spine to [(a, b, c)] *)

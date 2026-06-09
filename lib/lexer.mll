@@ -45,8 +45,10 @@ rule token = parse
   | "→" { ARROW }
   | "=>" { DARROW }
   | "⇒" { DARROW }
-  | "=" { EQUALS }
+  (* [:=] separates a definition/inductive from its body; [=] is equality infix
+     (sugar for [Eq], with the type inferred) *)
   | ":=" { EQUALS }
+  | "=" { EQOP }
   | "+" { PLUS }
   | "×" { TIMES }
   | "*" { TIMES }
@@ -67,6 +69,8 @@ rule token = parse
   | "." (ident as f) { DOTID f }
   | "(" { LPAREN }
   | ")" { RPAREN }
+  | "{" { LBRACE }
+  | "}" { RBRACE }
   | ":" { COLON }
   | digits as n { INT (int_of_string n) }
   | ident as x { ID x }

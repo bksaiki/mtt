@@ -1,7 +1,7 @@
 type t =
   | Sort of int
-  | Pi of string * t * closure
-  | Lam of string * t * closure
+  | Pi of Type.icit * string * t * closure
+  | Lam of Type.icit * string * t * closure
   | Eq of t * t * t
   | Refl
   (* an inductive type former applied to its parameters (a type once the
@@ -17,6 +17,7 @@ type t =
 
 and neutral =
   | Var of int (* de Bruijn level *)
+  | Meta of int (* a metavariable head, by id; flexible until solved *)
   | App of neutral * t
   | Proj of int * neutral (* a stuck record field projection *)
   | J of t * t * neutral (* a stuck J: motive, diagonal, stuck proof *)
@@ -36,9 +37,13 @@ exception Not_a_function
 let rec eval env t =
   match t with
   | Type.Var i -> List.nth env i
+  (* a metavariable is inert in the kernel: it evaluates to a stuck head and is
+     never solved here. The frontend ({!Meta}) owns solutions and zonks them
+     away, so a meta never reaches a final {!Check}. *)
+  | Type.Meta i -> Neutral (Meta i)
   | Type.Sort i -> Sort i
-  | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
-  | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
+  | Type.Pi (i, x, a, b) -> Pi (i, x, eval env a, { env; body = b })
+  | Type.Lam (i, x, a, b) -> Lam (i, x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
   | Type.Proj (i, t) -> vproj i (eval env t)
   | Type.Eq (a, x, y) -> Eq (eval env a, eval env x, eval env y)
@@ -55,7 +60,7 @@ let rec eval env t =
    accumulate as neutral spines instead. *)
 and apply f a =
   match f with
-  | Lam (_, _, c) -> apply_closure c a
+  | Lam (_, _, _, c) -> apply_closure c a
   | Neutral n -> Neutral (App (n, a))
   (* inductive heads accumulate arguments; a saturated recursor fires ι *)
   | VInd (name, args) -> VInd (name, args @ [ a ])
@@ -142,8 +147,8 @@ let rec quote l v =
   | Sort i -> Type.Sort i
   | Eq (a, x, y) -> Type.Eq (quote l a, quote l x, quote l y)
   | Refl -> Type.Refl
-  | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
-  | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
+  | Pi (i, x, a, c) -> Type.Pi (i, x, quote l a, quote_closure l c)
+  | Lam (i, x, a, c) -> Type.Lam (i, x, quote l a, quote_closure l c)
   | VInd (name, args) -> quote_spine l (Type.Ind name) args
   | VCtor (h, args) -> quote_spine l (Type.Ctor h) args
   | VRec (h, args) -> quote_spine l (Type.Rec h) args
@@ -160,6 +165,8 @@ and quote_neutral l = function
   (* level → index: the variable bound under k other binders, seen from under l
      binders, is index l - k - 1 *)
   | Var k -> Type.Var (l - k - 1)
+  (* an unsolved meta (a solved one is unfolded by [force] in [quote]) *)
+  | Meta i -> Type.Meta i
   | App (n, a) -> Type.App (quote_neutral l n, quote l a)
   | Proj (i, n) -> Type.Proj (i, quote_neutral l n)
   | J (p, d, n) -> Type.J (quote l p, quote l d, quote_neutral l n)

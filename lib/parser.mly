@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP TIMES PLUS EQ REFL J COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE EOF
+%token FUN PI SIGMA TYPE PROP TIMES PLUS EQ EQOP REFL J COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -51,7 +51,7 @@ decl_desc:
     s = term; cs = ctors_opt
     { Stmt.Inductive
         { Stmt.iname = x
-        ; iparams = List.concat_map (fun (xs, a) -> List.map (fun y -> (y, a)) xs) ps
+        ; iparams = List.concat_map (fun (_, xs, a) -> List.map (fun y -> (y, a)) xs) ps
         ; isort = s
         ; ictors = cs
         ; iattr = a
@@ -77,9 +77,13 @@ ctors_opt:
 ctor:
   | BAR; c = ID; COLON; t = term { (c, t) }
 
-(* a binder group: one annotation shared by one or more names *)
+(* a binder group: one annotation shared by one or more names, explicit
+   [(x y : A)] or implicit [{x y : A}] *)
 binder_group:
-  | LPAREN; xs = nonempty_list(ID); COLON; a = term; RPAREN { (xs, a) }
+  | LPAREN; xs = nonempty_list(ID); COLON; a = term; RPAREN
+    { (Type.Explicit, xs, a) }
+  | LBRACE; xs = nonempty_list(ID); COLON; a = term; RBRACE
+    { (Type.Implicit, xs, a) }
 
 term:
   | FUN; bs = nonempty_list(binder_group); DARROW; b = term
@@ -88,11 +92,11 @@ term:
     { Ast.pis $loc bs b }
   | SIGMA; bs = nonempty_list(binder_group); DARROW; b = term
     { Ast.sigmas $loc bs b }
-  (* a single binder may drop its parens: λ x : A ⇒ b *)
+  (* a single binder may drop its parens: λ x : A ⇒ b (always explicit) *)
   | FUN; x = ID; COLON; a = term; DARROW; b = term
-    { Ast.mk $loc (Ast.Lam (x, a, b)) }
+    { Ast.mk $loc (Ast.Lam (Type.Explicit, x, a, b)) }
   | PI; x = ID; COLON; a = term; DARROW; b = term
-    { Ast.mk $loc (Ast.Pi (x, a, b)) }
+    { Ast.mk $loc (Ast.Pi (Type.Explicit, x, a, b)) }
   | SIGMA; x = ID; COLON; a = term; DARROW; b = term
     { Ast.mk $loc (Ast.Sigma (x, a, b)) }
   | t = pi_term { t }
@@ -103,17 +107,28 @@ term:
    dependent pi binder. (Consequently extra parens cannot force the
    ascription reading there.) *)
 pi_term:
-  | a = sum_term; ARROW; b = pi_term
+  | a = eq_term; ARROW; b = pi_term
     { match a.Ast.desc with
       | Ast.Ascribe (e, ty) -> (
           (* an ascribed variable spine [(x y : A)] is a pi binder group *)
           match Ast.var_spine e with
-          | Some xs -> Ast.pis $loc [ (xs, ty) ] b
+          | Some xs -> Ast.pis $loc [ (Type.Explicit, xs, ty) ] b
           | None -> Ast.mk $loc (Ast.Arrow (a, b)))
       | _ -> Ast.mk $loc (Ast.Arrow (a, b)) }
+  (* an implicit binder group left of an arrow: [{x y : A} -> B]. (Explicit
+     [(x : A) -> B] rides the ascription path above; braces have no ascription
+     form, so they need their own production.) *)
+  | LBRACE; xs = nonempty_list(ID); COLON; a = term; RBRACE; ARROW; b = pi_term
+    { Ast.pis $loc [ (Type.Implicit, xs, a) ] b }
+  | t = eq_term { t }
+
+(* equality infix sits between arrows and sums; non-associative, and the type
+   argument is inferred (so [x = y], not [Eq A x y]) *)
+eq_term:
+  | x = sum_term; EQOP; y = sum_term { Ast.mk $loc (Ast.EqInfix (x, y)) }
   | t = sum_term { t }
 
-(* sums sit between arrows and products; right-associative *)
+(* sums sit between equalities and products; right-associative *)
 sum_term:
   | a = prod_term; PLUS; b = sum_term { Ast.mk $loc (Ast.Sum (a, b)) }
   | t = prod_term { t }
@@ -133,7 +148,9 @@ app_term:
   | t = atom { t }
 
 atom:
-  | x = ID { Ast.mk $loc (Ast.Var x) }
+  (* a bare [_] is an elaboration hole; any other identifier is a variable *)
+  | x = ID
+    { Ast.mk $loc (if String.equal x "_" then Ast.Hole else Ast.Var x) }
   (* surface universes name sorts: Prop = Sort 0, Type i = Sort (i+1) *)
   | i = TYPELEVEL { Ast.mk $loc (Ast.Sort (i + 1)) }
   | TYPE { Ast.mk $loc (Ast.Sort 1) }

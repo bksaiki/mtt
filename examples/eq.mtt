@@ -15,12 +15,13 @@ theorem beta_refl : Eq A ((λ x : A ⇒ x) a) a := refl
 -- the toolkit composes: sym (sym p) is p (both proofs of a = b — and equal
 -- anyway by UIP)
 axiom p : Eq A a b
-#check_equal (sym A b a (sym A a b p)) p
+#check_equal (sym (sym p)) p
 
--- ι: transport along refl computes away
+-- ι: transport along refl computes away. The endpoints are implicit, but a bare
+-- refl pins neither, so it is ascribed to fix them (Eq A a a).
 axiom P : A → Type
 axiom h : P a
-#check_equal (subst A P a a refl h) h
+#check_equal (subst P (refl : Eq A a a) h) h
 
 -- UIP for free: Eq lives in Prop, so proof irrelevance equates any two proofs
 -- of the same equation — no axiom needed

@@ -6,8 +6,8 @@
 
 type t =
   | Sort of int
-  | Pi of string * t * closure
-  | Lam of string * t * closure
+  | Pi of Type.icit * string * t * closure
+  | Lam of Type.icit * string * t * closure
   | Eq of t * t * t
   | Refl
   | VInd of string * t list
@@ -24,6 +24,7 @@ type t =
 (** a stuck term: a variable applied to a spine of eliminations *)
 and neutral =
   | Var of int  (** de Bruijn level *)
+  | Meta of int  (** a metavariable head (by id), flexible until solved *)
   | App of neutral * t
   | Proj of int * neutral  (** a stuck record field projection *)
   | J of t * t * neutral

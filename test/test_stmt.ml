@@ -34,8 +34,8 @@ let%expect_test "defs unfold (delta), theorems do not (opaque)" =
   session
     [ "axiom N : Type"
     ; "axiom zero : N"
-    ; "def d : N = zero"
-    ; "theorem t : N = zero"
+    ; "def d : N := zero"
+    ; "theorem t : N := zero"
     ; "#check d"
     ; "#check t"
     ];
@@ -46,7 +46,7 @@ let%expect_test "defs unfold (delta), theorems do not (opaque)" =
 
 let%expect_test "def with inferred type, used at two types" =
   session
-    [ "def id = fun (A : Type) => fun (x : A) => x"
+    [ "def id := fun (A : Type) => fun (x : A) => x"
     ; "axiom N : N"
     ; "axiom N : Type"
     ; "axiom zero : N"
@@ -66,15 +66,15 @@ let%expect_test "a theorem and its use" =
     ; "axiom Q : Type"
     ; "axiom f : P -> Q"
     ; "axiom p : P"
-    ; "theorem q : Q = f p"
-    ; "theorem bad : Q = p"
+    ; "theorem q : Q := f p"
+    ; "theorem bad : Q := p"
     ];
   [%expect {| type error: this term has type P but Q was expected |}]
 
 let%expect_test "declared names are in scope for later annotations" =
   session
     [ "axiom N : Type"
-    ; "def arrow : Type = N -> N"
+    ; "def arrow : Type := N -> N"
     ; "axiom g : arrow"
     ; "#check g"
     ];
@@ -84,8 +84,8 @@ let%expect_test "#eval reports just the normal form" =
   session
     [ "axiom N : Type"
     ; "axiom zero : N"
-    ; "def two = fun (f : N -> N) => fun (x : N) => f (f x)"
-    ; "def add = fun (m : (N -> N) -> N -> N) => fun (n : (N -> N) -> N -> N) \
+    ; "def two := fun (f : N -> N) => fun (x : N) => f (f x)"
+    ; "def add := fun (m : (N -> N) -> N -> N) => fun (n : (N -> N) -> N -> N) \
        => fun (f : N -> N) => fun (x : N) => m f (n f x)"
     ; "#eval add two two"
     ; "#eval Type Type"
@@ -213,6 +213,91 @@ let%expect_test "Empty: irrelevance and stuck absurd" =
     ];
   [%expect {| fun (A : Prop) => A -> Empty : Prop -> Prop |}]
 
+(* a hole [_] elaborates to a metavariable that unification solves from the
+   surrounding term; an unsolvable one is rejected. *)
+let%expect_test "holes: solved by unification, rejected when unsolvable" =
+  session
+    [ (* the type argument is recovered from the value argument *)
+      "#check id _ 0"
+    ; "#eval id _ 0"
+    ; "#check_equal (id _ 0) 0"
+    ; (* solved from a local variable, under binders: the solution is read back
+         as a reuse-safe de Bruijn index, so the def is usable at other types *)
+      "def appId (A : Type) (x : A) : A := id _ x"
+    ; "#check appId"
+    ; "#check_equal (appId Nat 0) 0"
+    ; (* nothing determines the hole: rejected *)
+      "#check (_ : Nat)"
+    ];
+  [%expect
+    {|
+    0 : Nat
+    0
+    fun (A : Type) => fun (x : A) => x : (A : Type) -> A -> A
+    type error: could not infer a hole (_); add a type annotation
+    |}]
+
+(* implicit arguments ([{x : A}]): the elaborator inserts a fresh metavariable
+   for each leading implicit binder when an explicit argument follows, and
+   solves it by unifying that argument's type. The prelude's equality lemmas
+   ([cong]/[sym]/[trans]) take their type and endpoint arguments implicitly. *)
+let%expect_test "implicit arguments: insertion and inference" =
+  session
+    [ (* an implicit type argument, inferred from the value argument *)
+      "def myid {A : Type} (x : A) : A := x"
+    ; "#check myid 0"
+    ; (* a bare implicit-arg function is not applied, so nothing is inserted:
+         its full implicit type prints with braces *)
+      "#check myid"
+    ; (* the prelude's lemmas now take type/endpoints implicitly *)
+      "theorem e : Eq Nat 1 1 := refl"
+    ; "#check sym e"
+    ; "#check cong (fun n : Nat => Nat.succ n) e"
+    ; (* a standalone implicit function type round-trips through the printer *)
+      "axiom dup : {A : Type} -> A -> A"
+    ; "#check dup"
+    ];
+  [%expect
+    {|
+    0 : Nat
+    fun {A : Type} => fun (x : A) => x : {A : Type} -> A -> A
+    J (fun (z : Nat) => fun (q : 1 = z) => z = 1) refl e : 1 = 1
+    J (fun (z : Nat) => fun (q : 1 = z) => 2 = Nat.succ z) refl e : 2 = 2
+    dup : {A : Type} -> A -> A
+    |}]
+
+(* a hole [_] in a motive position, in checking mode, is inferred by abstracting
+   the scrutinee out of the goal: the proof's endpoint for [J], the major
+   premise for a recursor. (In inference position there is no goal to abstract,
+   so the motive must be given.) *)
+let%expect_test "motive inference for J and recursors" =
+  session
+    [ (* J: abstract the endpoint [y] of [p : x = y] out of the goal [y = x],
+         recovering the motive [fun z q => z = x] *)
+      "def symm (A : Type) (x y : A) (p : x = y) : y = x := J _ refl p"
+    ; "#check symm Nat 0 0 refl"
+    ; (* a recursor: abstract the major [n] out of the goal [add n 0 = n] *)
+      "theorem azr (n : Nat) : add n 0 = n :=\n\
+      \   Nat.rec _ refl (fun (k : Nat) (ih : add k 0 = k) => cong Nat.succ \
+       ih) n"
+    ; "#check azr 3"
+    ; (* a non-dependent goal: abstraction finds no occurrence, giving a
+         constant motive (ordinary, non-dependent recursion) *)
+      "def dbl (n : Nat) : Nat := Nat.rec _ 0 (fun (k s : Nat) => Nat.succ \
+       (Nat.succ s)) n"
+    ; "#eval dbl 3"
+    ; (* no goal to abstract against (inference position): the motive is
+         required *)
+      "#check J _ refl (refl : (0 : Nat) = 0)"
+    ];
+  [%expect
+    {|
+    refl : 0 = 0
+    azr 3 : 3 = 3
+    6
+    type error: cannot infer the type of a hole _; use it where its type is determined
+    |}]
+
 (* Σ is the prelude record [Sigma]: pairs check against it (recovering the
    parameters), projections are the generic record projections, and η comes from
    the record rule. Fixed at Type, so the old "a pair of props is an irrelevant
@@ -235,7 +320,7 @@ let%expect_test "sigma: beta, eta, dependent pairs" =
       "axiom r : Unit × Unit"
     ; "#check_equal r ((), ())"
     ];
-  [%expect {| refl : Eq Nat 0 0 |}]
+  [%expect {| refl : 0 = 0 |}]
 
 (* the binary sum is the prelude inductive [Sum]: [+] is notation, the
    injections and eliminator are the qualified [Sum.inl]/[Sum.inr]/[Sum.rec].
@@ -315,14 +400,13 @@ let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
     {|
     fun (x : A) =>
     fun (y : A) =>
-    fun (p : Eq A x y) =>
-    J (fun (z : A) => fun (q : Eq A x z) => Eq A z x) refl p : (x : A) -> (y : A) -> Eq A x y -> Eq A y x
+    fun (p : x = y) => J (fun (z : A) => fun (q : x = z) => z = x) refl p : (x : A) -> (y : A) -> x = y -> y = x
     fun (P : A -> Type) =>
     fun (x : A) =>
     fun (y : A) =>
-    fun (p : Eq A x y) =>
-    fun (h : P x) => J (fun (z : A) => fun (q : Eq A x z) => P z) h p : (P : A -> Type) -> (x : A) -> (y : A) -> Eq A x y -> P x -> P y
-    J (fun (z : A) => fun (q' : Eq A a z) => Eq A z a) refl q : Eq A b a
+    fun (p : x = y) =>
+    fun (h : P x) => J (fun (z : A) => fun (q : x = z) => P z) h p : (P : A -> Type) -> (x : A) -> (y : A) -> x = y -> P x -> P y
+    J (fun (z : A) => fun (q' : a = z) => z = a) refl q : b = a
     |}]
 
 let%expect_test "constructor parameters may be omitted in checking position" =
@@ -382,8 +466,6 @@ let%expect_test "Nat: computation by recursion, and induction" =
     5
     6
     add_zero : (n : Nat) ->
-    Eq Nat
-    (Nat.rec (fun (x : Nat) => Nat) 0
-     (fun (k : Nat) => fun (ih : Nat) => Nat.succ ih) n)
-    n
+    Nat.rec (fun (x : Nat) => Nat) 0
+    (fun (k : Nat) => fun (ih : Nat) => Nat.succ ih) n = n
     |}]

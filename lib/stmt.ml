@@ -78,7 +78,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
             ];
         let rec decompose j ty =
           match (ty : Type.t) with
-          | Pi (x, a, b) ->
+          | Pi (_, x, a, b) ->
               let fields, result = decompose (j + 1) b in
               ( { Inductive.aname = x; aty = a; recursive = is_self (m + j) a }
                 :: fields
@@ -103,7 +103,9 @@ let run (sess : session) stmt =
   let ctx = sess.ctx in
   let notation = sess.notation in
   (* elaborate (surface → explicit core) then have the kernel re-check: the
-     elaborator is untrusted, so [Check] stays the sole authority *)
+     elaborator is untrusted, so [Check] stays the sole authority. [Elab] solves
+     and zonks metavariables internally, so the core handed to the kernel is
+     meta-free (an unsolvable hole is reported there). *)
   let infer s = Elab.infer notation ctx s in
   let check_against s va =
     let t = Elab.check notation ctx s va in

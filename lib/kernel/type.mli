@@ -24,15 +24,29 @@ type rec_head =
   ; recs : bool list list
   }
 
+(** A binder's visibility. An [Explicit] [(x : A)] argument is supplied at every
+    application; an [Implicit] [{x : A}] one is inserted automatically by the
+    elaborator. The kernel carries this on {!Pi}/{!Lam} but ignores it in
+    conversion and typing (exactly as it ignores the binder-name hint) — it is
+    metadata consumed only by the frontend (argument insertion and printing). *)
+type icit =
+  | Explicit
+  | Implicit
+
 type t =
   | Var of int  (** de Bruijn index *)
   | Sort of int  (** the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
-  | Pi of string * t * t  (** Π (x : A). B, where B binds index 0 *)
-  | Lam of string * t * t  (** λ (x : A). b, where b binds index 0 *)
+  | Pi of icit * string * t * t  (** Π (x : A). B, where B binds index 0 *)
+  | Lam of icit * string * t * t  (** λ (x : A). b, where b binds index 0 *)
   | App of t * t
   | Proj of int * t
       (** [x.(i+1)]: the [i]-th (0-based) field projection of a record (a
           single-constructor inductive) *)
+  | Meta of int
+      (** a metavariable, referenced by id; produced by the elaborator and
+          resolved by unification, then zonked away — it never reaches the
+          trusted check of final core. Its local dependencies ride the enclosing
+          [App] spine ([?m a b] is [App (App (Meta m, a), b)]). *)
   | Eq of t * t * t  (** [Eq A x y]: propositional equality of [x y : A] *)
   | Refl  (** the reflexivity proof [refl : Eq A x x]; check-only *)
   | J of t * t * t
@@ -49,6 +63,11 @@ type t =
 
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool
+
+(** [has_meta t] is true if any metavariable ({!Meta}) occurs in [t]; the
+    frontend uses it (on a quoted value, where solved metas are already
+    unfolded) to detect an unsolved hole before the trusted check. *)
+val has_meta : t -> bool
 
 (** [freshen names x] is [x] primed with enough trailing ['] to make it distinct
     from every name in [names] (and [x]); ["" ] becomes ["x"] first. The printer

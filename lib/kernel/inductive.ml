@@ -65,9 +65,12 @@ let apply spec depth =
   in
   go (Type.Ind spec.name) 0
 
-(* wrap [body] in the parameter telescope as Π binders *)
+(* wrap [body] in the parameter telescope as Π binders (parameters are always
+   explicit) *)
 let pi_params spec body =
-  List.fold_right (fun (x, pty) acc -> Type.Pi (x, pty, acc)) spec.params body
+  List.fold_right
+    (fun (x, pty) acc -> Type.Pi (Type.Explicit, x, pty, acc))
+    spec.params body
 
 (* the type former's type: [(params) -> Sort sort] *)
 let former_type spec = pi_params spec (Type.Sort spec.sort)
@@ -80,7 +83,7 @@ let ctor_type spec i =
   let result = apply spec (nparams spec + List.length c.fields) in
   pi_params spec
     (List.fold_right
-       (fun a acc -> Type.Pi (a.aname, a.aty, acc))
+       (fun a acc -> Type.Pi (Type.Explicit, a.aname, a.aty, acc))
        c.fields result)
 
 (* whether the inductive [name] occurs anywhere in [t]; the positivity check
@@ -92,13 +95,14 @@ let rec occurs name (t : Type.t) =
   | Rec h -> String.equal h.rind name
   | Var _
   | Sort _
+  | Meta _
   | Refl ->
       false
   | Proj (_, a) -> occurs name a
-  | Pi (_, a, b)
-  | Lam (_, a, b)
-  | App (a, b) ->
+  | Pi (_, _, a, b)
+  | Lam (_, _, a, b) ->
       occurs name a || occurs name b
+  | App (a, b) -> occurs name a || occurs name b
   | Eq (a, b, c)
   | J (a, b, c) ->
       occurs name a || occurs name b || occurs name c

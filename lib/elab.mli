@@ -7,14 +7,20 @@
     It is {e untrusted}, in the Lean/Rocq tradition: the core it produces is
     re-verified by {!Check}, so a bug here is a usability bug, not a soundness
     one. The elaborator reuses the kernel's NbE ({!Value.eval}, conversion via
-    {!Check}) rather than reimplementing it.
+    {!Check}) rather than reimplementing it, adding only the meta machinery in
+    {!Meta} and its own meta-aware type synthesis.
 
-    What it infers in this phase: a constructor application checked against its
-    own inductive type may {e omit the leading parameters}, which are recovered
-    from the expected type — [Box.wrap a] in place of [Box.wrap A a]. Everywhere
-    else it preserves the explicit behaviour of {!Ast.to_term}. The builtin
-    type-formers ([Σ]/[+]/[Eq] and their intro/elim forms) are still translated
-    syntactically, with no inference inside them. *)
+    What it infers, all driven by the expected type:
+    - constructor applications may {e omit the leading parameters}, recovered
+      from the expected inductive type ([Box.wrap a] for [Box.wrap A a]);
+    - a surface hole [_] becomes a metavariable, solved by unification;
+    - implicit binders [{x : A}] are inserted as fresh metavariables;
+    - [x = y] is [Eq A x y] with [A] inferred from [x];
+    - a hole motive on [J] or a recursor is synthesized by abstracting the
+      scrutinee out of the expected goal.
+
+    The result is zonked to meta-free core; an unsolved hole is reported here,
+    never handed to the kernel. *)
 
 (** [infer notation ctx s] elaborates [s] in inference position (no expected
     type), returning the core term. Its type is then synthesized by

@@ -25,4 +25,4 @@ def code (n : Nat) : Type :=
   Nat.rec (λ x : Nat ⇒ Type) Unit (λ k : Nat ⇒ λ ih : Type ⇒ Empty) n
 
 theorem zero_neq_succ (n : Nat) (p : Eq Nat 0 (Nat.succ n)) : Empty :=
-  subst Nat code 0 (Nat.succ n) p ()
+  subst code p ()

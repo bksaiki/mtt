@@ -188,6 +188,70 @@ name, beside the de Bruijn context.
 See `examples/inductive.mtt`; deferred work (indices, mutual/nested, `open`,
 replacing the builtins) is tracked in `todo.md`.
 
+## Elaboration
+
+The elaborator (`elab.ml`) is the frontend's type-directed surface → core pass.
+It is **untrusted**: it fills in the arguments the kernel demands explicitly and
+produces fully-explicit core, which the trusted `Check` then **re-verifies** (the
+Lean/Rocq bargain — a bug here is a usability bug, not a soundness one). It
+**reuses** the kernel's NbE (`Value.eval`/`quote`, `Check.infer`/`conv`) rather
+than reimplementing it, so there is exactly one reduction engine. It is
+bidirectional — `go ctx mode s` with `mode = Infer | Check ty` — and the expected
+type drives every inference the surface leaves implicit:
+
+- **Constructor-argument inference (checking mode, no metavariables).** A
+  constructor application checked against its own inductive omits the leading
+  parameters (`Box.wrap a` for `Box.wrap A a`), recovered from the expected type
+  by decomposition; likewise `(a, b)` against an expected `Σ`. This is the key
+  economy: a checking position supplies the missing arguments directly, so
+  retiring `Σ`/`Sum` needed no unifier — only inference position and implicit
+  function arguments do.
+- **Metavariables, unification, holes.** A surface hole `_` becomes a fresh
+  metavariable. The **kernel stays pristine**: it carries an *inert* `Meta of int`
+  node (in `Type.t` and the `Value.t` neutral) that `eval` leaves stuck and
+  `quote` reads back but never solves — a meta reaching `Check` is an internal
+  error. All the machinery lives in the frontend `Meta` module, a **functional
+  metacontext** (`type t`, threaded by the caller through a local ref): `force`
+  unfolds a solved meta at a head, `unify` solves the flex-rigid case `?m := t`
+  and walks rigid-rigid structurally (lenient elsewhere — soundness rests on the
+  re-check), and `zonk` replaces each solved meta by its solution read back **as
+  core** (reuse-safe de Bruijn — a stored solution is a value with absolute
+  levels). Metavariables are **non-contextual** (no spine): a contextual meta
+  cannot form a pattern here, because the context's `def`s are bound to values,
+  not variables; a scope check by the meta's *birth level* keeps solutions sound
+  under binders, and only unapplied metas are solved. Because the kernel can no
+  longer type a meta, `Elab` does its own meta-aware synthesis (`elab_infer`),
+  delegating meta-free subterms to `Check.infer` and walking only the
+  meta-carrying spine. The elaborated term is zonked; a residual meta is an
+  unfillable hole, reported before the kernel sees it.
+- **Implicit arguments.** Visibility lives on the binder: `Type.t`/`Value.t` carry
+  an `icit` (`Explicit | Implicit`) field on `Pi`/`Lam` which the kernel
+  **carries but ignores** — `conv`/`infer` pattern it as `_`, exactly as they
+  ignore the binder-name hint, so `{A} → B` checks identically to `(A) → B` (the
+  Lean design: visibility is frontend metadata, not type theory). The surface has
+  `{x : A}` binder groups and a standalone `{x : A} → B` arrow. At an application
+  the elaborator inserts a fresh metavariable for each leading implicit binder
+  *while an explicit argument still follows* — gating on a remaining argument so a
+  partial application keeps its trailing implicit binders instead of spawning
+  unsolvable metas. This is what lets `cong`/`sym`/`trans`/`subst` take their
+  type/endpoint arguments implicitly (`cong f p`, `sym p`).
+- **`=` infix and motive inference.** `x = y` is `Eq A x y` with `A` synthesized
+  from the left side (a dedicated `eq_term` parser level, looser than `+`/`×` and
+  tighter than `→`; `:=` is the sole definition separator, freeing `=`). A hole
+  `_` in a motive position, in checking mode, is inferred by **occurrence
+  abstraction**: generalize the expected goal over the scrutinee — for `J`, the
+  proof's endpoint (`P := λ z q ⇒ goal[y↦z]`); for a recursor, the major premise
+  (`P := λ x ⇒ goal[major↦x]`). One `abstract`/`lift` primitive over core normal
+  forms suffices — no higher-order unifier or postponement, since in checking
+  position the goal is known up front.
+
+A residual type-free `Ast.to_term` (scope resolution + notation, no types) still
+exists: it backs the inductive-declaration scope-check and the leaf surface forms
+the elaborator has no inference to do for (`()`, numerals, `refl`). It retires
+once the elaborator covers the last builtin forms. Remaining inference work
+(inference-position intros, named projections `x.field`, retiring `Eq`) is
+tracked in `todo.md`.
+
 ## Notation
 
 Surface sugar like `()` and decimal literals is *notation*, not kernel concern:

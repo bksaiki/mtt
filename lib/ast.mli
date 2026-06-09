@@ -11,9 +11,10 @@ and desc =
   | Var of string
   | Field of t * string  (** a named projection, e.g. the recursor [Nat.rec] *)
   | Sort of int  (** Prop = Sort 0, Type i = Sort (i+1), as in the core *)
-  | Pi of string * t * t  (** (x : A) -> B *)
+  | Pi of Type.icit * string * t * t  (** [(x : A) -> B] or [{x : A} -> B] *)
   | Arrow of t * t  (** A -> B *)
-  | Lam of string * t * t  (** fun (x : A) => b *)
+  | Lam of Type.icit * string * t * t
+      (** [fun (x : A) => b] or [fun {x : A} => b] *)
   | App of t * t
   | Ascribe of t * t  (** (t : A) *)
   | MkUnit  (** [()], sugar for the prelude's [Unit.unit] *)
@@ -24,25 +25,31 @@ and desc =
   | Snd of t  (** p.2 *)
   | Sum of t * t  (** A + B *)
   | Eq of t * t * t  (** Eq A x y *)
+  | EqInfix of t * t  (** [x = y]: equality with the type argument inferred *)
   | Refl  (** refl *)
   | J of t * t * t  (** J P d p *)
   | Numeral of int
       (** a decimal literal, e.g. [0], [5]; expands to succ-applications of the
           [nat] notation's zero/succ *)
+  | Hole
+      (** [_], an elaboration hole — a fresh metavariable for the elaborator to
+          solve *)
 
 (** [mk loc desc] is the node [desc] located at [loc] *)
 val mk : Loc.t -> desc -> t
 
 (** [lams loc groups body] wraps [body] in a lambda for every name of every
-    binder group, e.g. [λ (x y : A) (z : B) ⇒ body]; the synthetic binder nodes
-    are stamped with [loc], the span of the whole construct *)
-val lams : Loc.t -> (string list * t) list -> t -> t
+    binder group, e.g. [λ (x y : A) {z : B} ⇒ body]; each group carries its
+    visibility. The synthetic binder nodes are stamped with [loc], the span of
+    the whole construct. *)
+val lams : Loc.t -> (Type.icit * string list * t) list -> t -> t
 
 (** [pis loc groups body] is the Π counterpart of {!lams} *)
-val pis : Loc.t -> (string list * t) list -> t -> t
+val pis : Loc.t -> (Type.icit * string list * t) list -> t -> t
 
-(** [sigmas loc groups body] is the Σ counterpart of {!lams} *)
-val sigmas : Loc.t -> (string list * t) list -> t -> t
+(** [sigmas loc groups body] is the Σ counterpart of {!lams}; the visibility on
+    each group is ignored (Σ binders are always explicit) *)
+val sigmas : Loc.t -> (Type.icit * string list * t) list -> t -> t
 
 (** [var_spine t] is [Some [x1; ...; xn]] if [t] is an application spine of
     variables [x1 ... xn]: used by the parser to read the ascription [(x y : A)]
