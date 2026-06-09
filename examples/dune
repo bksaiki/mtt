@@ -77,3 +77,9 @@
  (deps vec.mtt %{bin:mtt})
  (action
   (run mtt vec.mtt)))
+
+(rule
+ (alias runtest)
+ (deps match.mtt %{bin:mtt})
+ (action
+  (run mtt match.mtt)))

@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP TIMES PLUS EQOP COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE AT EOF
+%token FUN PI SIGMA TYPE PROP TIMES PLUS EQOP COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE AT MATCH WITH END EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -99,7 +99,16 @@ term:
     { Ast.mk $loc (Ast.Pi (Type.Explicit, x, a, b)) }
   | SIGMA; x = ID; COLON; a = term; DARROW; b = term
     { Ast.mk $loc (Ast.Sigma (x, a, b)) }
+  (* case analysis [match e with | C x… => b … end]; the [end] terminator keeps
+     nested matches unambiguous (no dangling-arm conflict) *)
+  | MATCH; e = term; WITH; arms = nonempty_list(match_arm); END
+    { Ast.mk $loc (Ast.Match (e, arms)) }
   | t = pi_term { t }
+
+(* one match arm: an unqualified constructor name, its pattern variables, and a
+   body. The constructor is resolved against the scrutinee's inductive. *)
+match_arm:
+  | BAR; c = ID; xs = list(ID); DARROW; b = term { (c, xs, b) }
 
 (* arrows are right-associative; the domain is one level tighter. There is
    no dedicated pi-binder production: "(x : A)" parses as an ascription

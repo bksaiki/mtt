@@ -1,0 +1,73 @@
+-- `match` is case-analysis sugar: `match e with | C x… => b … end` desugars to
+-- the inductive's recursor `T.rec`, with the motive recovered from the expected
+-- result type and one branch per constructor. Constructor names in patterns are
+-- unqualified (resolved against the scrutinee's type), and a branch binds the
+-- constructor's fields. It is forward-only sugar — a `match` prints back as the
+-- `T.rec` it compiles to.
+--
+-- `match` is *case analysis*, not recursion: on a recursive constructor the
+-- branch sees the fields, not an induction hypothesis (recursion still uses the
+-- recursor directly). The result type must be known, so `match` appears in a
+-- checking position (e.g. a `def` with a return annotation).
+
+inductive Bool : Type :=
+| true : Bool
+| false : Bool
+
+def not (b : Bool) : Bool :=
+  match b with
+  | true => Bool.false
+  | false => Bool.true
+  end
+
+#eval not Bool.true
+#eval not (not Bool.false)
+
+-- a match on a binary sum; the parameters of the result injections are recovered
+axiom A : Type
+axiom B : Type
+
+def swap (s : A + B) : B + A :=
+  match s with
+  | inl x => Sum.inr B A x
+  | inr y => Sum.inl B A y
+  end
+
+-- the desugaring is faithful: `match` produces exactly the explicit recursor
+def swap' (s : A + B) : B + A :=
+  Sum.rec A B (fun x : A + B => B + A)
+    (fun x : A => Sum.inr B A x)
+    (fun y : B => Sum.inl B A y) s
+
+#check_equal swap swap'
+
+-- a match on Nat; the recursive constructor's field is bound, its induction
+-- hypothesis ignored (this is case analysis, not recursion)
+def pred (n : Nat) : Nat :=
+  match n with
+  | zero => 0
+  | succ k => k
+  end
+
+#eval pred 5
+#eval pred 0
+
+-- a `_` in a field position binds that field anonymously; a trailing `| _ => b`
+-- branch is a catch-all covering every unlisted constructor (its fields bound
+-- to `_`, so `b` cannot inspect them)
+def isZero (n : Nat) : Nat :=
+  match n with
+  | zero => 1
+  | succ _ => 0
+  end
+
+inductive RGB : Type := | red : RGB | green : RGB | blue : RGB
+
+def isRed (c : RGB) : Nat :=
+  match c with
+  | red => 1
+  | _ => 0
+  end
+
+#eval isZero 0
+#eval isRed RGB.green

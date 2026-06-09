@@ -298,6 +298,20 @@ type drives every inference the surface leaves implicit:
     off, so `Eq.rec _ _ P d _ p` and `Vec.rec _ P z s _ xs` recover the type and
     endpoints/length from the scrutinee. (An explicit argument is elaborated as
     written and re-checked by the kernel.)
+- **`match` (flat case analysis).** `match e with | C x̄ ⇒ b … end` is sugar that
+  desugars to `T.rec params motive minors… indices e`: the scrutinee's type fixes
+  the inductive, the motive is recovered from the expected goal by the same
+  occurrence abstraction as above (so a `match` needs a checking position), and
+  each branch becomes a constructor's minor premise — a λ binding the
+  constructor's fields to the pattern variables, with each recursive field's
+  induction hypothesis bound to `_`. It is therefore **case analysis, not
+  recursion** (recursion still uses the recursor directly), and **forward-only**
+  sugar: a `match` prints back as the `T.rec` it compiles to. A `_` in a field
+  position binds that field anonymously, and a trailing `| _ ⇒ b` is a catch-all
+  covering every unlisted constructor (its fields bound to `_`). The match is
+  flat (one branch per constructor) and non-indexed; nested/multiple patterns
+  (an equation compiler) and dependent (convoy) match on indexed families are
+  future work (`todo.md`).
 
 `Elab` handles **every** surface form, down to the leaves (`()` → the registered
 unit constructor, numerals → succ-chains), so there is no second pass: inductive
@@ -351,9 +365,10 @@ kernel's *plain* faithful view, for internal use and debugging; the error
 vocabulary itself lives in the small `Error` module.)
 
 This is the "faithful core printer + frontend delaborator" split: the kernel
-emits terms, the frontend delaborates. The longer arc — a full **delaborator**
-(core → surface, the elaborator's mirror) sharing this registry, plus the
-remaining `+`/`=` notation — is tracked in `todo.md`.
+emits terms, the frontend delaborates them into surface notation (`()`,
+numerals, `×`/`Σ`/`+`/`=`, tuples, and `Eq.refl` → `rfl`). The one delaboration
+not yet done — folding a recursor application back into a `match` — is tracked in
+`todo.md`.
 
 ## Errors and locations
 

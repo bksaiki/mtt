@@ -70,13 +70,14 @@ first.
 Inductives eliminate through their generic recursor (`T.rec`, explicit
 motive), the verbosity of which we worried would need `match`-style sugar.
 
-**Status**: largely resolved. The recursor is implemented (qualified
-`T.rec`, no bespoke `case`), and the elaborator now **infers the motive** —
-a `_` in the motive position is recovered by abstracting the scrutinee out
-of the goal (see `design.md`, Elaboration), so a dependent elimination no
-longer writes its motive by hand. Remaining verbosity (binding the minor
-premises) is what a `match`/equation compiler would absorb; that is tracked
-in `todo.md`. **Revisit**: when `match` is taken on.
+**Status**: resolved. The recursor is implemented (qualified `T.rec`, no bespoke
+`case`), the elaborator **infers the motive** (a `_` motive is recovered by
+abstracting the scrutinee out of the goal), and `match` now absorbs the
+remaining verbosity — `match e with | C x̄ ⇒ b … end` desugars to `T.rec` with
+the minor premises bound by the branch patterns (see `design.md`, Elaboration).
+The MVP is flat, non-indexed case analysis; the equation compiler and dependent
+(convoy) match are tracked in `todo.md`. **Revisit**: when those land, or if the
+forward-only sugar (no `match` round-trip in printing) becomes a pain.
 
 ## Statement boundaries in files
 
