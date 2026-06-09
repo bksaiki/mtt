@@ -100,25 +100,15 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
   { Inductive.name = d.iname; params; sort; ctors }
 
 let run (sess : session) stmt =
-  (* a fresh metacontext per statement, so ids do not leak between them; safe
-     because every elaborated term is zonked meta-free before it is stored *)
-  Value.reset_metas ();
   let ctx = sess.ctx in
   let notation = sess.notation in
-  (* zonk the elaborated term (replacing solved metas) and reject any unsolved
-     hole left behind, before the kernel ever sees it *)
-  let finish t =
-    let t = Elab.zonk ctx.lvl t in
-    if Type.has_meta t then
-      Error.type_error
-        [ Error.txt "could not infer a hole (_); add a type annotation" ];
-    t
-  in
-  (* elaborate (surface → explicit core), zonk, then have the kernel re-check:
-     the elaborator is untrusted, so [Check] stays the sole authority *)
-  let infer s = finish (Elab.infer notation ctx s) in
+  (* elaborate (surface → explicit core) then have the kernel re-check: the
+     elaborator is untrusted, so [Check] stays the sole authority. [Elab] solves
+     and zonks metavariables internally, so the core handed to the kernel is
+     meta-free (an unsolvable hole is reported there). *)
+  let infer s = Elab.infer notation ctx s in
   let check_against s va =
-    let t = finish (Elab.check notation ctx s va) in
+    let t = Elab.check notation ctx s va in
     Check.check ctx t va;
     t
   in

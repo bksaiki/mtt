@@ -49,18 +49,96 @@ let classify_head sg (s : Ast.t) =
             | None -> Other))
   | _ -> Other
 
-(* a fresh metavariable of (use-site) type [ty], born at the current level. It
-   is non-contextual (no spine): a solution may mention variables already in
-   scope at its birth, which the unifier's scope check enforces. (A contextual
-   meta applied to the context would not work here — the context's [def]s are
-   bound to values, not variables, so they could not form a unification
-   pattern.) *)
-let fresh_meta_core (ctx : Check.ctx) (ty : Value.t) : Type.t =
-  Type.Meta (Value.fresh_meta ctx.Check.lvl ty)
+let imax i j =
+  if j = 0 then
+    0
+  else
+    max i j
+
+(* peel a core application into its head and argument list (outermost first) *)
+let core_spine t =
+  let rec go acc = function
+    | Type.App (f, a) -> go (a :: acc) f
+    | h -> (h, acc)
+  in
+  go [] t
 
 let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
   let sg = ctx0.Check.signature in
   let fresh (ctx : Check.ctx) = Value.Neutral (Value.Var ctx.Check.lvl) in
+  (* the metacontext for this elaboration: a functional value threaded through a
+     local ref, so unification and hole creation can update it without any
+     global state — the metacontext itself stays pure *)
+  let ms = ref Meta.empty in
+  (* a fresh metavariable of (use-site) type [ty], born at the current level;
+     non-contextual (no spine), so a solution may mention variables already in
+     scope at its birth, which {!Meta.unify}'s scope check enforces *)
+  let fresh_meta_core (ctx : Check.ctx) (ty : Value.t) : Type.t =
+    let ms', id = Meta.fresh !ms ~blvl:ctx.Check.lvl ty in
+    ms := ms';
+    Type.Meta id
+  in
+  (* the elaborator's own meta-aware type synthesis: it must not lean on the
+     kernel's [Check.infer] for a term containing metavariables (the kernel no
+     longer knows them). A meta-free subterm is still handed to [Check.infer];
+     only the meta-carrying spine is walked here, forcing solutions via
+     [Meta]. *)
+  let rec elab_infer ctx (t : Type.t) : Value.t =
+    if not (Type.has_meta t) then
+      Check.infer ctx t
+    else
+      match t with
+      | Type.Meta i -> Meta.typ !ms i
+      | Type.App (f, a) -> (
+          match core_spine t with
+          (* a saturated recursor application has type [P major] *)
+          | Type.Rec rh, args ->
+              Value.apply
+                (Value.eval ctx.Check.env (List.nth args rh.Type.nparams))
+                (Value.eval ctx.Check.env
+                   (List.nth args (List.length args - 1)))
+          | _ -> (
+              match Meta.force !ms (elab_infer ctx f) with
+              | Value.Pi (_, _, c) ->
+                  Value.apply_closure c (Value.eval ctx.Check.env a)
+              | _ -> assert false))
+      | Type.Lam (x, a, b) ->
+          let va = Value.eval ctx.Check.env a in
+          let vb = elab_infer (Check.bind x va ctx) b in
+          Value.Pi
+            ( x
+            , va
+            , { Value.env = ctx.Check.env
+              ; body = Value.quote (ctx.Check.lvl + 1) vb
+              } )
+      | Type.Pi (x, a, b) ->
+          let i = sort_of_ty ctx a in
+          let j =
+            sort_of_ty (Check.bind x (Value.eval ctx.Check.env a) ctx) b
+          in
+          Value.Sort (imax i j)
+      | Type.Proj (i, e) -> (
+          match Meta.force !ms (elab_infer ctx e) with
+          | Value.VInd (name, params) ->
+              Check.field_type
+                (Check.lookup_ind ctx name)
+                params
+                (Value.eval ctx.Check.env e)
+                i
+          | _ -> assert false)
+      | Type.J (p, _, pr) -> (
+          match Meta.force !ms (elab_infer ctx pr) with
+          | Value.Eq (_, _, vy) ->
+              Value.apply
+                (Value.apply (Value.eval ctx.Check.env p) vy)
+                (Value.eval ctx.Check.env pr)
+          | _ -> assert false)
+      | _ -> Check.infer ctx t
+  and sort_of_ty ctx a =
+    match Meta.force !ms (elab_infer ctx a) with
+    | Value.Sort i -> i
+    | _ -> 0
+  in
   let rec go (ctx : Check.ctx) mode (s : Ast.t) : Type.t =
     match s.desc with
     (* a bare name is a local binder (de Bruijn) first, otherwise a global
@@ -105,7 +183,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         let body_mode =
           match mode with
           | Check e -> (
-              match Value.force e with
+              match Meta.force !ms e with
               | Value.Pi (_, _, c) -> Check (Value.apply_closure c (fresh ctx))
               | _ -> Infer)
           | Infer -> Infer
@@ -121,7 +199,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
        In inference position there is nothing to determine it. *)
     | Ast.Hole -> (
         match mode with
-        | Check e -> fresh_meta_core ctx (Value.force e)
+        | Check e -> fresh_meta_core ctx (Meta.force !ms e)
         | Infer ->
             Error.type_error
               [ Error.txt
@@ -148,7 +226,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
             let recovered =
               match mode with
               | Check e -> (
-                  match Value.force e with
+                  match Meta.force !ms e with
                   | Value.VInd (name, [ pa; pb ])
                     when String.equal name mk.Type.ind ->
                       Some [ pa; pb ]
@@ -159,7 +237,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
             | Some pvals -> checked_ctor ctx mk pvals [ a; b ]
             | None ->
                 let a' = go ctx Infer a and b' = go ctx Infer b in
-                let ta = Check.infer ctx a' and tb = Check.infer ctx b' in
+                let ta = elab_infer ctx a' and tb = elab_infer ctx b' in
                 let bfun =
                   Type.Lam
                     ( ""
@@ -193,7 +271,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         let recovered =
           match mode with
           | Check e -> (
-              match Value.force e with
+              match Meta.force !ms e with
               | Value.VInd (name, pvals)
                 when String.equal name h.Type.ind && List.length args = nfields
                 ->
@@ -210,7 +288,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
             elab_spine ctx (Type.Ctor h) cty args)
     | Other ->
         let head_core = go ctx Infer head in
-        elab_spine ctx head_core (Check.infer ctx head_core) args
+        elab_spine ctx head_core (elab_infer ctx head_core) args
   (* elaborate each argument against the domain read off the head's (function)
      type, advancing that type as arguments are consumed so each argument is in
      checking position *)
@@ -218,7 +296,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
     let rec walk core ty = function
       | [] -> core
       | a :: rest -> (
-          match Value.force ty with
+          match Meta.force !ms ty with
           | Value.Pi (_, dom, c) ->
               let a' = go ctx (Check dom) a in
               (* only when the domain still has an unsolved metavariable is
@@ -226,7 +304,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                  could fail on a check-only form like [refl], and is needless
                  work *)
               if Type.has_meta (Value.quote ctx.Check.lvl dom) then
-                Unify.unify ctx.Check.lvl dom (Check.infer ctx a');
+                ms := Meta.unify !ms ctx.Check.lvl dom (elab_infer ctx a');
               walk
                 (Type.App (core, a'))
                 (Value.apply_closure c (Value.eval ctx.Check.env a'))
@@ -262,33 +340,15 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
     in
     elab_spine ctx head_core (instantiate cty pvals) args
   in
-  go ctx0 mode0 s0
+  let core = go ctx0 mode0 s0 in
+  (* replace solved metavariables with their solutions; an unsolved one left
+     behind is an unfillable hole, which the kernel must never see *)
+  let core = Meta.zonk !ms ctx0.Check.lvl core in
+  if Type.has_meta core then
+    Error.type_error
+      [ Error.txt "could not infer a hole (_); add a type annotation" ];
+  core
 
 let infer notation ctx s = elaborate notation ctx Infer s
 
 let check notation ctx s expected = elaborate notation ctx (Check expected) s
-
-(* replace every solved metavariable by its solution, read back as core at the
-   use-site level [lvl] (so de Bruijn indices are reuse-safe — a metacontext
-   solution is a value with absolute levels and cannot be stored directly). An
-   unsolved meta is left in place; {!Type.has_meta} on the result then detects
-   it. *)
-let rec zonk lvl (t : Type.t) : Type.t =
-  match t with
-  | Type.Meta i -> (
-      match Value.meta_soln i with
-      | Some v -> Value.quote lvl v
-      | None -> t)
-  | Type.Var _
-  | Type.Sort _
-  | Type.Refl
-  | Type.Ind _
-  | Type.Ctor _
-  | Type.Rec _ ->
-      t
-  | Type.Proj (i, a) -> Type.Proj (i, zonk lvl a)
-  | Type.Pi (x, a, b) -> Type.Pi (x, zonk lvl a, zonk (lvl + 1) b)
-  | Type.Lam (x, a, b) -> Type.Lam (x, zonk lvl a, zonk (lvl + 1) b)
-  | Type.App (f, a) -> Type.App (zonk lvl f, zonk lvl a)
-  | Type.Eq (a, x, y) -> Type.Eq (zonk lvl a, zonk lvl x, zonk lvl y)
-  | Type.J (p, d, pr) -> Type.J (zonk lvl p, zonk lvl d, zonk lvl pr)

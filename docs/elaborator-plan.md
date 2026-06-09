@@ -70,38 +70,36 @@ recursor, large elimination) now lives in `test_ind.ml`. Details in `design.md`.
 
 ### Phase 3 — Metavariables, unification, holes — **done**
 
-The inference engine, with Option A (metavariables live in the kernel's NbE).
-The kernel became meta-aware; the frontend owns solving and zonks to meta-free
-core before the trusted `Check` re-verifies, so soundness is unchanged. (The
-metacontext's placement in the kernel is what the follow-up above will move out.)
+The inference engine. The **kernel stays pristine**: it carries an *inert*
+`Meta of int` node (in `Type.t` and the `Value.t` neutral) that it never
+inspects — `eval` leaves it stuck, `quote` reads it back, and a metavariable
+reaching `Check` is an internal error. All metavariable machinery lives in the
+untrusted frontend; soundness is unchanged because the elaborator zonks to
+meta-free core before the trusted `Check` re-verifies.
 
-Kernel:
+`lib/meta.ml` — the metacontext, a **functional value** (`type t`, `empty`,
+`fresh`, `solve`, `solution`, `typ`) threaded by the caller:
 
-- `Type.t` / `Value.t`-neutral gain `Meta of int`; the printer renders `?n`.
-- A metacontext in `value.ml` (mutable, isolated): per-meta `{ ty; blvl; soln }`
-  with `fresh_meta`/`meta_type`/`meta_blvl`/`meta_soln`/`solve_meta`/`reset_metas`,
-  and `force` (unfold a solved meta at a value's head).
-- `eval`/`quote`/`conv`/`sort_of`/`infer` force before matching a value's shape,
-  so a solved meta behaves as its solution; `Check` *tolerates* metas (returns a
-  meta's recorded type), since the elaborator reuses it mid-elaboration. The
-  final re-check runs on zonked, meta-free core.
+- `force ms v` unfolds a solved meta at a value's head (the kernel does not, so
+  the frontend forces before matching a shape).
+- `unify ms lvl v1 v2` solves the flex-rigid case `?m := t` and walks rigid-rigid
+  structurally; lenient elsewhere. Metavariables are **non-contextual** (no
+  spine): a contextual meta would not work here because the context's `def`s are
+  bound to values, not variables, so they cannot form a pattern. A scope check
+  (by the meta's birth level) keeps solutions sound under binders; only unapplied
+  metas are solved.
+- `zonk ms lvl t` replaces each solved meta by its solution read back **as core**
+  at the use-site level (reuse-safe de Bruijn — a stored solution is a value with
+  absolute levels and cannot be spliced directly).
 
-Frontend:
-
-- A surface hole `_` (`Ast.Hole`) → `Elab.fresh_meta_core`, a fresh metavariable
-  of the expected type. **Non-contextual** (no spine): a contextual meta applied
-  to the context would not work, because the context's `def`s are bound to values
-  (not variables) and so cannot form a unification pattern. A scope check
-  (`Unify.scope_ok`, by birth level) keeps solutions sound under binders.
-- `Unify.unify` (in `lib/unify.ml`): forces, solves the flex-rigid case
-  `?m := t` (occurs + scope check), and walks rigid-rigid structurally; lenient
-  elsewhere. The elaborator calls it at application arguments — but only when the
-  domain still carries an unsolved meta, so a check-only argument like `refl`
-  (whose type cannot be inferred) is untouched.
-- `Elab.zonk` replaces each solved meta by its solution read back **as core** at
-  the use-site level (reuse-safe de Bruijn — a raw metacontext solution is a
-  value with absolute levels and cannot be stored). `Stmt.run` zonks every
-  elaborated term and rejects any residual `Meta` (an unsolvable hole).
+`Elab` — a surface hole `_` (`Ast.Hole`) becomes a fresh metavariable of the
+expected type; the elaborator threads the metacontext through a local ref. Since
+the kernel can no longer type a meta, `Elab` does its own meta-aware type
+synthesis (`elab_infer`), delegating meta-free subterms to `Check.infer` and
+walking only the meta-carrying spine. `unify` runs at application arguments (only
+when the domain still has an unsolved meta, so a check-only argument like `refl`
+is untouched); the result is zonked, and any residual `Meta` is reported as an
+unfillable hole.
 
 **Limitation (acceptable until Phase 4):** only unapplied metavariables are
 solved, and only with a solution in scope at the meta's birth — enough for holes
@@ -124,36 +122,14 @@ Several smaller PRs, built on Phases 3–4.
 - `Eq` removal — also needs **indexed inductive families** (a separate kernel
   feature, possibly its own track), so it is the last builtin to go.
 
-## Planned follow-up: move the metacontext out of the kernel
-
-Phase 3 lands with the metacontext as **mutable global state in `value.ml`** and
-the kernel's NbE (`eval`/`quote`/`conv`/`force`) meta-aware. That works but puts
-mutable state and an elaboration concern inside the TCB. A follow-up PR (after
-Phase 3) will pivot to a cleaner split, keeping the kernel pristine:
-
-- the kernel keeps only an **inert** `Meta` node — carried as an opaque neutral,
-  never forced, no metacontext, no mutable state (the final `Check` only ever
-  sees zonked, meta-free core);
-- a new **`lib/meta.ml`** holds the metacontext as a *functional, caller-managed*
-  value (`empty`/`fresh`/`solve`/`lookup`); `force`/`unify`/`zonk` move to the
-  frontend, threading it;
-- consequently `Elab` grows into a proper bidirectional inferer that returns
-  `(core, type)` and threads the metacontext, instead of leaning on
-  `Check.infer` for meta-containing terms.
-
-This reuses the kernel's `eval`/`quote`/`apply` via the inert node (no NbE-
-reduction duplication) while pushing all meta machinery into the untrusted
-frontend — the most TCB-minimal design. Deferred only to keep the Phase-3 PR
-focused.
-
 ## Open decisions
 
-- **Metavariable representation (Phase 3).** *Decided: Option A* — a `Meta` form
-  in the kernel `Type.t`/`Value.t`, reusing NbE (see Phase 3). Chosen over a
-  separate elaborator NbE because duplicating the reduction engine is a larger,
-  more error-prone cost than one meta-aware (and, post-zonk, meta-free) kernel.
-  The metacontext's *placement* (kernel-global now, frontend-functional later)
-  is the follow-up above.
+- **Metavariable representation (Phase 3).** *Settled.* The kernel keeps an inert
+  `Meta` node (reusing its NbE for reduction) while the metacontext, unification,
+  and zonking live in a functional `lib/meta.ml` threaded by the frontend (see
+  Phase 3). This keeps the TCB pristine and reuses the kernel's reduction engine,
+  at the cost of `Elab` doing its own meta-aware type synthesis — untrusted code,
+  the right place for it.
 - **Implicit-argument surface.** `{x : A}` binders (Agda/Lean-ish) is the
   expected choice; confirm at Phase 4.
 - **`to_term`'s fate.** `Parse.term_of_string*` already routes through `Elab`;

@@ -124,21 +124,21 @@ let field_type spec params v i =
 let rec infer_neutral ctx (n : Value.neutral) : Value.t =
   match n with
   | Value.Var k -> List.nth ctx.types (ctx.lvl - k - 1)
-  (* a metavariable carries its own (closed) type; its spine is typed by the
-     [App] rule below, exactly as for a variable head *)
-  | Value.Meta i -> Value.meta_type i
+  (* metavariables never reach the kernel: the elaborator zonks them away before
+     any check, so an inert [Meta] head here is impossible *)
+  | Value.Meta _ -> assert false
   | Value.App (m, a) -> (
-      match Value.force (infer_neutral ctx m) with
+      match infer_neutral ctx m with
       | Value.Pi (_, _, c) -> Value.apply_closure c a
       | _ -> assert false (* values are well-typed by invariant *))
   | Value.Proj (i, n) -> (
-      match Value.force (infer_neutral ctx n) with
+      match infer_neutral ctx n with
       | Value.VInd (name, params) ->
           field_type (lookup_ind ctx name) params (Value.Neutral n) i
       | _ -> assert false)
   (* J P d p : P y p; recover y from the stuck proof's type Eq A x y *)
   | Value.J (p, _, n) -> (
-      match Value.force (infer_neutral ctx n) with
+      match infer_neutral ctx n with
       | Value.Eq (_, _, y) -> motive_at p y (Value.Neutral n)
       | _ -> assert false)
   (* T.rec params P minors major : P major; the motive sits after the params in
@@ -149,7 +149,7 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
 
 (* [sort_of ctx ty] is the i such that [ty : Sort i] *)
 let rec sort_of ctx (ty : Value.t) : int =
-  match Value.force ty with
+  match ty with
   | Value.Sort i -> i + 1
   | Value.Pi (x, a, c) ->
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
@@ -176,10 +176,7 @@ let rec conv ctx ty v1 v2 =
   (* proof irrelevance *)
   sort_of ctx ty = 0
   ||
-  (* force solved metavariables at the heads before matching shapes (a no-op on
-     meta-free values, i.e. outside elaboration) *)
-  let v1 = Value.force v1 and v2 = Value.force v2 in
-  match Value.force ty with
+  match ty with
   (* η *)
   | Value.Pi (x, a, c) ->
       let v = fresh ctx in
@@ -220,7 +217,7 @@ let rec conv ctx ty v1 v2 =
       | _ -> false)
 
 and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
-  match (Value.force t1, Value.force t2) with
+  match (t1, t2) with
   (* sorts: equal, or upward-included under cumulativity *)
   | Value.Sort i, Value.Sort j ->
       if cumul then
@@ -276,13 +273,6 @@ and conv_neutral ctx n1 n2 : Value.t option =
   | Value.Var k1, Value.Var k2 ->
       if k1 = k2 then
         Some (List.nth ctx.types (ctx.lvl - k1 - 1))
-      else
-        None
-  (* two unsolved metavariables: equal iff the same one. Solved metas are
-     unfolded by [Value.force] before conversion ever reaches here. *)
-  | Value.Meta i, Value.Meta j ->
-      if i = j then
-        Some (Value.meta_type i)
       else
         None
   | Value.App (m1, a1), Value.App (m2, a2) -> (
@@ -403,10 +393,11 @@ let subsingleton ctx spec =
 let rec infer ctx t =
   match t with
   | Type.Var i -> List.nth ctx.types i (* (Var) *)
-  (* a metavariable has its recorded type; the elaborator calls [infer] on
-     part-elaborated core, so metas are tolerated here. Final core is zonked
-     meta-free, so a real check never relies on this. *)
-  | Type.Meta i -> Value.meta_type i
+  (* metavariables are an elaboration-only node; the elaborator zonks them away,
+     so a meta reaching the kernel is a bug, not a typeable term *)
+  | Type.Meta _ ->
+      Error.type_error
+        [ Error.txt "internal error: a metavariable reached the kernel" ]
   | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
   (* (Pi) *)
   | Type.Pi (x, a, b) ->
@@ -428,7 +419,7 @@ let rec infer ctx t =
       match spine t with
       | Type.Rec rh, args -> infer_rec ctx rh args
       | _ -> (
-          match Value.force (infer ctx f) with
+          match infer ctx f with
           | Value.Pi (_, dom, c) ->
               check ctx a dom;
               Value.apply_closure c (Value.eval ctx.env a)
@@ -441,7 +432,7 @@ let rec infer ctx t =
                 ]))
   (* (Proj): the i-th field of a record, at its dependent field type *)
   | Type.Proj (i, e) -> (
-      match Value.force (infer ctx e) with
+      match infer ctx e with
       | Value.VInd (name, params) ->
           let spec = lookup_ind ctx name in
           if not (Inductive.is_record spec) then
@@ -478,10 +469,10 @@ let rec infer ctx t =
      — Eq is a single-constructor subsingleton (like Empty), so eliminating into
      any sort is sound. *)
   | Type.J (p, d, pr) -> (
-      match Value.force (infer ctx pr) with
+      match infer ctx pr with
       | Value.Eq (va, vx, vy) ->
           (* validate the motive P : Π (y : A) ⇒ Eq A x y → Sort *)
-          (match Value.force (infer ctx p) with
+          (match infer ctx p with
           | Value.Pi (_, dom1, c1) -> (
               if not (conv_ty ~cumul:false ctx dom1 va) then
                 Error.type_error
@@ -551,7 +542,7 @@ let rec infer ctx t =
 
 (* infers and requires a sort: used where the rules demand "a type" *)
 and infer_univ ctx t =
-  match Value.force (infer ctx t) with
+  match infer ctx t with
   | Value.Sort i -> i
   | ty ->
       Error.type_error
@@ -604,7 +595,7 @@ and infer_rec ctx rh args =
   (* the motive P : ind_ty → Sort j *)
   let pmot = Value.eval ctx.env motive_tm in
   let j =
-    match Value.force (infer ctx motive_tm) with
+    match infer ctx motive_tm with
     | Value.Pi (_, dom, c) -> (
         if not (conv_ty ~cumul:false ctx dom ind_ty) then
           Error.type_error
@@ -646,7 +637,7 @@ and infer_rec ctx rh args =
   Value.apply pmot (Value.eval ctx.env major_tm)
 
 and check ctx t expected =
-  match (t, Value.force expected) with
+  match (t, expected) with
   (* a lambda against a Pi: the annotation must match the domain, then the body
      is checked against the codomain at a fresh variable *)
   | Type.Lam (x, a, b), Value.Pi (_, dom, c) ->

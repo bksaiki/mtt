@@ -44,40 +44,6 @@ and env = t list
 (** raised when a non-function is applied; unreachable for type-checked terms *)
 exception Not_a_function
 
-(** {2 Metacontext}
-
-    Metavariables created by the elaborator. This mutable state is the kernel's
-    concession to elaboration (see [docs/design.md]); the frontend owns its
-    lifecycle and zonks solutions away, so no metavariable reaches a final
-    {!Check}. *)
-
-(** [fresh_meta blvl ty] allocates a new metavariable of type [ty], born at de
-    Bruijn level [blvl] (the binders in scope where it was created — used by the
-    unifier's scope check), and returns its id; it occurs in values as
-    [Neutral (Meta id)]. *)
-val fresh_meta : int -> t -> int
-
-(** [meta_type i] is the metavariable's recorded type. *)
-val meta_type : int -> t
-
-(** [meta_blvl i] is the de Bruijn level in scope when [i] was created. *)
-val meta_blvl : int -> int
-
-(** [meta_soln i] is its solution, if it has been solved. *)
-val meta_soln : int -> t option
-
-(** [solve_meta i v] records [v] as the metavariable's solution. *)
-val solve_meta : int -> t -> unit
-
-(** [reset_metas ()] empties the metacontext; the frontend calls it before each
-    top-level elaboration so ids do not leak between them. *)
-val reset_metas : unit -> unit
-
-(** [force v] unfolds a solved metavariable at the head of [v] (re-applying its
-    solution to the argument spine); a meta-free value is returned unchanged.
-    {!quote} and conversion force before matching on a value's shape. *)
-val force : t -> t
-
 (** [eval env t] evaluates [t] in [env], which must bind every free index.
     β-redexes never survive evaluation, and δ happens here too: a defined
     variable is bound in [env] directly to its value. *)

@@ -77,11 +77,11 @@ The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
       (`Box.wrap a`, `(a, b)`, `Sum.inl a`), recovered from the expected type —
       the metavariable-free core of the elaborator (Phase 1)
 - [x] Holes / metavariables (the unification engine): a surface `_` becomes a
-      metavariable (kernel `Meta` node + metacontext in `value.ml`, meta-aware
-      `force` in NbE), solved by `Unify.unify` and zonked away before the kernel
-      re-checks (Phase 3). Non-contextual + scope-checked; only unapplied metas
-      solved so far. A follow-up moves the metacontext out of the kernel into a
-      functional `lib/meta.ml` (see `elaborator-plan.md`)
+      metavariable solved by unification and zonked away before the kernel
+      re-checks (Phase 3). The kernel stays pristine — an inert `Meta` node only;
+      the metacontext, `unify`, and `zonk` live in a functional `lib/meta.ml`
+      threaded by `Elab` (which does its own meta-aware type synthesis).
+      Non-contextual + scope-checked; only unapplied metas solved so far
 - [ ] Implicit arguments: infer the type arguments the kernel demands
       explicitly — gives `x = y` infix over `Eq A x y`, motive inference for
       `J`/`T.rec`, and lets `refl` / inference-position intros omit their

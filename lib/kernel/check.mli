@@ -145,6 +145,16 @@ val check : ctx -> Type.t -> Value.t -> unit
     signature, so its former, constructors and recursor can be referenced *)
 val add_ind : Inductive.spec -> ctx -> ctx
 
+(** [lookup_ind ctx name] is the inductive [name] declared in [ctx], or a type
+    error if unknown. (Exposed for the elaborator's own type synthesis.) *)
+val lookup_ind : ctx -> string -> Inductive.spec
+
+(** [field_type spec params v i] is the type of the [i]-th field of a record
+    value [v : Ind params]: the field's declared type, instantiated by the
+    parameters and by [v]'s earlier projections. (Exposed for the elaborator.)
+*)
+val field_type : Inductive.spec -> Value.t list -> Value.t -> int -> Value.t
+
 (** [check_inductive ctx spec] validates an inductive declaration: kind-checks
     the parameter telescope and each constructor's field types, and enforces
     strict positivity (the inductive may appear only as a direct recursive

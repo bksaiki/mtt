@@ -26,9 +26,3 @@ val infer : Notation.t -> Check.ctx -> Ast.t -> Type.t
     constructor applications (so their parameters may be omitted) and through
     lambda bodies. The result is re-verified by {!Check.check}. *)
 val check : Notation.t -> Check.ctx -> Ast.t -> Value.t -> Type.t
-
-(** [zonk lvl t] replaces every solved metavariable in [t] by its solution (read
-    back as core at level [lvl]), making [t] reuse-safe; a remaining
-    {!Type.Meta} is an unsolved hole, which {!Type.has_meta} detects. Run on an
-    elaborated term before re-checking or storing it. *)
-val zonk : int -> Type.t -> Type.t
