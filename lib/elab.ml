@@ -214,17 +214,63 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         Error.type_error
           [ Error.txt "= and rfl require the eq notation to be registered" ]
   in
+  (* expected-type-driven implicit insertion. [core] has (use-site) type [ty];
+     in checking position, if [ty] begins with implicit binders [{a : A} -> …]
+     and the goal does *not* itself expect an implicit binder, insert a fresh
+     metavariable for each leading implicit and unify the instantiated type
+     against the goal (which solves them). This lets a fully-implicit term be
+     used bare — [rfl : {A}{x} -> x = x] checked against [a = a] — where the
+     spine rule (which only inserts before an explicit argument) cannot. The
+     unify is gated on having inserted at least one meta, so a meta-free term is
+     left untouched for the kernel's own conversion. *)
+  let coerce (ctx : Check.ctx) mode core ty : Type.t =
+    match mode with
+    | Infer -> core
+    | Check g ->
+        let goal_implicit =
+          match Meta.force !ms g with
+          | Value.Pi (Type.Implicit, _, _, _) -> true
+          | _ -> false
+        in
+        if goal_implicit then
+          core
+        else
+          let rec walk core ty inserted =
+            match Meta.force !ms ty with
+            | Value.Pi (Type.Implicit, _, dom, c) ->
+                let m = fresh_meta_core ctx dom in
+                walk
+                  (Type.App (core, m))
+                  (Value.apply_closure c (Value.eval ctx.Check.env m))
+                  true
+            | _ ->
+                if inserted then ms := Meta.unify !ms ctx.Check.lvl ty g;
+                core
+          in
+          walk core ty false
+  in
+  (* coerce a head leaf (a bare variable or projection) in checking position:
+     synthesize its type and insert leading implicits as above. A no-op in
+     inference position. *)
+  let coerce_leaf ctx mode core : Type.t =
+    match mode with
+    | Infer -> core
+    | Check _ -> coerce ctx mode core (Meta.force !ms (elab_infer ctx core))
+  in
   let rec go (ctx : Check.ctx) mode (s : Ast.t) : Type.t =
     match s.desc with
     (* a bare name is a local binder (de Bruijn) first, otherwise a global
        inductive former — matching {!Ast.to_term} *)
-    | Ast.Var x -> (
-        match List.find_index (String.equal x) ctx.Check.names with
-        | Some i -> Type.Var i
-        | None -> (
-            match Signature.find sg x with
-            | Some spec -> Type.Ind spec.Inductive.name
-            | None -> raise (Ast.Unbound_variable (s.loc, x))))
+    | Ast.Var x ->
+        let core =
+          match List.find_index (String.equal x) ctx.Check.names with
+          | Some i -> Type.Var i
+          | None -> (
+              match Signature.find sg x with
+              | Some spec -> Type.Ind spec.Inductive.name
+              | None -> raise (Ast.Unbound_variable (s.loc, x)))
+        in
+        coerce_leaf ctx mode core
     (* qualified access on an inductive *name* [T] (not shadowed by a local):
        [T.rec] is its recursor, [T.c] one of its constructors. Otherwise [e.f]
        is a named field projection on the record value [e]. *)
@@ -263,7 +309,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                   String.equal a.Inductive.aname field)
                 ctor.Inductive.fields
             with
-            | Some i -> Type.Proj (i, e')
+            | Some i -> coerce_leaf ctx mode (Type.Proj (i, e'))
             | None ->
                 Error.type_error [ Error.txtf "%s has no field .%s" name field ]
             )
@@ -565,14 +611,21 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
             elab_spine ctx (Type.Ctor h) cty args)
     | Other ->
         let head_core = go ctx Infer head in
-        elab_spine ~explicit ctx head_core (elab_infer ctx head_core) args
+        elab_spine ~explicit ~mode ctx head_core (elab_infer ctx head_core) args
   (* elaborate each argument against the domain read off the head's (function)
      type, advancing that type as arguments are consumed so each argument is in
      checking position. [~explicit] (set under an [@f] head) makes an implicit
-     binder consume the next written argument instead of inserting a meta. *)
-  and elab_spine ?(explicit = false) ctx head_core head_ty args : Type.t =
+     binder consume the next written argument instead of inserting a meta; once
+     the arguments run out, [~mode] drives expected-type implicit insertion on
+     the result (suppressed under [@f]). *)
+  and elab_spine ?(explicit = false) ?(mode = Infer) ctx head_core head_ty args
+      : Type.t =
     let rec walk core ty = function
-      | [] -> core
+      | [] ->
+          if explicit then
+            core
+          else
+            coerce ctx mode core ty
       | a :: rest -> (
           match Meta.force !ms ty with
           (* an implicit binder while an explicit argument is still to come:
