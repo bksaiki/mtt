@@ -94,9 +94,16 @@ The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
       than `+`/`×`, tighter than `->`, non-associative) producing `Ast.EqInfix`;
       the elaborator synthesizes the type from the left side, and the
       delaborator prints `Eq A x y` as `x = y`. `:=` is now the sole
-      definition/inductive separator (`=` is equality). Still wanted: motive
-      inference for `J`/`T.rec` (needs occurrence abstraction, ideally a stronger
-      unifier)
+      definition/inductive separator (`=` is equality)
+- [x] Motive inference for `J`/`T.rec` (Phase 5): a hole `_` in the motive
+      position, in checking mode, is inferred by **abstracting the scrutinee out
+      of the goal** — the proof's endpoint for `J` (`P := λ z q ⇒ goal[y↦z]`),
+      the major premise for a recursor (`P := λ x ⇒ goal[major↦x]`). One
+      core `abstract`/`lift` primitive (occurrence generalization on normal
+      forms); no higher-order unifier needed. The whole prelude (`cong`/`sym`/
+      `trans`/`subst`, `add`/`mul`/`pred`, the Nat lemmas, `absurd`) now writes
+      `_` for its motives. Inference position (no goal) still needs an explicit
+      motive
 - [ ] `match` expressions — pure surface sugar that compiles to recursor
       (`T.rec`) applications; the kernel never sees it. Needs an equation
       compiler (nested/multiple/overlapping patterns → nested single-level

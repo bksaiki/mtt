@@ -141,11 +141,15 @@ Several smaller PRs, built on Phases 3–4.
   elaborator synthesizes the type from the left operand (`x : A ⊢ x = y :
   Eq A x y`); the delaborator prints `Eq A x y` back as `x = y`. `:=` became the
   sole definition/inductive separator so `=` is free for equality.
-- **Motive inference for `J`/`T.rec` — still to do.** The hard one: it needs to
-  abstract the occurrences of the scrutinee (and, for `J`, the endpoint + proof)
-  out of the expected goal type to build the motive. That is higher-order, so it
-  wants occurrence-generalization and ideally a stronger (pattern) unifier than
-  the current first-order/lenient one.
+- **Motive inference for `J`/`T.rec` — done.** A hole `_` in the motive
+  position, in checking mode, is inferred by *occurrence abstraction*: generalize
+  the expected goal over the scrutinee — for `J`, the proof's endpoint `y`
+  (`P := λ z q ⇒ goal[y↦z]`); for a recursor, the major premise
+  (`P := λ x ⇒ goal[major↦x]`). This is one `abstract`/`lift` primitive over core
+  normal forms — no higher-order unifier or postponement needed, since the goal
+  is known up front in checking position. The whole prelude now writes `_` for
+  its motives. (Inference position, with no goal to abstract, still needs the
+  motive written out.)
 - Inference-position intros (`Sum.inl a` / `refl` with no expected type), named
   projections `x.field`.
 - `Eq` removal — also needs **indexed inductive families** (a separate kernel

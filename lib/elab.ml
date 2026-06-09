@@ -63,6 +63,64 @@ let core_spine t =
   in
   go [] t
 
+(* shift every free de Bruijn index of [t] (those [>= c]) up by [d] *)
+let rec lift d c (t : Type.t) : Type.t =
+  match t with
+  | Type.Var i ->
+      Type.Var
+        (if i >= c then
+           i + d
+         else
+           i)
+  | Type.Pi (ic, x, a, b) -> Type.Pi (ic, x, lift d c a, lift d (c + 1) b)
+  | Type.Lam (ic, x, a, b) -> Type.Lam (ic, x, lift d c a, lift d (c + 1) b)
+  | Type.App (f, a) -> Type.App (lift d c f, lift d c a)
+  | Type.Proj (i, e) -> Type.Proj (i, lift d c e)
+  | Type.Eq (a, x, y) -> Type.Eq (lift d c a, lift d c x, lift d c y)
+  | Type.J (p, dd, pr) -> Type.J (lift d c p, lift d c dd, lift d c pr)
+  | Type.Sort _
+  | Type.Refl
+  | Type.Ind _
+  | Type.Ctor _
+  | Type.Rec _
+  | Type.Meta _ ->
+      t
+
+(* [abstract needle t] is the body of [λ _ ⇒ t] with every subterm equal to
+   [needle] replaced by the fresh outermost binder (de Bruijn 0); [t]'s other
+   free indices shift up by one to make room. [needle] and [t] are core terms in
+   the same context, in normal form (so the match is up to βδη). This is the
+   motive-synthesis primitive: it generalizes a goal over a chosen subterm. *)
+let abstract needle t =
+  let rec go k t =
+    (* at depth [k] within [t], the new binder is index [k] and [needle]'s free
+       indices have shifted up by [k] *)
+    if t = lift k 0 needle then
+      Type.Var k
+    else
+      match t with
+      | Type.Var i ->
+          Type.Var
+            (if i >= k then
+               i + 1
+             else
+               i)
+      | Type.Pi (ic, x, a, b) -> Type.Pi (ic, x, go k a, go (k + 1) b)
+      | Type.Lam (ic, x, a, b) -> Type.Lam (ic, x, go k a, go (k + 1) b)
+      | Type.App (f, a) -> Type.App (go k f, go k a)
+      | Type.Proj (i, e) -> Type.Proj (i, go k e)
+      | Type.Eq (a, x, y) -> Type.Eq (go k a, go k x, go k y)
+      | Type.J (p, d, pr) -> Type.J (go k p, go k d, go k pr)
+      | Type.Sort _
+      | Type.Refl
+      | Type.Ind _
+      | Type.Ctor _
+      | Type.Rec _
+      | Type.Meta _ ->
+          t
+  in
+  go 0 t
+
 let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
   let sg = ctx0.Check.signature in
   let fresh (ctx : Check.ctx) = Value.Neutral (Value.Var ctx.Check.lvl) in
@@ -272,6 +330,44 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
        would. *)
     | Ast.Eq (a, x, y) ->
         Type.Eq (go ctx Infer a, go ctx Infer x, go ctx Infer y)
+    (* a hole motive in checking position is inferred by abstracting the proof's
+       (second) endpoint out of the goal — based path induction's motive [P : Π
+       (z : A) ⇒ Eq A x z → Sort] with [P y p ≡ goal] *)
+    | Ast.J ({ desc = Ast.Hole; _ }, d, pr) when mode <> Infer -> (
+        let g =
+          match mode with
+          | Check g -> Meta.force !ms g
+          | Infer -> assert false
+        in
+        let pr_core = go ctx Infer pr in
+        match Meta.force !ms (elab_infer ctx pr_core) with
+        | Value.Eq (a, x, y) ->
+            let lvl = ctx.Check.lvl in
+            let a_c = Value.quote lvl a
+            and x_c = Value.quote lvl x
+            and y_c = Value.quote lvl y
+            and g_c = Value.quote lvl g in
+            (* [λ z ⇒ λ q ⇒ goal[y ↦ z]]: abstract [y] (one binder, [z]), then
+               lift over the unused proof binder [q] *)
+            let body = lift 1 0 (abstract y_c g_c) in
+            let qty = Type.Eq (lift 1 0 a_c, lift 1 0 x_c, Type.Var 0) in
+            let motive =
+              Type.Lam
+                ( Type.Explicit
+                , "z"
+                , a_c
+                , Type.Lam (Type.Explicit, "q", qty, body) )
+            in
+            (* the diagonal proves [P x refl]; check [d] against it *)
+            let pmot = Value.eval ctx.Check.env motive in
+            let d_ty = Value.apply (Value.apply pmot x) Value.Refl in
+            Type.J (motive, go ctx (Check d_ty) d, pr_core)
+        | _ ->
+            Error.type_error
+              [ Error.txt
+                  "cannot infer the J motive: the proof's type is not an \
+                   equality"
+              ])
     | Ast.J (p, d, pr) ->
         Type.J (go ctx Infer p, go ctx Infer d, go ctx Infer pr)
     | Ast.Sum (a, b) -> (
@@ -306,10 +402,56 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
     match classify_head sg head with
     (* a recursor is motive-polymorphic; produce its core structurally and let
        the kernel's bespoke rule type the saturated spine *)
-    | Rec rh ->
-        List.fold_left
-          (fun core a -> Type.App (core, go ctx Infer a))
-          (Type.Rec rh) args
+    | Rec rh -> (
+        let m = rh.Type.nparams in
+        let n = List.length args in
+        let saturated = n = m + 1 + List.length rh.Type.recs + 1 in
+        let motive_is_hole =
+          match List.nth_opt args m with
+          | Some { desc = Ast.Hole; _ } -> true
+          | _ -> false
+        in
+        match mode with
+        (* a hole motive on a saturated recursor in checking position is
+           inferred by abstracting the major premise out of the goal: [P := λ (x
+           : T params) ⇒ goal[major ↦ x]] *)
+        | Check g when saturated && motive_is_hole ->
+            let g = Meta.force !ms g in
+            let param_asts = List.filteri (fun i _ -> i < m) args in
+            let minor_asts =
+              List.filteri (fun i _ -> i > m && i < n - 1) args
+            in
+            let major_ast = List.nth args (n - 1) in
+            let param_cores = List.map (go ctx Infer) param_asts in
+            let param_vals = List.map (Value.eval ctx.Check.env) param_cores in
+            let t_val =
+              List.fold_left Value.apply
+                (Value.VInd (rh.Type.rind, []))
+                param_vals
+            in
+            let t_c =
+              List.fold_left
+                (fun c p -> Type.App (c, p))
+                (Type.Ind rh.Type.rind) param_cores
+            in
+            let major_core = go ctx (Check t_val) major_ast in
+            let lvl = ctx.Check.lvl in
+            let major_nf =
+              Value.quote lvl (Value.eval ctx.Check.env major_core)
+            in
+            let motive =
+              Type.Lam
+                (Type.Explicit, "x", t_c, abstract major_nf (Value.quote lvl g))
+            in
+            let minor_cores = List.map (go ctx Infer) minor_asts in
+            List.fold_left
+              (fun core a -> Type.App (core, a))
+              (Type.Rec rh)
+              (param_cores @ [ motive ] @ minor_cores @ [ major_core ])
+        | _ ->
+            List.fold_left
+              (fun core a -> Type.App (core, go ctx Infer a))
+              (Type.Rec rh) args)
     | Ctor (spec, h) -> (
         let nfields = h.Type.carity - h.Type.nparams in
         (* checked against its own inductive with the parameters omitted:

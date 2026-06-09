@@ -266,6 +266,38 @@ let%expect_test "implicit arguments: insertion and inference" =
     dup : {A : Type} -> A -> A
     |}]
 
+(* a hole [_] in a motive position, in checking mode, is inferred by abstracting
+   the scrutinee out of the goal: the proof's endpoint for [J], the major
+   premise for a recursor. (In inference position there is no goal to abstract,
+   so the motive must be given.) *)
+let%expect_test "motive inference for J and recursors" =
+  session
+    [ (* J: abstract the endpoint [y] of [p : x = y] out of the goal [y = x],
+         recovering the motive [fun z q => z = x] *)
+      "def symm (A : Type) (x y : A) (p : x = y) : y = x := J _ refl p"
+    ; "#check symm Nat 0 0 refl"
+    ; (* a recursor: abstract the major [n] out of the goal [add n 0 = n] *)
+      "theorem azr (n : Nat) : add n 0 = n :=\n\
+      \   Nat.rec _ refl (fun (k : Nat) (ih : add k 0 = k) => cong Nat.succ \
+       ih) n"
+    ; "#check azr 3"
+    ; (* a non-dependent goal: abstraction finds no occurrence, giving a
+         constant motive (ordinary, non-dependent recursion) *)
+      "def dbl (n : Nat) : Nat := Nat.rec _ 0 (fun (k s : Nat) => Nat.succ \
+       (Nat.succ s)) n"
+    ; "#eval dbl 3"
+    ; (* no goal to abstract against (inference position): the motive is
+         required *)
+      "#check J _ refl (refl : (0 : Nat) = 0)"
+    ];
+  [%expect
+    {|
+    refl : 0 = 0
+    azr 3 : 3 = 3
+    6
+    type error: cannot infer the type of a hole _; use it where its type is determined
+    |}]
+
 (* Σ is the prelude record [Sigma]: pairs check against it (recovering the
    parameters), projections are the generic record projections, and η comes from
    the record rule. Fixed at Type, so the old "a pair of props is an irrelevant
