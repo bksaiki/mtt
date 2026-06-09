@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP TIMES PLUS EQOP REFL COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE EOF
+%token FUN PI SIGMA TYPE PROP TIMES PLUS EQOP REFL COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE AT EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -153,6 +153,8 @@ atom:
   | TYPE { Ast.mk $loc (Ast.Sort 1) }
   | PROP { Ast.mk $loc (Ast.Sort 0) }
   | REFL { Ast.mk $loc Ast.Refl }
+  (* [@f] makes every argument explicit (no implicit insertion for this head) *)
+  | AT; e = atom { Ast.mk $loc (Ast.At e) }
   (* a decimal literal; expands to the registered nat's succ/zero in to_term *)
   | n = INT { Ast.mk $loc (Ast.Numeral n) }
   (* () is the unit element, like OCaml; whitespace between the parens is

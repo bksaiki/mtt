@@ -55,6 +55,9 @@ rule token = parse
   | "|" { BAR }
   | "@[" { ATTR_OPEN }
   | "]" { ATTR_CLOSE }
+  (* [@f] makes every argument explicit (suppresses implicit insertion); the
+     longer [@[] above wins by maximal munch, so a lone [@] is unambiguous *)
+  | "@" { AT }
   | ".1" { FST }
   | ".2" { SND }
   | "." digits as s

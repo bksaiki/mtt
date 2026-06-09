@@ -16,6 +16,8 @@ and desc =
   | Lam of Type.icit * string * t * t
       (** [fun (x : A) => b] or [fun {x : A} => b] *)
   | App of t * t
+  | At of t
+      (** [@f]: make every argument explicit, suppressing implicit insertion *)
   | Ascribe of t * t  (** (t : A) *)
   | MkUnit  (** [()], sugar for the prelude's [Unit.unit] *)
   | Sigma of string * t * t  (** Σ (x : A) ⇒ B *)

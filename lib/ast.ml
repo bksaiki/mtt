@@ -11,6 +11,7 @@ and desc =
   | Arrow of t * t (* A -> B *)
   | Lam of Type.icit * string * t * t (* fun (x : A) => b / fun {x : A} => b *)
   | App of t * t
+  | At of t (* @f: make every argument explicit (suppress implicit insertion) *)
   | Ascribe of t * t (* (t : A) *)
   | MkUnit (* (), sugar for the prelude's Unit.unit *)
   | Sigma of string * t * t (* Σ (x : A) ⇒ B *)
@@ -145,6 +146,12 @@ let to_term sg ?(notation = Notation.empty) names s =
           [ Error.txt
               "= / rfl require the elaborator (the type or parameters are \
                inferred)"
+          ]
+    (* @f controls implicit insertion, which only the elaborator does *)
+    | At _ ->
+        Error.type_error
+          [ Error.txt
+              "@ requires the elaborator (it controls implicit insertion)"
           ]
     (* a numeral expands to succ-applications of the registered nat zero/succ *)
     | Numeral n -> (

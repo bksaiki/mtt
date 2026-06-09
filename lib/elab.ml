@@ -294,7 +294,9 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           | Infer -> Infer
         in
         Type.Lam (i, x, a', go (Check.bind x va ctx) body_mode b)
-    | Ast.App _ -> elab_app ctx mode s
+    | Ast.App _
+    | Ast.At _ ->
+        elab_app ctx mode s
     (* the generic record projections; handled here (not delegated) so a literal
        pair underneath — [(a, b).1] — still reaches the elaborator *)
     | Ast.Fst t -> Type.Proj (0, go ctx Infer t)
@@ -418,6 +420,13 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
   (* an application spine [head arg…] *)
   and elab_app ctx mode s : Type.t =
     let head, args = peel s in
+    (* [@f …]: the head is wrapped in [At], and every binder of [f]'s type —
+       implicit included — consumes a written argument (no insertion) *)
+    let explicit, head =
+      match head.Ast.desc with
+      | Ast.At h -> (true, h)
+      | _ -> (false, head)
+    in
     match classify_head sg head with
     (* a recursor application. The minors and major are elaborated in *checking*
        position (against their derived types), so check-only forms — a [rfl]
@@ -556,11 +565,12 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
             elab_spine ctx (Type.Ctor h) cty args)
     | Other ->
         let head_core = go ctx Infer head in
-        elab_spine ctx head_core (elab_infer ctx head_core) args
+        elab_spine ~explicit ctx head_core (elab_infer ctx head_core) args
   (* elaborate each argument against the domain read off the head's (function)
      type, advancing that type as arguments are consumed so each argument is in
-     checking position *)
-  and elab_spine ctx head_core head_ty args : Type.t =
+     checking position. [~explicit] (set under an [@f] head) makes an implicit
+     binder consume the next written argument instead of inserting a meta. *)
+  and elab_spine ?(explicit = false) ctx head_core head_ty args : Type.t =
     let rec walk core ty = function
       | [] -> core
       | a :: rest -> (
@@ -570,8 +580,9 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
              explicit argument lands below) and retry against the next binder.
              Insertion is gated on a remaining argument, so a partially-applied
              head keeps its trailing implicit binders rather than spawning
-             unsolvable metas. *)
-          | Value.Pi (Type.Implicit, _, dom, c) ->
+             unsolvable metas. Under [@f] ([explicit]) the binder instead
+             consumes the written argument, like an explicit one. *)
+          | Value.Pi (Type.Implicit, _, dom, c) when not explicit ->
               let m = fresh_meta_core ctx dom in
               walk
                 (Type.App (core, m))
