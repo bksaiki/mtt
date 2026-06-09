@@ -357,6 +357,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
     | Ast.App _
     | Ast.At _ ->
         elab_app ctx mode s
+    | Ast.Match (scrut, arms) -> elab_match ctx mode scrut arms
     (* the generic record projections; handled here (not delegated) so a literal
        pair underneath — [(a, b).1] — still reaches the elaborator *)
     | Ast.Fst t -> Type.Proj (0, go ctx Infer t)
@@ -720,6 +721,134 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           | _ -> ty)
     in
     elab_spine ctx head_core (instantiate cty pvals) args
+  (* [match e with | Cᵢ x̄ᵢ ⇒ bᵢ … end]: flat case analysis desugared to the
+     recursor [T.rec params motive minors… indices e]. The motive is recovered
+     from the expected goal (checking mode, non-indexed only). Each branch
+     becomes the constructor's minor premise — a λ binding the constructor's
+     fields to the pattern variables, with each recursive field's induction
+     hypothesis bound to [_] (case analysis ignores it; recursion uses the
+     recursor directly). *)
+  and elab_match ctx mode scrut arms : Type.t =
+    let scrut_core = go ctx Infer scrut in
+    match Meta.force !ms (elab_infer ctx scrut_core) with
+    | Value.VInd (tname, margs) ->
+        let spec = Check.lookup_ind ctx tname in
+        let rh = Inductive.rec_head spec in
+        let m = rh.Type.nparams in
+        if rh.Type.nindices > 0 then
+          Error.type_error
+            [ Error.txtf
+                "match on the indexed family %s is not yet supported; use \
+                 %s.rec"
+                tname tname
+            ];
+        (* every arm names an actual constructor *)
+        List.iter
+          (fun (cn, _, _) ->
+            if
+              not
+                (List.exists
+                   (fun (c : Inductive.ctor) -> String.equal c.cname cn)
+                   spec.Inductive.ctors)
+            then
+              Error.type_error
+                [ Error.txtf "%s is not a constructor of %s" cn tname ])
+          arms;
+        (* the arm for constructor [c]: exactly one, with the right arity *)
+        let arm_for (c : Inductive.ctor) =
+          match
+            List.filter
+              (fun (cn, _, _) -> String.equal cn c.Inductive.cname)
+              arms
+          with
+          | [ (_, xs, b) ] ->
+              let nfields = List.length c.Inductive.fields in
+              if List.length xs <> nfields then
+                Error.type_error
+                  [ Error.txtf
+                      "the pattern for %s.%s binds %d variable(s) but the \
+                       constructor has %d field(s)"
+                      tname c.Inductive.cname (List.length xs) nfields
+                  ];
+              (xs, b)
+          | [] ->
+              Error.type_error
+                [ Error.txtf "match is missing a branch for %s.%s" tname
+                    c.Inductive.cname
+                ]
+          | _ ->
+              Error.type_error
+                [ Error.txtf "match has more than one branch for %s.%s" tname
+                    c.Inductive.cname
+                ]
+        in
+        let goal =
+          match mode with
+          | Check g -> Meta.force !ms g
+          | Infer ->
+              Error.type_error
+                [ Error.txt
+                    "cannot infer the result type of a match; annotate it \
+                     (e.g. (match … end : T))"
+                ]
+        in
+        let lvl = ctx.Check.lvl in
+        let pvals = List.filteri (fun i _ -> i < m) margs in
+        let param_cores = List.map (Value.quote lvl) pvals in
+        (* motive [P := λ (x : T params) ⇒ goal[e ↦ x]] (non-indexed, so no
+           index binders to abstract) *)
+        let t_c =
+          List.fold_left
+            (fun c p -> Type.App (c, p))
+            (Type.Ind tname) param_cores
+        in
+        let scrut_nf = Value.quote lvl (Value.eval ctx.Check.env scrut_core) in
+        let motive_core =
+          Type.Lam
+            (Type.Explicit, "x", t_c, abstract scrut_nf (Value.quote lvl goal))
+        in
+        let pmot = Value.eval ctx.Check.env motive_core in
+        let minor_cores =
+          List.mapi
+            (fun i (c : Inductive.ctor) ->
+              let xs, body = arm_for c in
+              (* the minor's binders: a field's pattern variable, and [_] for
+                 the induction hypothesis that follows each recursive field *)
+              let names =
+                List.concat
+                  (List.map2
+                     (fun x (a : Inductive.arg) ->
+                       match a.Inductive.recursive with
+                       | Some _ -> [ x; "_" ]
+                       | None -> [ x ])
+                     xs c.Inductive.fields)
+              in
+              build_minor ctx names body
+                (Check.minor_type ctx spec pvals pmot i))
+            spec.Inductive.ctors
+        in
+        List.fold_left
+          (fun c a -> Type.App (c, a))
+          (Type.Rec rh)
+          (param_cores @ (motive_core :: minor_cores) @ [ scrut_core ])
+    | _ ->
+        Error.type_error
+          [ Error.txt "the scrutinee of a match must have an inductive type" ]
+  (* build a minor premise: wrap [body] in λs over the minor type's telescope,
+     naming each binder from [names] (pattern variables and [_] for ignored
+     induction hypotheses); the body is checked against the telescope's tail *)
+  and build_minor ctx names body minor_ty : Type.t =
+    match (names, Meta.force !ms minor_ty) with
+    | name :: rest, Value.Pi (ic, _, dom, cod) ->
+        let v = Value.Neutral (Value.Var ctx.Check.lvl) in
+        Type.Lam
+          ( ic
+          , name
+          , Value.quote ctx.Check.lvl dom
+          , build_minor (Check.bind name dom ctx) rest body
+              (Value.apply_closure cod v) )
+    | [], final -> go ctx (Check final) body
+    | _ -> assert false
   in
   let core = go ctx0 mode0 s0 in
   (* replace solved metavariables with their solutions; an unsolved one left

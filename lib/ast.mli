@@ -18,6 +18,10 @@ and desc =
   | App of t * t
   | At of t
       (** [@f]: make every argument explicit, suppressing implicit insertion *)
+  | Match of t * (string * string list * t) list
+      (** [match e with | C x… => b … end]: scrutinee and per-arm constructor
+          name, pattern variables, and body — case-analysis sugar for the
+          recursor *)
   | Ascribe of t * t  (** (t : A) *)
   | MkUnit  (** [()], sugar for the prelude's [Unit.unit] *)
   | Sigma of string * t * t  (** Σ (x : A) ⇒ B *)

@@ -12,6 +12,9 @@ and desc =
   | Lam of Type.icit * string * t * t (* fun (x : A) => b / fun {x : A} => b *)
   | App of t * t
   | At of t (* @f: make every argument explicit (suppress implicit insertion) *)
+  | Match of t * (string * string list * t) list
+    (* match e with | C x… => b … end: scrutinee and per-arm constructor name,
+       pattern variables, body — case-analysis sugar for the recursor *)
   | Ascribe of t * t (* (t : A) *)
   | MkUnit (* (), sugar for the prelude's Unit.unit *)
   | Sigma of string * t * t (* Σ (x : A) ⇒ B *)

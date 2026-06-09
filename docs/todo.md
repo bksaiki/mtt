@@ -140,13 +140,25 @@ remains is below.
       `Elab` covers every surface form — `()` and numerals included — so the
       type-free `Ast.to_term` is **deleted**: `Elab` is the sole surface → core
       pass, used even for inductive declarations (`Stmt.elaborate_inductive`)
-- [ ] `match` expressions — pure surface sugar that compiles to recursor
-      (`T.rec`) applications; the kernel never sees it. Needs an equation
-      compiler (nested/multiple/overlapping patterns → nested single-level
-      `.rec` calls) and, for dependent matching once indices land, motive and
-      index generalization (the convoy pattern). Structural recursion comes from
-      the recursor's IH; general / well-founded recursion would need more (a
-      `brecOn`-style principle)
+- [~] `match` expressions — pure surface sugar that compiles to recursor
+      (`T.rec`) applications; the kernel never sees it.
+      - [x] **MVP: flat case analysis.** `match e with | C x̄ ⇒ b … end`
+            (Rocq-style `end`, so the grammar stays conflict-free), one
+            variable-pattern branch per constructor (exhaustive), unqualified
+            constructor names, non-indexed types, motive recovered from the
+            expected goal (checking position). Desugars in `Elab` to
+            `T.rec params motive minors… e`, each branch a minor premise binding
+            the fields with the recursive constructors' IHs bound to `_` — so it
+            is **case analysis, not recursion** (recursion stays explicit via
+            `T.rec`). Forward-only sugar (prints back as the recursor).
+      - [ ] wildcard `_` patterns and a catch-all branch
+      - [ ] the equation compiler proper: nested / multiple / overlapping
+            patterns → nested single-level `.rec` calls
+      - [ ] dependent (convoy) matching on **indexed** families: motive and
+            index generalization (the MVP gates on `nindices = 0`)
+      - [ ] structural recursion through `match` (a `brecOn`-style principle);
+            general / well-founded recursion needs more still
+      - [ ] a delaborator that prints a recursor back as `match`
 
 ## Surface syntax
 

@@ -38,6 +38,10 @@ rule token = parse
   | "theorem" { THEOREM }
   | "lemma" { THEOREM }
   | "inductive" { INDUCTIVE }
+  (* [match e with | C x => … | … end]: case-analysis sugar for the recursor *)
+  | "match" { MATCH }
+  | "with" { WITH }
+  | "end" { END }
   | "->" { ARROW }
   | "→" { ARROW }
   | "=>" { DARROW }

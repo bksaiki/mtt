@@ -497,6 +497,58 @@ let%expect_test "surface inference: implicits, @, named projections, intros" =
     Box.wrap A a : Box A
     |}]
 
+(* [match] is flat case-analysis sugar: it desugars to the inductive's recursor
+   with the motive recovered from the expected type, one branch per constructor
+   (unqualified constructor names, binding the fields), the recursive
+   constructors' induction hypotheses bound but ignored. *)
+let%expect_test "match: case analysis desugars to the recursor" =
+  session
+    [ "axiom A : Type"
+    ; "axiom B : Type"
+    ; "axiom a : A"
+    ; "axiom b : B"
+    ; (* case analysis on a sum; the result injections' parameters are
+         recovered, and [#check] shows the desugared [Sum.rec] *)
+      "def swap (s : A + B) : B + A := match s with | inl x => Sum.inr B A x | \
+       inr y => Sum.inl B A y end"
+    ; "#check swap"
+    ; (* the desugaring is *exactly* the hand-written recursor *)
+      "def swap2 (s : A + B) : B + A := Sum.rec A B (fun x : A + B => B + A) \
+       (fun x : A => Sum.inr B A x) (fun y : B => Sum.inl B A y) s"
+    ; "#check_equal swap swap2"
+    ; (* ι-reduction fires on a constructor scrutinee *)
+      "#check_equal (swap (Sum.inl a)) (Sum.inr a)"
+    ; (* on a recursive type the branch binds the field, ignoring the IH *)
+      "def pred (n : Nat) : Nat := match n with | zero => 0 | succ k => k end"
+    ; "#eval pred 3"
+    ; "#eval pred 0"
+    ];
+  [%expect
+    {|
+    fun (s : A + B) =>
+    Sum.rec A B (fun (x : A + B) => B + A) (fun (x : A) => Sum.inr B A x)
+    (fun (y : B) => Sum.inl B A y) s : A + B -> B + A
+    2
+    0
+    |}]
+
+let%expect_test "match: coverage and well-formedness are checked" =
+  let case s = session [ "axiom A : Type"; "axiom a : A"; s ] in
+  (* a missing branch *)
+  case "def f (s : A + A) : A := match s with | inl x => x end";
+  [%expect {| type error: match is missing a branch for Sum.inr |}];
+  (* an unknown constructor *)
+  case "def f (n : Nat) : Nat := match n with | zero => 0 | bogus k => k end";
+  [%expect {| type error: bogus is not a constructor of Nat |}];
+  (* wrong pattern arity *)
+  case "def f (n : Nat) : Nat := match n with | zero => 0 | succ => 0 end";
+  [%expect
+    {| type error: the pattern for Nat.succ binds 0 variable(s) but the constructor has 1 field(s) |}];
+  (* the result type must be known (no inference-mode match) *)
+  case "def f (n : Nat) := match n with | zero => 0 | succ j => j end";
+  [%expect
+    {| type error: cannot infer the result type of a match; annotate it (e.g. (match … end : T)) |}]
+
 let%expect_test "Nat: computation by recursion, and induction" =
   session
     [ "def add (m n : Nat) : Nat :="
