@@ -1,10 +1,10 @@
 (* the inductive machinery lives in the kernel, so this suite uses the top-level
    kernel modules (Type, Value, Check, Inductive) directly *)
 
-(* Phase 1 exercises the kernel's *computation* for inductives (eval/quote and
-   the generic ι-rule) by building terms directly, before any surface syntax or
-   type checking exists. Two specs serve as fixtures: a parameterless Nat and a
-   parameterized List. *)
+(* These first tests exercise the kernel's *computation* for inductives
+   (eval/quote and the generic ι-rule) by building core terms directly, with no
+   surface syntax or type checking involved. Two specs serve as fixtures: a
+   parameterless Nat and a parameterized List. *)
 
 let norm t = print_endline (Type.to_string (Value.normalize t))
 
@@ -12,13 +12,18 @@ let norm t = print_endline (Type.to_string (Value.normalize t))
 let nat_spec =
   { Inductive.name = "Nat"
   ; params = []
+  ; indices = []
   ; sort = 1
   ; ctors =
-      [ { Inductive.cname = "zero"; fields = [] }
+      [ { Inductive.cname = "zero"; fields = []; result_indices = [] }
       ; { Inductive.cname = "succ"
         ; fields =
-            [ { Inductive.aname = "n"; aty = Type.Ind "Nat"; recursive = true }
+            [ { Inductive.aname = "n"
+              ; aty = Type.Ind "Nat"
+              ; recursive = Some []
+              }
             ]
+        ; result_indices = []
         }
       ]
   }
@@ -42,20 +47,22 @@ let rec numeral k =
 let list_spec =
   { Inductive.name = "List"
   ; params = [ ("A", Type.Sort 1) ]
+  ; indices = []
   ; sort = 1
   ; ctors =
-      [ { Inductive.cname = "nil"; fields = [] }
+      [ { Inductive.cname = "nil"; fields = []; result_indices = [] }
       ; { Inductive.cname = "cons"
         ; fields =
             [ { Inductive.aname = "head"
               ; aty = Type.Var 0 (* A *)
-              ; recursive = false
+              ; recursive = None
               }
             ; { Inductive.aname = "tail"
               ; aty = Type.App (Type.Ind "List", Type.Var 1 (* A *))
-              ; recursive = true
+              ; recursive = Some []
               }
             ]
+        ; result_indices = []
         }
       ]
   }
@@ -153,7 +160,7 @@ let%expect_test "parameterized recursor: length of a two-element list" =
   [%expect
     {| fun (A : Type) => fun (a : A) => fun (b : A) => Nat.succ (Nat.succ Nat.zero) |}]
 
-(* --- Phase 2: type checking --- *)
+(* --- type checking --- *)
 
 let sig_ctx = Check.add_ind list_spec (Check.add_ind nat_spec Check.empty)
 
@@ -201,6 +208,7 @@ let%expect_test "strict positivity rejects a non-recursive occurrence" =
   let bad =
     { Inductive.name = "Bad"
     ; params = []
+    ; indices = []
     ; sort = 1
     ; ctors =
         [ { Inductive.cname = "mk"
@@ -208,9 +216,10 @@ let%expect_test "strict positivity rejects a non-recursive occurrence" =
               [ { Inductive.aname = "f"
                 ; aty =
                     Type.Pi (Type.Explicit, "_", Type.Ind "Bad", Type.Ind "Bad")
-                ; recursive = false
+                ; recursive = None
                 }
               ]
+          ; result_indices = []
           }
         ]
     }
@@ -226,10 +235,11 @@ let%expect_test "strict positivity rejects a non-recursive occurrence" =
 let pbool_spec =
   { Inductive.name = "PBool"
   ; params = []
+  ; indices = []
   ; sort = 0
   ; ctors =
-      [ { Inductive.cname = "pt"; fields = [] }
-      ; { Inductive.cname = "pf"; fields = [] }
+      [ { Inductive.cname = "pt"; fields = []; result_indices = [] }
+      ; { Inductive.cname = "pf"; fields = []; result_indices = [] }
       ]
   }
 
@@ -246,8 +256,9 @@ let pbool_rec = Type.Rec (Inductive.rec_head pbool_spec)
 let punit_spec =
   { Inductive.name = "PUnit"
   ; params = []
+  ; indices = []
   ; sort = 0
-  ; ctors = [ { Inductive.cname = "pstar"; fields = [] } ]
+  ; ctors = [ { Inductive.cname = "pstar"; fields = []; result_indices = [] } ]
   }
 
 let punit_ctx = Check.add_ind punit_spec Check.empty
@@ -299,7 +310,7 @@ let%expect_test "a stuck recursor on a Prop scrutinee ignores the proof" =
      Prop so result-level irrelevance does not apply. This is what subsumes the
      hardcoded `absurd`. *)
   let bot_spec =
-    { Inductive.name = "Bot"; params = []; sort = 0; ctors = [] }
+    { Inductive.name = "Bot"; params = []; indices = []; sort = 0; ctors = [] }
   in
   let ctx = Check.add_ind bot_spec Check.empty in
   let ctx = Check.bind "A" (Value.Sort 1) ctx in
@@ -358,19 +369,21 @@ let dpair_spec =
       [ ("A", Type.Sort 1)
       ; ("B", Type.Pi (Type.Explicit, "_", Type.Var 0, Type.Sort 1))
       ]
+  ; indices = []
   ; sort = 1
   ; ctors =
       [ { Inductive.cname = "mk"
         ; fields =
             [ { Inductive.aname = "a"
               ; aty = Type.Var 1 (* A *)
-              ; recursive = false
+              ; recursive = None
               }
             ; { Inductive.aname = "b"
               ; aty = Type.App (Type.Var 1 (* B *), Type.Var 0 (* a *))
-              ; recursive = false
+              ; recursive = None
               }
             ]
+        ; result_indices = []
         }
       ]
   }
@@ -419,8 +432,9 @@ let%expect_test "record η: a value equals the tuple of its projections" =
 let urec_spec =
   { Inductive.name = "URec"
   ; params = []
+  ; indices = []
   ; sort = 1
-  ; ctors = [ { Inductive.cname = "u"; fields = [] } ]
+  ; ctors = [ { Inductive.cname = "u"; fields = []; result_indices = [] } ]
   }
 
 let%expect_test "0-field record: any two values are equal (Unit-η)" =
@@ -431,3 +445,102 @@ let%expect_test "0-field record: any two values are equal (Unit-η)" =
   let r2 = Value.eval ctx.Check.env (Type.Var 0) in
   print_endline (conv_str ctx (Value.VInd ("URec", [])) r1 r2);
   [%expect {| equal |}]
+
+(* === Indexed families ===
+
+   [Vec], the canonical indexed family, exercises what parameters cannot: a
+   per-constructor result index, and a recursive field ([v : Vec A k]) sitting
+   at a *different* index than the result ([Vec A (succ k)]). The recursor's ι
+   rule must recover that field index [k] to form the induction hypothesis, so
+   computing a vector's length is the real test of the index machinery.
+
+   inductive Vec (A : Type) : Nat -> Type := | vnil : Vec A 0 | vcons : (k :
+   Nat) -> A -> Vec A k -> Vec A (succ k) *)
+let vec_spec =
+  { Inductive.name = "Vec"
+  ; params = [ ("A", Type.Sort 1) ]
+  ; indices = [ ("n", nat) ]
+  ; sort = 1
+  ; ctors =
+      [ { Inductive.cname = "vnil"; fields = []; result_indices = [ zero ] }
+      ; { Inductive.cname = "vcons"
+        ; fields =
+            [ { Inductive.aname = "k"; aty = nat; recursive = None }
+            ; { Inductive.aname = "a"
+              ; aty = Type.Var 1 (* A *)
+              ; recursive = None
+              }
+            ; { Inductive.aname = "v"
+              ; aty =
+                  Type.App
+                    ( Type.App (Type.Ind "Vec", Type.Var 2 (* A *))
+                    , Type.Var 1 (* k *) )
+              ; recursive = Some [ Type.Var 1 (* k *) ]
+              }
+            ]
+        ; result_indices = [ succ (Type.Var 2 (* k *)) ]
+        }
+      ]
+  }
+
+let vec_ctx = Check.add_ind vec_spec sig_ctx
+
+let vnil a = Type.App (Type.Ctor (Inductive.ctor_head vec_spec 0), a)
+
+(* vcons A k x v *)
+let vcons a k x v =
+  let c = Type.Ctor (Inductive.ctor_head vec_spec 1) in
+  Type.App (Type.App (Type.App (Type.App (c, a), k), x), v)
+
+let vec_rec = Type.Rec (Inductive.rec_head vec_spec)
+
+(* a length recursor at the constant motive [fun n v => Nat]: vnil ↦ 0, vcons k
+   a v ih ↦ succ ih (the IH [ih] is the recursor on the tail [v : Vec A k]) *)
+let vec_length n vec =
+  let vec_ty m = Type.App (Type.App (Type.Ind "Vec", nat), m) in
+  let motive =
+    Type.Lam
+      ( Type.Explicit
+      , "n"
+      , nat
+      , Type.Lam (Type.Explicit, "v", vec_ty (Type.Var 0), nat) )
+  in
+  let vcons_case =
+    Type.Lam
+      ( Type.Explicit
+      , "k"
+      , nat
+      , Type.Lam
+          ( Type.Explicit
+          , "a"
+          , nat
+          , Type.Lam
+              ( Type.Explicit
+              , "v"
+              , vec_ty (Type.Var 1 (* k *))
+              , Type.Lam (Type.Explicit, "ih", nat, succ (Type.Var 0 (* ih *)))
+              ) ) )
+  in
+  List.fold_left
+    (fun f a -> Type.App (f, a))
+    vec_rec
+    [ nat; motive; zero (* vnil case *); vcons_case; n; vec ]
+
+(* a Vec Nat 2: vcons 1 7 (vcons 0 5 vnil) *)
+let vec2 =
+  vcons nat (numeral 1) (numeral 7) (vcons nat zero (numeral 5) (vnil nat))
+
+let%expect_test "indexed Vec: declaration is well-formed" =
+  Check.check_inductive sig_ctx vec_spec;
+  print_endline "ok";
+  [%expect {| ok |}]
+
+let%expect_test
+    "indexed Vec: the recursor computes a length (ι passes the field index)" =
+  norm (vec_length (numeral 2) vec2);
+  [%expect {| Nat.succ (Nat.succ Nat.zero) |}]
+
+let%expect_test "indexed Vec: a recursor application is typed at P index major"
+    =
+  infers vec_ctx (vec_length (numeral 2) vec2);
+  [%expect {| Nat |}]

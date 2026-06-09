@@ -34,13 +34,13 @@ type session =
 let initial = { ctx = Check.empty; notation = Notation.empty }
 
 (* Elaborates a surface inductive declaration into an {!Inductive.spec}:
-   scope-checks the parameter telescope and the result sort, then each
-   constructor's declared type. A constructor type is decomposed as a Π-spine
-   [(f₀ : F₀) -> ... -> T params]: the arguments become fields (a field is
-   recursive when its type is exactly the inductive applied to the parameters),
-   and the result must be the inductive applied to its parameters (no indices).
-   The former is registered provisionally so constructor types can mention
-   it. *)
+   scope-checks the parameter telescope, then the result — an index telescope
+   ending in a sort, [(i : I) -> … -> Sort] — then each constructor's declared
+   type. A constructor type is a Π-spine [(f₀ : F₀) -> … -> T params idxs]: the
+   arguments become fields (a field is recursive when its type is [T] applied to
+   the parameters and some indices), and the result must be [T] applied to its
+   parameters and the constructor's index instances. The former is registered
+   provisionally so constructor types can mention it. *)
 let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
   let sg = sess.ctx.Check.signature in
   let notation = sess.notation in
@@ -51,22 +51,51 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
         (params @ [ (x, Ast.to_term sg ~notation names aty) ], x :: names))
       ([], []) d.iparams
   in
-  let sort =
-    match Ast.to_term sg ~notation param_names d.isort with
-    | Type.Sort k -> k
-    | _ ->
-        Error.type_error
-          [ Error.txt
-              "the result of an inductive must be a sort (Type, Prop, or Type \
-               n)"
-          ]
+  (* the result is an index telescope ending in a sort; the Π binders the
+     surface arrow introduces are the indices (their scope already threaded by
+     {!Ast.to_term}, so the index types carry the right de Bruijn) *)
+  let indices, sort =
+    let rec decompose = function
+      | Type.Pi (_, x, a, b) ->
+          let idxs, k = decompose b in
+          ((x, a) :: idxs, k)
+      | Type.Sort k -> ([], k)
+      | _ ->
+          Error.type_error
+            [ Error.txt
+                "an inductive's result must be a sort (Type, Prop, Type n), \
+                 optionally after an index telescope (e.g. Nat -> Type)"
+            ]
+    in
+    decompose (Ast.to_term sg ~notation param_names d.isort)
   in
-  let provisional = { Inductive.name = d.iname; params; sort; ctors = [] } in
+  let provisional =
+    { Inductive.name = d.iname; params; indices; sort; ctors = [] }
+  in
   let sg = Signature.add provisional sg in
   let m = List.length params in
-  (* a field/result at depth [d] is recursive iff it is the inductive applied to
-     its parameters there *)
-  let is_self depth ty = ty = Inductive.apply provisional depth in
+  (* [as_self depth ty]: if [ty] is this inductive applied to the parameter
+     variables (read at [depth]) and then index instances, those instances; else
+     [None]. Used both to flag a recursive field and to read a constructor's
+     result indices. (A field that mentions the inductive but not in this shape
+     is left non-recursive and rejected later by the kernel's positivity
+     gate.) *)
+  let as_self depth ty =
+    let rec peel acc = function
+      | Type.App (f, a) -> peel (a :: acc) f
+      | Type.Ind n when String.equal n d.iname -> Some acc
+      | _ -> None
+    in
+    match peel [] ty with
+    | Some args when List.length args >= m ->
+        let pvars = List.filteri (fun i _ -> i < m) args in
+        let expected = List.init m (fun j -> Type.Var (depth - 1 - j)) in
+        if pvars = expected then
+          Some (List.filteri (fun i _ -> i >= m) args)
+        else
+          None
+    | _ -> None
+  in
   let ctors =
     List.map
       (fun (cname, cty) ->
@@ -80,7 +109,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
           match (ty : Type.t) with
           | Pi (_, x, a, b) ->
               let fields, result = decompose (j + 1) b in
-              ( { Inductive.aname = x; aty = a; recursive = is_self (m + j) a }
+              ( { Inductive.aname = x; aty = a; recursive = as_self (m + j) a }
                 :: fields
               , result )
           | result -> ([], result)
@@ -88,16 +117,18 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
         let fields, result =
           decompose 0 (Ast.to_term sg ~notation param_names cty)
         in
-        if not (is_self (m + List.length fields) result) then
-          Error.type_error
-            [ Error.txtf
-                "constructor %s must construct %s applied to its parameters"
-                cname d.iname
-            ];
-        { Inductive.cname; fields })
+        match as_self (m + List.length fields) result with
+        | Some result_indices -> { Inductive.cname; fields; result_indices }
+        | None ->
+            Error.type_error
+              [ Error.txtf
+                  "constructor %s must construct %s applied to its parameters \
+                   and indices"
+                  cname d.iname
+              ])
       d.ictors
   in
-  { Inductive.name = d.iname; params; sort; ctors }
+  { Inductive.name = d.iname; params; indices; sort; ctors }
 
 let run (sess : session) stmt =
   let ctx = sess.ctx in

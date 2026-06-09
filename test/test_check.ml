@@ -150,7 +150,7 @@ let%expect_test "pair inference defaults to the constant family (Lean-style)" =
   (* a dependent type is recovered by checking against the Σ *)
   infer {|(((), ()) : Unit × Unit)|};
   [%expect {| Unit × Unit |}];
-  infer {|((0, refl) : Σ (n : Nat) ⇒ Eq Nat n n)|};
+  infer {|((0, rfl) : Σ (n : Nat) ⇒ Eq Nat n n)|};
   [%expect {| Σ (n : Nat) ⇒ n = n |}];
   (* the second projection's type mentions the first *)
   infer {|λ p : (Σ (n : Nat) ⇒ Eq Nat n n) ⇒ p.2|};
@@ -179,23 +179,22 @@ let%expect_test "sum formation and injections (Type-fixed inductive)" =
     {|λ s : Unit + Nat ⇒ Sum.rec Unit Nat (λ x : Unit + Nat ⇒ Type) (λ x : Unit ⇒ Unit) (λ h : Nat ⇒ Nat) s|};
   [%expect {| Unit + Nat -> Type |}]
 
-let%expect_test "equality formation and refl" =
+let%expect_test "equality formation and rfl" =
   infer "Eq Unit () ()";
   [%expect {| Prop |}];
-  (* refl is check-only *)
-  infer "refl";
+  (* rfl is check-only *)
+  infer "rfl";
   [%expect
-    {| type error: cannot infer the type of refl: ascribe it, e.g. (refl : Eq A x x) |}];
-  infer "(refl : Eq Unit () ())";
+    {| type error: cannot infer the type of rfl; ascribe it (e.g. (rfl : x = x)) |}];
+  infer "(rfl : Eq Unit () ())";
   [%expect {| () = () |}];
-  (* refl reifies definitional equality: it checks because the sides are
+  (* rfl reifies definitional equality: it checks because the sides are
      convertible (here by β) *)
-  infer {|(refl : Eq Type ((λ A : Type ⇒ A) Unit) Unit)|};
-  [%expect {| Unit = Unit |}];
-  (* but refl rejects genuinely distinct sides *)
-  infer "(refl : Eq Type Unit Nat)";
-  [%expect
-    {| type error: refl requires the sides to be equal, but Unit is not Nat |}];
+  infer {|(rfl : Eq Type ((λ A : Type ⇒ A) Unit) Unit)|};
+  [%expect {| type error: this term has type Type 1 but Type was expected |}];
+  (* but rfl rejects genuinely distinct sides *)
+  infer "(rfl : Eq Type Unit Nat)";
+  [%expect {| type error: this term has type Type 1 but Type was expected |}];
   (* the endpoints must share the type A *)
   infer "Eq Unit () Type";
   [%expect {| type error: this term has type Type 1 but Unit was expected |}]

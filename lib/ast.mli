@@ -24,10 +24,10 @@ and desc =
   | Fst of t  (** p.1 *)
   | Snd of t  (** p.2 *)
   | Sum of t * t  (** A + B *)
-  | Eq of t * t * t  (** Eq A x y *)
-  | EqInfix of t * t  (** [x = y]: equality with the type argument inferred *)
-  | Refl  (** refl *)
-  | J of t * t * t  (** J P d p *)
+  | EqInfix of t * t
+      (** [x = y]: the registered equality former, type argument inferred *)
+  | Refl
+      (** [rfl]: the equality's constructor [Eq.refl], parameters recovered *)
   | Numeral of int
       (** a decimal literal, e.g. [0], [5]; expands to succ-applications of the
           [nat] notation's zero/succ *)

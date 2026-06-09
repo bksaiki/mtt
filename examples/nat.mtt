@@ -13,7 +13,7 @@
 -- add 0 _ reduces, so the step is just the induction hypothesis)
 theorem mul_zero (n : Nat) : Eq Nat (mul n 0) 0 :=
   Nat.rec (λ m : Nat ⇒ Eq Nat (mul m 0) 0)
-    refl
+    rfl
     (λ k : Nat ⇒ λ ih : Eq Nat (mul k 0) 0 ⇒ ih)
     n
 

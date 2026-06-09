@@ -59,24 +59,39 @@ def absurd (A : Type) (h : Empty) : A := Empty.rec _ h
 -- applies to data as well as propositions
 def not (A : Type) := A → Empty
 
--- === Equality === (each lemma is one J; the motive is a hole `_`, inferred by
--- abstracting the proof's endpoint out of the goal)
+-- === Equality ===
 
--- congruence: equal arguments give equal images. The types and endpoints are
--- implicit ({…}) — the elaborator recovers them from the equality proof — so a
--- call is just `cong f p`.
-def cong {A B : Type} (f : A → B) {x y : A} (p : x = y) : f x = f y :=
-  J _ refl p
+-- propositional equality as an indexed inductive family: the first endpoint is
+-- a parameter, the second an index, and the sole constructor `refl` proves
+-- `Eq A x x` (matching Lean's `Eq.refl`). Its recursor `Eq.rec` is based path
+-- induction (the motive abstracts the second endpoint, the first fixed) — the
+-- equivalent of Lean's `Eq.rec`. The surface forms `x = y` and `rfl` are sugar
+-- for the former and constructor; the eliminator is written out as `Eq.rec`
+-- (there is no `J` keyword). It is the last builtin retired into the prelude —
+-- the kernel now knows only Sort/Π/λ/App/Var and the generic inductive machinery.
+@[notation eq]
+inductive Eq (A : Type) (x : A) : A -> Prop :=
+| refl : Eq A x x
 
-def sym {A : Type} {x y : A} (p : x = y) : y = x := J _ refl p
+-- equality is symmetric: if `a = b` then `b = a`.
+def symm {A : Type} {x y : A} (p : x = y) : y = x :=
+  Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ z = x) rfl _ p
 
-def trans {A : Type} {x y z : A} (p : x = y) (q : y = z) : x = z := J _ p q
+-- equality is transitive: if `a = b` and `b = c` then `a = c`.
+def trans {A : Type} {x y z : A} (p : x = y) (q : y = z) : x = z :=
+  Eq.rec _ _ (λ w : A ⇒ λ r : y = w ⇒ x = w) p _ q
 
 -- transport along an equality (large elimination: the motive lands in Type).
--- The motive P stays explicit (it is not determined by the proof); the type and
--- endpoints are implicit.
+-- Transparent (a `def`) so transport along `rfl` computes away (ι). The types
+-- and endpoints are implicit.
 def subst {A : Type} (P : A → Type) {x y : A} (p : x = y) (h : P x) : P y :=
-  J _ h p
+  Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ P z) h _ p
+
+-- congruence: equal arguments give equal images. The types and endpoints are
+-- implicit ({…}) — recovered from the equality proof — so a call is just
+-- `cong f p`.
+def cong {A B : Type} (f : A → B) {x y : A} (p : x = y) : f x = f y :=
+  Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ f x = f z) rfl _ p
 
 -- === Naturals === (arithmetic by recursion on the first argument)
 
@@ -99,26 +114,26 @@ def pred (n : Nat) : Nat :=
   Nat.rec _ 0 (λ k : Nat ⇒ λ ih : Nat ⇒ k) n
 
 -- foundational lemmas. add recurses on its first argument, so add 0 n reduces
--- to n (zero_add is refl) but add n 0 is stuck on n and needs induction.
-theorem zero_add (n : Nat) : add 0 n = n := refl
+-- to n (zero_add is rfl) but add n 0 is stuck on n and needs induction.
+theorem zero_add (n : Nat) : add 0 n = n := rfl
 
 theorem add_zero (n : Nat) : add n 0 = n :=
   Nat.rec _
-    refl
+    rfl
     (λ k : Nat ⇒ λ ih : add k 0 = k ⇒
       cong (λ m : Nat ⇒ Nat.succ m) ih)
     n
 
 theorem add_succ (n m : Nat) : add n (Nat.succ m) = Nat.succ (add n m) :=
   Nat.rec _
-    refl
+    rfl
     (λ k : Nat ⇒ λ ih : add k (Nat.succ m) = Nat.succ (add k m) ⇒
       cong (λ z : Nat ⇒ Nat.succ z) ih)
     n
 
 theorem add_comm (m n : Nat) : add m n = add n m :=
   Nat.rec _
-    (sym (add_zero n))
+    (symm (add_zero n))
     (λ k : Nat ⇒ λ ih : add k n = add n k ⇒
-      trans (cong (λ z : Nat ⇒ Nat.succ z) ih) (sym (add_succ n k)))
+      trans (cong (λ z : Nat ⇒ Nat.succ z) ih) (symm (add_succ n k)))
     m

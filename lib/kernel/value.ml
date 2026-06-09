@@ -2,8 +2,6 @@ type t =
   | Sort of int
   | Pi of Type.icit * string * t * closure
   | Lam of Type.icit * string * t * closure
-  | Eq of t * t * t
-  | Refl
   (* an inductive type former applied to its parameters (a type once the
      parameters are complete; a type-returning function while partial) *)
   | VInd of string * t list
@@ -20,7 +18,6 @@ and neutral =
   | Meta of int (* a metavariable head, by id; flexible until solved *)
   | App of neutral * t
   | Proj of int * neutral (* a stuck record field projection *)
-  | J of t * t * neutral (* a stuck J: motive, diagonal, stuck proof *)
   | Rec of Type.rec_head * t list * neutral
 (* a stuck inductive recursion: the recursor skeleton, the arguments before the
    major ([params @ motive :: minors]), and the stuck major *)
@@ -46,9 +43,6 @@ let rec eval env t =
   | Type.Lam (i, x, a, b) -> Lam (i, x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
   | Type.Proj (i, t) -> vproj i (eval env t)
-  | Type.Eq (a, x, y) -> Eq (eval env a, eval env x, eval env y)
-  | Type.Refl -> Refl
-  | Type.J (p, d, pr) -> vj (eval env p) (eval env d) (eval env pr)
   (* inductive heads start empty and accumulate their arguments via [apply] *)
   | Type.Ind name -> VInd (name, [])
   | Type.Ctor h -> VCtor (h, [])
@@ -67,9 +61,11 @@ and apply f a =
   | VCtor (h, args) -> VCtor (h, args @ [ a ])
   | VRec (h, args) ->
       let args = args @ [ a ] in
-      (* params, then the motive, one minor premise per constructor, the
-         major *)
-      let needed = h.Type.nparams + 1 + List.length h.Type.recs + 1 in
+      (* params, the motive, one minor premise per constructor, the index
+         arguments, then the major *)
+      let needed =
+        h.Type.nparams + 1 + List.length h.Type.recs + h.Type.nindices + 1
+      in
       if List.length args < needed then
         VRec (h, args)
       else
@@ -95,6 +91,10 @@ and vrec h args =
     | [] -> assert false
   in
   let minors, rest = split_at (List.length h.Type.recs) rest in
+  (* the index arguments sit between the minors and the major; ι ignores them
+     (they are determined by the constructor), but they must be split off, and a
+     stuck recursion keeps them in its frame *)
+  let indices, rest = split_at h.Type.nindices rest in
   let major =
     match rest with
     | [ m ] -> m
@@ -106,24 +106,28 @@ and vrec h args =
       let recs = List.nth h.Type.recs ch.Type.cindex in
       (* drop the leading parameters: the minor premise abstracts only fields *)
       let _, fields = split_at h.Type.nparams cargs in
-      let rec go acc fields recs =
+      (* [seen] accumulates the field values already consumed (newest first); a
+         recursive field's recorded index expressions are evaluated against
+         [seen, params] to form the induction hypothesis at the right indices *)
+      let rec go acc seen fields recs =
         match (fields, recs) with
         | [], [] -> acc
-        | f :: fs, r :: rs ->
+        | f :: fs, fr :: rs ->
             let acc = apply acc f in
             let acc =
-              if r then
-                (* the induction hypothesis: the recursor on the recursive
-                   field *)
-                apply acc (vrec h (params @ (motive :: minors) @ [ f ]))
-              else
-                acc
+              match fr with
+              | Type.Nonrec -> acc
+              | Type.Recursive idx_exprs ->
+                  let env = seen @ List.rev params in
+                  let idx_vals = List.map (eval env) idx_exprs in
+                  apply acc
+                    (vrec h (params @ (motive :: minors) @ idx_vals @ [ f ]))
             in
-            go acc fs rs
+            go acc (f :: seen) fs rs
         | _ -> assert false
       in
-      go minor fields recs
-  | Neutral n -> Neutral (Rec (h, params @ (motive :: minors), n))
+      go minor [] fields recs
+  | Neutral n -> Neutral (Rec (h, params @ (motive :: minors) @ indices, n))
   | _ -> assert false
 
 (* the [i]-th field projection of a record: on a constructor, the matching
@@ -134,19 +138,9 @@ and vproj i = function
   | Neutral n -> Neutral (Proj (i, n))
   | _ -> assert false
 
-(* ι-reduction: J on refl picks the diagonal case; a stuck proof freezes the
-   whole elimination as a neutral frame *)
-and vj p d pr =
-  match pr with
-  | Refl -> d
-  | Neutral n -> Neutral (J (p, d, n))
-  | _ -> assert false
-
 let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
-  | Eq (a, x, y) -> Type.Eq (quote l a, quote l x, quote l y)
-  | Refl -> Type.Refl
   | Pi (i, x, a, c) -> Type.Pi (i, x, quote l a, quote_closure l c)
   | Lam (i, x, a, c) -> Type.Lam (i, x, quote l a, quote_closure l c)
   | VInd (name, args) -> quote_spine l (Type.Ind name) args
@@ -169,7 +163,6 @@ and quote_neutral l = function
   | Meta i -> Type.Meta i
   | App (n, a) -> Type.App (quote_neutral l n, quote l a)
   | Proj (i, n) -> Type.Proj (i, quote_neutral l n)
-  | J (p, d, n) -> Type.J (quote l p, quote l d, quote_neutral l n)
   | Rec (h, pre, n) ->
       (* pre = params @ motive :: minors; the stuck major closes the spine *)
       Type.App (quote_spine l (Type.Rec h) pre, quote_neutral l n)

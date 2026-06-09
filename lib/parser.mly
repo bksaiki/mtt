@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP TIMES PLUS EQ EQOP REFL J COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE EOF
+%token FUN PI SIGMA TYPE PROP TIMES PLUS EQOP REFL COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -142,9 +142,6 @@ prod_term:
 (* application is left-associative *)
 app_term:
   | f = app_term; a = atom { Ast.mk $loc (Ast.App (f, a)) }
-  (* equality former (explicit type) and its eliminator J *)
-  | EQ; a = atom; x = atom; y = atom { Ast.mk $loc (Ast.Eq (a, x, y)) }
-  | J; p = atom; d = atom; pr = atom { Ast.mk $loc (Ast.J (p, d, pr)) }
   | t = atom { t }
 
 atom:

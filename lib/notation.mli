@@ -17,6 +17,10 @@ type t =
         (** the binary sum's type former, by name: an applied former renders as
             [A + B]. The injections and eliminator are ordinary qualified names
             ([Sum.inl], [Sum.rec]), so they need no sugar. *)
+  ; eq : string option
+        (** the equality inductive, by name: an applied former [Eq A x y]
+            renders as [x = y] and its constructor [Eq.refl A x] as [rfl]. The
+            recursor ([Eq.rec], i.e. [J]) is an ordinary qualified name. *)
   }
 
 (** the empty registry: no role bound, so nothing is sugared *)

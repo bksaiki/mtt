@@ -29,9 +29,8 @@ rule token = parse
   | "Type" [' ' '\t']+ (digits as n) { TYPELEVEL (int_of_string n) }
   | "Type" { TYPE }
   | "Prop" { PROP }
-  | "Eq" { EQ }
-  | "refl" { REFL }
-  | "J" { J }
+  (* the reflexivity term [rfl]; sugar for the equality's constructor Eq.refl *)
+  | "rfl" { REFL }
   | "prelude" { PRELUDE }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }

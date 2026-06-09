@@ -9,16 +9,6 @@ type ctor_head =
   ; nparams : int (* leading parameters, so a projection can skip them *)
   }
 
-(* The skeleton of a recursor, enough to drive ι. [recs] has one entry per
-   constructor (in order); each entry flags, for that constructor's *fields*
-   (its non-parameter arguments), which are recursive (of the inductive's own
-   type). Parameters are shared and never recursive, so they are excluded. *)
-type rec_head =
-  { rind : string (* the inductive being eliminated; prints as "rind.rec" *)
-  ; nparams : int (* leading parameter arguments, shared and fixed *)
-  ; recs : bool list list
-  }
-
 (* a binder's visibility: an explicit [(x : A)] argument is written at every
    application; an implicit [{x : A}] one is inserted by the elaborator. The
    kernel carries this on Π/λ but ignores it entirely in conversion and typing
@@ -37,12 +27,32 @@ type t =
   | Proj of int * t (* x.(i+1): the i-th field projection of a record *)
   | Meta of
       int (* a metavariable, by id; elaboration-only, never in final core *)
-  | Eq of t * t * t (* Eq A x y: propositional equality of x, y : A *)
-  | Refl (* the reflexivity proof; check-only *)
-  | J of t * t * t (* J P d p: eliminates p : Eq A x y at motive P *)
-  | Ind of string (* an inductive type former, applied to params via App *)
+  | Ind of
+      string (* an inductive type former, applied to params/indices via App *)
   | Ctor of ctor_head (* a constructor, applied to args via App *)
   | Rec of rec_head (* an inductive's recursor, applied to args via App *)
+
+(* The skeleton of a recursor, enough to drive ι without the signature. [recs]
+   has one entry per constructor (in order), each listing that constructor's
+   *fields* (its non-parameter arguments) and which are recursive. Parameters
+   are shared and never recursive, so they are excluded. For an indexed family
+   the recursor's argument spine is [params @ motive :: minors @ indices @
+   [major]]: [nindices] index arguments sit just before the major, and a
+   recursive field carries the index instances it sits at (so ι can form the
+   induction hypothesis at the right indices — see [vrec]). *)
+and rec_head =
+  { rind : string (* the inductive being eliminated; prints as "rind.rec" *)
+  ; nparams : int (* leading parameter arguments, shared and fixed *)
+  ; nindices : int (* index arguments, between the minors and the major *)
+  ; recs : field_rec list list
+  }
+
+(* whether a constructor field is recursive, and if so the index instances of
+   its inductive type [Ind params indices] — terms in the context [params,
+   earlier fields], evaluated by ι against the constructor's actual arguments *)
+and field_rec =
+  | Nonrec
+  | Recursive of t list
 
 let rec occurs k = function
   | Var i -> i = k
@@ -55,9 +65,6 @@ let rec occurs k = function
   (* a metavariable carries no de Bruijn index of its own; its dependencies ride
      the enclosing [App] spine *)
   | Meta _ -> false
-  | Eq (a, x, y) -> occurs k a || occurs k x || occurs k y
-  | Refl -> false
-  | J (p, d, pr) -> occurs k p || occurs k d || occurs k pr
   (* inductive heads are closed: they carry no de Bruijn indices, only the
      skeleton; any arguments ride along as App nodes *)
   | Ind _
@@ -71,7 +78,6 @@ let rec has_meta = function
   | Meta _ -> true
   | Var _
   | Sort _
-  | Refl
   | Ind _
   | Ctor _
   | Rec _ ->
@@ -81,9 +87,6 @@ let rec has_meta = function
   | Lam (_, _, a, b) ->
       has_meta a || has_meta b
   | App (a, b) -> has_meta a || has_meta b
-  | Eq (a, b, c)
-  | J (a, b, c) ->
-      has_meta a || has_meta b || has_meta c
 
 (* makes the hint [x] distinct from every name in scope *)
 let freshen names x =
@@ -180,15 +183,6 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
             Format.fprintf fmt "@[%a@ %a@]" (go 10 names) f (go 11 names) a)
     | Proj (i, t) -> Format.fprintf fmt "%a.%d" (go 11 names) t (i + 1)
     | Meta n -> Format.fprintf fmt "?%d" n
-    | Eq (a, x, y) ->
-        paren_if fmt (prec > 10) (fun fmt ->
-            Format.fprintf fmt "@[Eq@ %a@ %a@ %a@]" (go 11 names) a
-              (go 11 names) x (go 11 names) y)
-    | Refl -> Format.pp_print_string fmt "refl"
-    | J (p, d, pr) ->
-        paren_if fmt (prec > 10) (fun fmt ->
-            Format.fprintf fmt "@[J@ %a@ %a@ %a@]" (go 11 names) p (go 11 names)
-              d (go 11 names) pr)
     (* inductive heads are atoms; their arguments print via the enclosing App
        nodes (so [Nat.rec P z s n] renders through application). Constructors
        and the recursor print qualified by their type; surface sugar like [()]
