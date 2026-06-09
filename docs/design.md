@@ -21,13 +21,13 @@ string ─parse─▶ Ast.t ─elab─▶ Type.t ─eval─▶ Value.t ─quote�
        parser.mly    (re-checked by check.ml)
 ```
 
-Elaboration (`elab.ml`) is a type-directed surface → core pass that fills in the
-arguments the kernel demands explicitly (e.g. a constructor's parameters), then
-`check.ml` **re-checks** the core it produces — so the elaborator is untrusted,
-in the Lean/Rocq tradition. Type checking sits on `Type.t` and decides equality
-on `Value.t`. A residual type-free `Ast.to_term` (scope resolution only) still
-backs inductive-declaration checking and the forms the elaborator does not yet
-handle specially.
+Elaboration (`elab.ml`) is the **sole** surface → core pass: a type-directed
+translation that fills in the arguments the kernel demands explicitly (e.g. a
+constructor's parameters), then `check.ml` **re-checks** the core it produces —
+so the elaborator is untrusted, in the Lean/Rocq tradition. Type checking sits on
+`Type.t` and decides equality on `Value.t`. Even inductive declarations go
+through `Elab` (in a bare context holding just the inductive signature); there is
+no separate scope-resolution pass.
 
 The trusted core — `type`/`value`/`check`/`inductive`/`signature`/`error` — is
 an isolated library under `lib/kernel/` (`mtt_kernel`, left unwrapped so its
@@ -173,10 +173,10 @@ name, beside the de Bruijn context.
   Lean/Coq do records too); `ctor_head` carries `nparams` so `vproj` skips
   parameters, keeping the NbE core signature-free. The stuck projection's field
   type is recovered by the checker from the scrutinee's type, so the node needs
-  only the index. The surface is positional (`x.1`); named projection
-  (`x.field`) awaits the elaborator. This is what let `Unit` and the dependent
-  pair `Σ` become ordinary inductives (`Σ`'s `.1`/`.2` are now just `Proj`, and
-  the old primitive `Fst`/`Snd` are gone).
+  only the index. The surface offers both positional (`x.1`) and named
+  (`x.field`, resolved to the same `Proj` by the elaborator) projection. This is
+  what let `Unit` and the dependent pair `Σ` become ordinary inductives (`Σ`'s
+  `.1`/`.2` are now just `Proj`, and the old primitive `Fst`/`Snd` are gone).
 - **Replacing the builtins.** Retired so far: `Empty` (`inductive Empty : Prop`,
   with `absurd` a prelude `def` over `Empty.rec`), `Unit` (a prelude record,
   `()` sugar for `Unit.unit`, η from the record rule), `Nat` (a prelude
@@ -192,8 +192,9 @@ name, beside the de Bruijn context.
   are gone — deleting the `Sum`/`Inl`/`Inr`/`Case` nodes, `vcase`, and their
   machinery), and — the last one — `Eq` (a prelude **indexed** inductive
   `Eq (A : Type) (x : A) : A → Prop := | refl : Eq A x x` with `@[notation eq]`;
-  `x = y` is the applied former with the type inferred, `rfl` its constructor
-  with parameters recovered, and the eliminator is the plain recursor `Eq.rec`
+  `x = y` is the applied former with the type inferred, `rfl` an ordinary prelude
+  def (`Eq.refl A x`, its implicits inserted on use), and the eliminator is the
+  plain recursor `Eq.rec`
   (based path induction — Lean's `Eq.rec`); deleting the `Eq`/`Refl`/`J` nodes,
   `vj`, and their cases, and there is no `J` keyword). `Σ`/`Sum`/`Eq` are **fixed
   at `Type`**: a Σ/sum over the universe, a proof-irrelevant pair/disjunction of
@@ -214,8 +215,8 @@ See `examples/inductive.mtt` and `examples/vec.mtt`; deferred work
 
 ## Elaboration
 
-The elaborator (`elab.ml`) is the frontend's type-directed surface → core pass.
-It is **untrusted**: it fills in the arguments the kernel demands explicitly and
+The elaborator (`elab.ml`) is the frontend's **sole** type-directed surface →
+core pass. It is **untrusted**: it fills in the arguments the kernel demands explicitly and
 produces fully-explicit core, which the trusted `Check` then **re-verifies** (the
 Lean/Rocq bargain — a bug here is a usability bug, not a soundness one). It
 **reuses** the kernel's NbE (`Value.eval`/`quote`, `Check.infer`/`conv`) rather
@@ -223,13 +224,16 @@ than reimplementing it, so there is exactly one reduction engine. It is
 bidirectional — `go ctx mode s` with `mode = Infer | Check ty` — and the expected
 type drives every inference the surface leaves implicit:
 
-- **Constructor-argument inference (checking mode, no metavariables).** A
-  constructor application checked against its own inductive omits the leading
-  parameters (`Box.wrap a` for `Box.wrap A a`), recovered from the expected type
-  by decomposition; likewise `(a, b)` against an expected `Σ`. This is the key
-  economy: a checking position supplies the missing arguments directly, so
-  retiring `Σ`/`Sum` needed no unifier — only inference position and implicit
-  function arguments do.
+- **Constructor-argument inference.** A constructor application checked against
+  its own inductive omits the leading parameters (`Box.wrap a` for `Box.wrap A a`),
+  recovered from the expected type by decomposition; likewise `(a, b)` against an
+  expected `Σ`. This is the key economy: a checking position supplies the missing
+  arguments directly, so retiring `Σ`/`Sum` needed no unifier. In **inference
+  position** (no expected type) the same omission is allowed by inserting a
+  metavariable per parameter and solving it from the field arguments — `Box.wrap a`
+  fixes the parameter from `a`; a genuinely-undetermined one (`Sum.inl a`, which
+  cannot fix `B`) surfaces as an unsolved-hole error. The `@f` escape (below)
+  forces the parameters explicit instead.
 - **Metavariables, unification, holes.** A surface hole `_` becomes a fresh
   metavariable. The **kernel stays pristine**: it carries an *inert* `Meta of int`
   node (in `Type.t` and the `Value.t` neutral) that `eval` leaves stuck and
@@ -257,14 +261,27 @@ type drives every inference the surface leaves implicit:
   the elaborator inserts a fresh metavariable for each leading implicit binder
   *while an explicit argument still follows* — gating on a remaining argument so a
   partial application keeps its trailing implicit binders instead of spawning
-  unsolvable metas. This is what lets `cong`/`sym`/`trans`/`subst` take their
-  type/endpoint arguments implicitly (`cong f p`, `sym p`).
-- **Equality sugar.** `Eq` is a prelude inductive (see Inductive types), so its
-  surface forms desugar to it: `x = y` is the applied former with `A` synthesized
-  from the left side (a dedicated `eq_term` parser level, looser than `+`/`×` and
-  tighter than `→`; `:=` is the sole definition separator, freeing `=`); `rfl`
-  is its constructor (`Eq.refl`) with the parameters recovered from the expected
-  type. The eliminator is the plain recursor `Eq.rec` — there is no `J` keyword.
+  unsolvable metas. This is what lets `cong`/`symm`/`trans`/`subst` take their
+  type/endpoint arguments implicitly (`cong f p`, `symm p`).
+  Two further controls: **expected-type insertion** (`coerce`) — when a term
+  whose type begins with implicit binders is *checked* against a goal that is not
+  itself an implicit `Pi`, insert metavariables for those leading implicits and
+  unify against the goal (gated on inserting ≥1, so meta-free terms are left for
+  the kernel's conversion); this lets a fully-implicit term be used bare, which
+  is exactly what makes `rfl : {A}{x} → x = x` check against `a = a` and let it
+  become a prelude def. And the **`@f` escape** — `@` before a head makes every
+  binder, implicit included, consume a written argument, so `@symm A a b p` passes
+  what `symm p` would insert.
+- **Equality sugar.** `Eq` is a prelude inductive (see Inductive types). Only the
+  infix `x = y` is sugar — the applied former with `A` synthesized from the left
+  side (a dedicated `eq_term` parser level, looser than `+`/`×` and tighter than
+  `→`; `:=` is the sole definition separator, freeing `=`). `rfl` is **not** a
+  keyword: it is an ordinary prelude def `Eq.refl A x`, usable bare against any
+  `a = a` goal by expected-type insertion. The eliminator is the plain recursor
+  `Eq.rec` — there is no `J` keyword.
+- **Named projections.** `e.field` on a record value resolves to the positional
+  `Proj` by looking the field name up in the (single) constructor's fields, so
+  `p.fst`/`p.snd` work alongside `p.1`/`p.2`.
 - **Recursors.** A recursor's minors and major are elaborated in *checking*
   position (against the derived minor-premise and `Ind`-applied types), so
   check-only forms — a `rfl` base case, a constructor major — work. Two
@@ -282,11 +299,12 @@ type drives every inference the surface leaves implicit:
     endpoints/length from the scrutinee. (An explicit argument is elaborated as
     written and re-checked by the kernel.)
 
-A residual type-free `Ast.to_term` (scope resolution + notation, no types) still
-exists: it backs the inductive-declaration scope-check and the leaf surface forms
-the elaborator has no inference to do for (`()`, numerals). Remaining inference
-work that would retire it (inference-position intros, named projections
-`x.field`, an `@f` escape) is tracked in `todo.md`.
+`Elab` handles **every** surface form, down to the leaves (`()` → the registered
+unit constructor, numerals → succ-chains), so there is no second pass: inductive
+declarations elaborate their parameter/index/constructor types through `Elab` too
+(`Stmt.elaborate_inductive`, in a bare context carrying just the inductive
+signature, so the spec's de Bruijn indices stay relative to the parameter
+telescope). The old type-free `Ast.to_term` is gone.
 
 ## Notation
 
@@ -299,8 +317,8 @@ and the printer folds them back), `sigma` (a two-parameter record, so
 `Σ (x : A) ⇒ B` / `A × B` abbreviate the applied former and `(a, b)` its
 constructor), `sum` (a two-parameter inductive, so `A + B` abbreviates the
 applied former), and `eq` (a two-parameter, one-index inductive, so `x = y`
-abbreviates the applied former and `rfl` its constructor; its recursor is
-`Eq.rec`).
+abbreviates the applied former; its constructor `Eq.refl` is folded back to `rfl`
+on printing, and its recursor is `Eq.rec`).
 Only *symbolic* sugar lives here: a constructor that wants a short name keeps its
 qualified spelling instead (`Sum.inl`, `Sum.rec`, like `Nat.succ`), so `sum`
 registers only the `+` former. Registration is **one-shot** and
@@ -312,11 +330,10 @@ notation type at all. The registry lives entirely in the frontend (the
 `Notation` module): a `Notation.t` mapping each role to the constructors that
 fill it, threaded alongside the kernel context in a `Stmt.session`. It drives
 both directions:
-- **forward** — the parse pass (`Ast.to_term`, and `Elab` for the type-directed
-  cases) reads it to resolve `()` → the unit constructor, `5` → a succ-chain of
-  the registered `Nat`, `Σ`/`×`/`(a,b)` → the registered `Sigma` former and
-  constructor (the pair's parameters recovered by the elaborator), and `A + B` →
-  the registered `Sum` former;
+- **forward** — the elaborator (`Elab`) reads it to resolve `()` → the unit
+  constructor, `5` → a succ-chain of the registered `Nat`, `Σ`/`×`/`(a,b)` → the
+  registered `Sigma` former and constructor (the pair's parameters recovered by
+  the elaborator), and `A + B` → the registered `Sum` former;
 - **reverse** — `Notation.sugar` is the hook the kernel printer (`Type.pp_in`)
   consults to fold a subterm into surface notation. Atomic sugar (`()`, a
   decimal) needs only the subterm, but infix/mixfix forms (`A × B`, `A + B`, a
