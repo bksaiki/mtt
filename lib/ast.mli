@@ -28,8 +28,6 @@ and desc =
   | Sum of t * t  (** A + B *)
   | EqInfix of t * t
       (** [x = y]: the registered equality former, type argument inferred *)
-  | Refl
-      (** [rfl]: the equality's constructor [Eq.refl], parameters recovered *)
   | Numeral of int
       (** a decimal literal, e.g. [0], [5]; expands to succ-applications of the
           [nat] notation's zero/succ *)

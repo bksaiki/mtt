@@ -29,11 +29,12 @@
     codomains. {!infer} still returns principal types: Sort i : Sort (i+1)
     exactly.
 
-    The typing rules ({!infer} synthesizes; (Refl) is the one checking rule
-    shown). The dependent pair (Σ/(a,b)/.1/.2) and the binary sum (+/inl/inr/
-    case) are no longer primitive — they are the prelude inductives [Sigma] and
-    [Sum], reached through the generic inductive rules (former/constructor/
-    recursor) and, for records, the projection (Proj) shown here:
+    The typing rules ({!infer} synthesizes; {!check} adds subsumption up to
+    cumulativity). Every datatype is now a prelude inductive — the dependent
+    pair (Σ/(a,b)/.1/.2), the binary sum, and propositional equality
+    (Eq/refl/Eq.rec) included — reached through the generic inductive rules
+    (former/constructor/ recursor) and, for records, the projection (Proj) shown
+    here:
 
     {v
       (x : A) ∈ Γ
@@ -46,23 +47,6 @@
       Γ ⊢ e : T p̄    T a single-constructor inductive with fields F₀ … Fₙ
       ──────────────────────────────────────────────────────────────────── (Proj)
         Γ ⊢ e.(i+1) : Fᵢ[p̄, e.1 … e.i]   (earlier projections substituted)
-
-      Γ ⊢ A : Sort i    Γ ⊢ x : A    Γ ⊢ y : A
-      ─────────────────────────────────────────── (Eq)
-                  Γ ⊢ Eq A x y : Prop
-
-              x ≡ y
-      ────────────────────── (Refl, checking only)
-        Γ ⊢ refl ⇐ Eq A x y
-
-      Γ ⊢ p : Eq A x y    Γ ⊢ P : Π (y : A) ⇒ Eq A x y → Sort j
-      Γ ⊢ d ⇐ P x refl
-      ─────────────────────────────────────────────────────────── (J)
-                       Γ ⊢ J P d p : P y p
-
-        no large-elimination restriction: Eq is a single-constructor
-        subsingleton (like Empty), so eliminating into any sort is sound —
-        this is what lets subst transport between types
 
       Γ ⊢ A : Sort i    Γ, x : A ⊢ B : Sort j
       ──────────────────────────────────────── (Pi)

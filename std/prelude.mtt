@@ -65,13 +65,18 @@ def not (A : Type) := A → Empty
 -- a parameter, the second an index, and the sole constructor `refl` proves
 -- `Eq A x x` (matching Lean's `Eq.refl`). Its recursor `Eq.rec` is based path
 -- induction (the motive abstracts the second endpoint, the first fixed) — the
--- equivalent of Lean's `Eq.rec`. The surface forms `x = y` and `rfl` are sugar
--- for the former and constructor; the eliminator is written out as `Eq.rec`
--- (there is no `J` keyword). It is the last builtin retired into the prelude —
--- the kernel now knows only Sort/Π/λ/App/Var and the generic inductive machinery.
+-- equivalent of Lean's `Eq.rec`. The surface form `x = y` is sugar for the
+-- former; the eliminator is written out as `Eq.rec` (there is no `J` keyword).
+-- It is the last builtin retired into the prelude — the kernel now knows only
+-- Sort/Π/λ/App/Var and the generic inductive machinery.
 @[notation eq]
 inductive Eq (A : Type) (x : A) : A -> Prop :=
 | refl : Eq A x x
+
+-- reflexivity: the equality's constructor with both endpoints the same, type and
+-- point implicit. `rfl` is an ordinary def (not a keyword) — checking it against
+-- a goal `a = a` inserts the implicits and recovers `Eq.refl`'s parameters.
+def rfl {A : Type} {x : A} : x = x := Eq.refl A x
 
 -- equality is symmetric: if `a = b` then `b = a`.
 def symm {A : Type} {x y : A} (p : x = y) : y = x :=

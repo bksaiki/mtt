@@ -199,9 +199,9 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         Error.type_error
           [ Error.txt "Σ/× requires the sigma notation to be registered" ]
   in
-  (* the inductive registered for the [eq] role, that [x = y] / [rfl] desugar to
-     (its former and the [Eq.refl] constructor; the recursor [Eq.rec] is an
-     ordinary qualified name, used directly) *)
+  (* the inductive registered for the [eq] role, that the infix [x = y] desugars
+     to (its applied former; [rfl] is now an ordinary prelude def over
+     [Eq.refl], and the recursor [Eq.rec] an ordinary qualified name) *)
   let eq_spec () =
     match notation.Notation.eq with
     | Some name -> (
@@ -212,7 +212,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
               [ Error.txt "the eq notation names an unknown inductive" ])
     | None ->
         Error.type_error
-          [ Error.txt "= and rfl require the eq notation to be registered" ]
+          [ Error.txt "= requires the eq notation to be registered" ]
   in
   (* expected-type-driven implicit insertion. [core] has (use-site) type [ty];
      in checking position, if [ty] begins with implicit binders [{a : A} -> …]
@@ -358,29 +358,6 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           (fun f a -> Type.App (f, a))
           (Type.Ind spec.Inductive.name)
           [ Value.quote ctx.Check.lvl tx; x'; go ctx (Check tx) y ]
-    (* [rfl] is the equality's nullary constructor (Eq.refl) with its parameters
-       [(A, x)] recovered from the expected equality type; the kernel re-check
-       enforces that the equation's two endpoints actually coincide *)
-    | Ast.Refl -> (
-        let spec = eq_spec () in
-        match mode with
-        | Check e -> (
-            match Meta.force !ms e with
-            | Value.VInd (name, p0 :: p1 :: _)
-              when String.equal name spec.Inductive.name ->
-                List.fold_left
-                  (fun f a -> Type.App (f, a))
-                  (Type.Ctor (Inductive.ctor_head spec 0))
-                  [ Value.quote ctx.Check.lvl p0; Value.quote ctx.Check.lvl p1 ]
-            | _ ->
-                Error.type_error
-                  [ Error.txt "rfl: an equality type was expected here" ])
-        | Infer ->
-            Error.type_error
-              [ Error.txt
-                  "cannot infer the type of rfl; ascribe it (e.g. (rfl : x = \
-                   x))"
-              ])
     (* a hole becomes a fresh metavariable; in checking position its type is the
        expected one, and unification (at the surrounding application) solves it.
        In inference position there is nothing to determine it. *)
