@@ -602,13 +602,38 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
               | _ -> None)
           | Infer -> None
         in
+        let cty = Value.eval [] (Inductive.ctor_type spec h.Type.cindex) in
         match recovered with
         | Some pvals -> checked_ctor ctx h pvals args
+        (* the parameters are omitted but no expected inductive type pins them
+           (inference position, or a non-matching goal): insert a fresh
+           metavariable per parameter and let unifying the field arguments solve
+           the ones they determine ([Box.wrap a] fixes [A] from [a]; a genuinely
+           undetermined parameter — [Sum.inl a] leaving [B] free — surfaces as
+           an unsolved-hole error). Gated off under [@f], which forces the
+           parameters explicit. *)
+        | None
+          when (not explicit)
+               && h.Type.nparams > 0
+               && List.length args = nfields ->
+            let rec params core ty k =
+              if k = 0 then
+                (core, ty)
+              else
+                match Meta.force !ms ty with
+                | Value.Pi (_, _, dom, c) ->
+                    let m = fresh_meta_core ctx dom in
+                    params
+                      (Type.App (core, m))
+                      (Value.apply_closure c (Value.eval ctx.Check.env m))
+                      (k - 1)
+                | _ -> (core, ty)
+            in
+            let head_core, field_ty = params (Type.Ctor h) cty h.Type.nparams in
+            elab_spine ctx head_core field_ty args
         (* otherwise the parameters are explicit (or we are inferring): walk the
            constructor's full type *)
-        | None ->
-            let cty = Value.eval [] (Inductive.ctor_type spec h.Type.cindex) in
-            elab_spine ctx (Type.Ctor h) cty args)
+        | None -> elab_spine ctx (Type.Ctor h) cty args)
     | Other ->
         let head_core = go ctx Infer head in
         elab_spine ~explicit ~mode ctx head_core (elab_infer ctx head_core) args
