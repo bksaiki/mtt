@@ -23,6 +23,7 @@ and desc =
   | Refl (* refl *)
   | J of t * t * t (* J P d p *)
   | Numeral of int (* a decimal literal, e.g. 0, 5; sugar for succ … zero *)
+  | Hole (* _, an elaboration hole (a fresh metavariable) *)
 
 let mk loc desc = { loc; desc }
 
@@ -156,5 +157,10 @@ let to_term sg ?(notation = Notation.empty) names s =
        forces the checking judgment t ⇐ A, and the redex evaporates under
        evaluation. No core constructor needed. *)
     | Ascribe (t, a) -> Type.App (Type.Lam ("x", go env a, Type.Var 0), go env t)
+    (* a hole needs a type to become a metavariable, so it is the elaborator's
+       job ({!Elab}); this type-free pass cannot produce one *)
+    | Hole ->
+        Error.type_error
+          [ Error.txt "a hole _ requires the elaborator (use it in a term)" ]
   in
   go names s

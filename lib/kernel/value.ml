@@ -41,7 +41,8 @@ exception Not_a_function
    so no metavariable survives to a final [Check]. The kernel only ever reads a
    solution — to [force] a solved meta during reduction. *)
 type meta_entry =
-  { mty : t (* the metavariable's (closed) type *)
+  { mty : t (* the metavariable's type, valid at its birth level *)
+  ; blvl : int (* the de Bruijn level in scope when it was created *)
   ; mutable soln : t option
   }
 
@@ -49,13 +50,15 @@ let metas : (int, meta_entry) Hashtbl.t = Hashtbl.create 64
 
 let meta_counter = ref 0
 
-let fresh_meta mty =
+let fresh_meta blvl mty =
   let i = !meta_counter in
   incr meta_counter;
-  Hashtbl.replace metas i { mty; soln = None };
+  Hashtbl.replace metas i { mty; blvl; soln = None };
   i
 
 let meta_type i = (Hashtbl.find metas i).mty
+
+let meta_blvl i = (Hashtbl.find metas i).blvl
 
 let meta_soln i = (Hashtbl.find metas i).soln
 

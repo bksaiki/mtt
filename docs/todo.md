@@ -76,11 +76,16 @@ The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
       application checked against its inductive omits the leading parameters
       (`Box.wrap a`, `(a, b)`, `Sum.inl a`), recovered from the expected type —
       the metavariable-free core of the elaborator (Phase 1)
+- [x] Holes / metavariables (the unification engine): a surface `_` becomes a
+      metavariable (kernel `Meta` node + metacontext in `value.ml`, meta-aware
+      `force` in NbE), solved by `Unify.unify` and zonked away before the kernel
+      re-checks (Phase 3). Non-contextual + scope-checked; only unapplied metas
+      solved so far. A follow-up moves the metacontext out of the kernel into a
+      functional `lib/meta.ml` (see `elaborator-plan.md`)
 - [ ] Implicit arguments: infer the type arguments the kernel demands
       explicitly — gives `x = y` infix over `Eq A x y`, motive inference for
       `J`/`T.rec`, and lets `refl` / inference-position intros omit their
-      type/endpoint arguments (the remaining, unification-based half)
-- [ ] Holes / metavariables (the unification engine the above is built on)
+      type/endpoint arguments (the remaining half, building on holes above)
 - [ ] `match` expressions — pure surface sugar that compiles to recursor
       (`T.rec`) applications; the kernel never sees it. Needs an equation
       compiler (nested/multiple/overlapping patterns → nested single-level

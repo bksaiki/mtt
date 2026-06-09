@@ -213,6 +213,30 @@ let%expect_test "Empty: irrelevance and stuck absurd" =
     ];
   [%expect {| fun (A : Prop) => A -> Empty : Prop -> Prop |}]
 
+(* a hole [_] elaborates to a metavariable that unification solves from the
+   surrounding term; an unsolvable one is rejected. *)
+let%expect_test "holes: solved by unification, rejected when unsolvable" =
+  session
+    [ (* the type argument is recovered from the value argument *)
+      "#check id _ 0"
+    ; "#eval id _ 0"
+    ; "#check_equal (id _ 0) 0"
+    ; (* solved from a local variable, under binders: the solution is read back
+         as a reuse-safe de Bruijn index, so the def is usable at other types *)
+      "def appId (A : Type) (x : A) : A := id _ x"
+    ; "#check appId"
+    ; "#check_equal (appId Nat 0) 0"
+    ; (* nothing determines the hole: rejected *)
+      "#check (_ : Nat)"
+    ];
+  [%expect
+    {|
+    0 : Nat
+    0
+    fun (A : Type) => fun (x : A) => x : (A : Type) -> A -> A
+    type error: could not infer a hole (_); add a type annotation
+    |}]
+
 (* Σ is the prelude record [Sigma]: pairs check against it (recovering the
    parameters), projections are the generic record projections, and η comes from
    the record rule. Fixed at Type, so the old "a pair of props is an irrelevant

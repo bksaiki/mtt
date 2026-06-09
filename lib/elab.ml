@@ -49,6 +49,15 @@ let classify_head sg (s : Ast.t) =
             | None -> Other))
   | _ -> Other
 
+(* a fresh metavariable of (use-site) type [ty], born at the current level. It
+   is non-contextual (no spine): a solution may mention variables already in
+   scope at its birth, which the unifier's scope check enforces. (A contextual
+   meta applied to the context would not work here — the context's [def]s are
+   bound to values, not variables, so they could not form a unification
+   pattern.) *)
+let fresh_meta_core (ctx : Check.ctx) (ty : Value.t) : Type.t =
+  Type.Meta (Value.fresh_meta ctx.Check.lvl ty)
+
 let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
   let sg = ctx0.Check.signature in
   let fresh (ctx : Check.ctx) = Value.Neutral (Value.Var ctx.Check.lvl) in
@@ -95,9 +104,11 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
            constructor there can drop its parameters *)
         let body_mode =
           match mode with
-          | Check (Value.Pi (_, _, c)) ->
-              Check (Value.apply_closure c (fresh ctx))
-          | _ -> Infer
+          | Check e -> (
+              match Value.force e with
+              | Value.Pi (_, _, c) -> Check (Value.apply_closure c (fresh ctx))
+              | _ -> Infer)
+          | Infer -> Infer
         in
         Type.Lam (x, a', go (Check.bind x va ctx) body_mode b)
     | Ast.App _ -> elab_app ctx mode s
@@ -105,6 +116,18 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
        pair underneath — [(a, b).1] — still reaches the elaborator *)
     | Ast.Fst t -> Type.Proj (0, go ctx Infer t)
     | Ast.Snd t -> Type.Proj (1, go ctx Infer t)
+    (* a hole becomes a fresh metavariable; in checking position its type is the
+       expected one, and unification (at the surrounding application) solves it.
+       In inference position there is nothing to determine it. *)
+    | Ast.Hole -> (
+        match mode with
+        | Check e -> fresh_meta_core ctx (Value.force e)
+        | Infer ->
+            Error.type_error
+              [ Error.txt
+                  "cannot infer the type of a hole _; use it where its type is \
+                   determined"
+              ])
     (* ascription is the typed identity: it forces a checking judgment for [t],
        and the redex evaporates under evaluation (as in {!Ast.to_term}) *)
     | Ast.Ascribe (t, a) ->
@@ -122,11 +145,19 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
               [ Error.txt "a pair requires the sigma notation to be registered"
               ]
         | Some mk -> (
-            match mode with
-            | Check (Value.VInd (name, [ pa; pb ]))
-              when String.equal name mk.Type.ind ->
-                checked_ctor ctx mk [ pa; pb ] [ a; b ]
-            | _ ->
+            let recovered =
+              match mode with
+              | Check e -> (
+                  match Value.force e with
+                  | Value.VInd (name, [ pa; pb ])
+                    when String.equal name mk.Type.ind ->
+                      Some [ pa; pb ]
+                  | _ -> None)
+              | Infer -> None
+            in
+            match recovered with
+            | Some pvals -> checked_ctor ctx mk pvals [ a; b ]
+            | None ->
                 let a' = go ctx Infer a and b' = go ctx Infer b in
                 let ta = Check.infer ctx a' and tb = Check.infer ctx b' in
                 let bfun =
@@ -157,15 +188,24 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           (Type.Rec rh) args
     | Ctor (spec, h) -> (
         let nfields = h.Type.carity - h.Type.nparams in
-        match mode with
         (* checked against its own inductive with the parameters omitted:
            recover them from the expected type and elaborate only the fields *)
-        | Check (Value.VInd (name, pvals))
-          when String.equal name h.Type.ind && List.length args = nfields ->
-            checked_ctor ctx h pvals args
+        let recovered =
+          match mode with
+          | Check e -> (
+              match Value.force e with
+              | Value.VInd (name, pvals)
+                when String.equal name h.Type.ind && List.length args = nfields
+                ->
+                  Some pvals
+              | _ -> None)
+          | Infer -> None
+        in
+        match recovered with
+        | Some pvals -> checked_ctor ctx h pvals args
         (* otherwise the parameters are explicit (or we are inferring): walk the
            constructor's full type *)
-        | _ ->
+        | None ->
             let cty = Value.eval [] (Inductive.ctor_type spec h.Type.cindex) in
             elab_spine ctx (Type.Ctor h) cty args)
     | Other ->
@@ -178,9 +218,15 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
     let rec walk core ty = function
       | [] -> core
       | a :: rest -> (
-          match ty with
+          match Value.force ty with
           | Value.Pi (_, dom, c) ->
               let a' = go ctx (Check dom) a in
+              (* only when the domain still has an unsolved metavariable is
+                 there anything to solve; otherwise skip — inferring [a']'s type
+                 could fail on a check-only form like [refl], and is needless
+                 work *)
+              if Type.has_meta (Value.quote ctx.Check.lvl dom) then
+                Unify.unify ctx.Check.lvl dom (Check.infer ctx a');
               walk
                 (Type.App (core, a'))
                 (Value.apply_closure c (Value.eval ctx.Check.env a'))
@@ -221,3 +267,28 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
 let infer notation ctx s = elaborate notation ctx Infer s
 
 let check notation ctx s expected = elaborate notation ctx (Check expected) s
+
+(* replace every solved metavariable by its solution, read back as core at the
+   use-site level [lvl] (so de Bruijn indices are reuse-safe — a metacontext
+   solution is a value with absolute levels and cannot be stored directly). An
+   unsolved meta is left in place; {!Type.has_meta} on the result then detects
+   it. *)
+let rec zonk lvl (t : Type.t) : Type.t =
+  match t with
+  | Type.Meta i -> (
+      match Value.meta_soln i with
+      | Some v -> Value.quote lvl v
+      | None -> t)
+  | Type.Var _
+  | Type.Sort _
+  | Type.Refl
+  | Type.Ind _
+  | Type.Ctor _
+  | Type.Rec _ ->
+      t
+  | Type.Proj (i, a) -> Type.Proj (i, zonk lvl a)
+  | Type.Pi (x, a, b) -> Type.Pi (x, zonk lvl a, zonk (lvl + 1) b)
+  | Type.Lam (x, a, b) -> Type.Lam (x, zonk lvl a, zonk (lvl + 1) b)
+  | Type.App (f, a) -> Type.App (zonk lvl f, zonk lvl a)
+  | Type.Eq (a, x, y) -> Type.Eq (zonk lvl a, zonk lvl x, zonk lvl y)
+  | Type.J (p, d, pr) -> Type.J (zonk lvl p, zonk lvl d, zonk lvl pr)

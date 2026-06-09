@@ -56,6 +56,26 @@ let rec occurs k = function
   | Rec _ ->
       false
 
+(* whether any metavariable occurs in [t]; the frontend uses it to reject a term
+   with an unsolved hole before the trusted check ever sees it *)
+let rec has_meta = function
+  | Meta _ -> true
+  | Var _
+  | Sort _
+  | Refl
+  | Ind _
+  | Ctor _
+  | Rec _ ->
+      false
+  | Proj (_, a) -> has_meta a
+  | Pi (_, a, b)
+  | Lam (_, a, b)
+  | App (a, b) ->
+      has_meta a || has_meta b
+  | Eq (a, b, c)
+  | J (a, b, c) ->
+      has_meta a || has_meta b || has_meta c
+
 (* makes the hint [x] distinct from every name in scope *)
 let freshen names x =
   let rec prime x =

@@ -29,6 +29,9 @@ and desc =
   | Numeral of int
       (** a decimal literal, e.g. [0], [5]; expands to succ-applications of the
           [nat] notation's zero/succ *)
+  | Hole
+      (** [_], an elaboration hole — a fresh metavariable for the elaborator to
+          solve *)
 
 (** [mk loc desc] is the node [desc] located at [loc] *)
 val mk : Loc.t -> desc -> t

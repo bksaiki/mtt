@@ -133,7 +133,9 @@ app_term:
   | t = atom { t }
 
 atom:
-  | x = ID { Ast.mk $loc (Ast.Var x) }
+  (* a bare [_] is an elaboration hole; any other identifier is a variable *)
+  | x = ID
+    { Ast.mk $loc (if String.equal x "_" then Ast.Hole else Ast.Var x) }
   (* surface universes name sorts: Prop = Sort 0, Type i = Sort (i+1) *)
   | i = TYPELEVEL { Ast.mk $loc (Ast.Sort (i + 1)) }
   | TYPE { Ast.mk $loc (Ast.Sort 1) }

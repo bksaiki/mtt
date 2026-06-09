@@ -55,6 +55,11 @@ type t =
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool
 
+(** [has_meta t] is true if any metavariable ({!Meta}) occurs in [t]; the
+    frontend uses it (on a quoted value, where solved metas are already
+    unfolded) to detect an unsolved hole before the trusted check. *)
+val has_meta : t -> bool
+
 (** [freshen names x] is [x] primed with enough trailing ['] to make it distinct
     from every name in [names] (and [x]); ["" ] becomes ["x"] first. The printer
     uses this so binder hints never shadow an enclosing binder; a frontend
