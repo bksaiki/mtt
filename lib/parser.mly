@@ -169,7 +169,8 @@ base_atom:
   | i = TYPELEVEL { Ast.mk $loc (Ast.Sort (i + 1)) }
   | TYPE { Ast.mk $loc (Ast.Sort 1) }
   | PROP { Ast.mk $loc (Ast.Sort 0) }
-  (* a decimal literal; expands to the registered nat's succ/zero in to_term *)
+  (* a decimal literal; the elaborator expands it to the registered nat's
+     succ/zero chain *)
   | n = INT { Ast.mk $loc (Ast.Numeral n) }
   (* () is the unit element, like OCaml; whitespace between the parens is
      fine since this is a grammar rule, not a lexeme *)

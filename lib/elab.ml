@@ -14,8 +14,9 @@
    (on meta-free, zonked core), so a bug here is a usability bug, not a
    soundness one. It reuses the kernel's NbE ({!Value}) for the types it needs,
    plus its own meta-aware synthesis ([elab_infer]) for terms still carrying
-   metavariables, which the kernel no longer knows. Forms with no inference to
-   do ([()], numerals) fall through to the type-free {!Ast.to_term}. *)
+   metavariables, which the kernel no longer knows. It is the sole surface →
+   core pass — every surface form, down to the leaves ([()], numerals), is
+   handled here. *)
 
 type mode =
   | Infer
@@ -260,7 +261,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
   let rec go (ctx : Check.ctx) mode (s : Ast.t) : Type.t =
     match s.desc with
     (* a bare name is a local binder (de Bruijn) first, otherwise a global
-       inductive former — matching {!Ast.to_term} *)
+       inductive former *)
     | Ast.Var x ->
         let core =
           match List.find_index (String.equal x) ctx.Check.names with
@@ -371,7 +372,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                    determined"
               ])
     (* ascription is the typed identity: it forces a checking judgment for [t],
-       and the redex evaporates under evaluation (as in {!Ast.to_term}) *)
+       and the redex evaporates under evaluation *)
     | Ast.Ascribe (t, a) ->
         let a' = go ctx Infer a in
         let va = Value.eval ctx.Check.env a' in
@@ -437,9 +438,30 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         Type.App
           ( Type.App (Type.Ind (sigma_form ()), a')
           , Type.Lam (Type.Explicit, "", a', body) )
-    (* the remaining leaf forms ([()], numerals) carry no elaborable subterm, so
-       the type-free {!Ast.to_term} (with its notation) suffices *)
-    | _ -> Ast.to_term sg ~notation ctx.Check.names s
+    (* [()] is the constructor registered for the [unit] notation (the prelude's
+       [Unit.unit]); the unit type itself is an ordinary inductive, resolved as
+       a [Var] above *)
+    | Ast.MkUnit -> (
+        match notation.Notation.unit_ctor with
+        | Some h -> Type.Ctor h
+        | None ->
+            Error.type_error
+              [ Error.txt "() requires the unit notation to be registered" ])
+    (* a numeral expands to succ-applications of the registered nat zero/succ *)
+    | Ast.Numeral k -> (
+        match notation.Notation.nat with
+        | Some (zero, succ) ->
+            let rec build k =
+              if k = 0 then
+                Type.Ctor zero
+              else
+                Type.App (Type.Ctor succ, build (k - 1))
+            in
+            build k
+        | None ->
+            Error.type_error
+              [ Error.txt "a numeral requires the nat notation to be registered"
+              ])
   (* an application spine [head arg…] *)
   and elab_app ctx mode s : Type.t =
     let head, args = peel s in

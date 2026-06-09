@@ -1,6 +1,6 @@
 (** Surface syntax: what the parser produces, with named binders and a source
-    location on every node. Scope checking ({!to_term}) converts it to the
-    (location-free) de Bruijn core. *)
+    location on every node. The elaborator ({!Elab}) is the sole pass that turns
+    it into the (location-free) de Bruijn core. *)
 
 type t =
   { loc : Loc.t  (** the node's source span *)
@@ -56,15 +56,6 @@ val sigmas : Loc.t -> (Type.icit * string list * t) list -> t -> t
     as a multi-name pi binder when it appears left of an arrow *)
 val var_spine : t -> string list option
 
+(** raised by the elaborator ({!Elab}) when a name is not in scope, with the
+    offending location *)
 exception Unbound_variable of Loc.t * string
-
-(** [to_term sg ?notation names s] scope-checks [s], converting named binders to
-    de Bruijn indices; [names] binds local variables (innermost first), e.g.
-    top-level declarations. A bare name not bound locally resolves to an
-    inductive former in the signature [sg]; qualified [T.c] / [T.rec] resolve to
-    a constructor or the recursor of [T]. [()] resolves to the constructor
-    registered for the [unit] notation (default {!Notation.empty}, under which
-    [()] is unbound). Ascriptions [(t : A)] elaborate to the typed identity
-    [(fun (x : A) => x) t]. Raises {!Unbound_variable}, with the offending
-    location, if a name is not in scope. *)
-val to_term : Signature.t -> ?notation:Notation.t -> string list -> t -> Type.t
