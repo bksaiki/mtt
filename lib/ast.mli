@@ -27,8 +27,6 @@ and desc =
   | EqInfix of t * t
       (** [x = y]: the registered equality former, type argument inferred *)
   | Refl  (** [refl]: the equality's constructor, parameters recovered *)
-  | J of t * t * t
-      (** [J P d p]: the equality recursor (based path induction / [Eq.rec]) *)
   | Numeral of int
       (** a decimal literal, e.g. [0], [5]; expands to succ-applications of the
           [nat] notation's zero/succ *)

@@ -27,6 +27,43 @@ types.
 **Status**: open; nothing has needed it yet. **Revisit**: if an example
 wants ⊤ as a proposition.
 
+## Singleton elimination, and Lean's `Eq` shape
+
+mtt's `Eq` is `inductive Eq (A : Type) (x : A) : A → Prop := | rfl : Eq A x x`
+— the **first endpoint is a parameter**, so `rfl` has no fields and the generic
+recursor is *based-path* induction (`P : (y : A) → Eq A x y → Sort`, `x` fixed),
+which is exactly Lean's `@Eq.rec`. Lean's *declaration* instead makes both
+endpoints indices, with the point carried by the constructor
+(`Eq : α → α → Prop`, `refl (a : α) : Eq a a`).
+
+Adopting Lean's declaration shape in mtt is a **net regression** as the kernel
+stands, for two reasons:
+
+- **Large elimination breaks.** mtt's large-elim gate permits a `Prop` inductive
+  to eliminate into `Type` only for a *subsingleton*, tested syntactically as
+  "one constructor, all fields proofs." Lean-form `refl` carries a data field
+  `a : A` (not a proof), so `Eq` flunks the test and `Eq.rec` into `Type` is
+  rejected — killing `subst`/transport. (Verified.) mtt's current form has a
+  zero-field `rfl`, so it passes trivially.
+- **Different recursor.** mtt's recursor rule abstracts *every* index, so Lean's
+  two-index declaration yields the *general* J (motive over both endpoints), not
+  Lean's based-path `Eq.rec` (Lean specializes; mtt doesn't). The general J makes
+  `subst` clunky (a function-valued motive) and isn't what motive inference
+  recovers.
+
+To make Lean's shape viable, the kernel would need the refined **singleton
+elimination** criterion Lean/Coq use: a `Prop` inductive may eliminate large
+when each constructor argument is a proof **or is determined by the indices**
+(`refl`'s `a` is pinned by the result `Eq a a`). That generalizes beyond `Eq`
+(`Acc`, equality-like families) and is a self-contained kernel improvement.
+
+**Status**: deliberately not done. The current parameter encoding already gives
+Lean's based-path `Eq.rec` with the crude subsingleton check, and `J` is gone in
+favour of explicit `Eq.rec` (see below / `design.md`). **Revisit**: if we want
+the general/HoTT J as the primitive, or the syntactic subsingleton check blocks
+another genuinely-eliminable `Prop` family — then add singleton elimination
+first.
+
 ## Eliminator style for sums (and later inductives)
 
 Inductives eliminate through their generic recursor (`T.rec`, explicit

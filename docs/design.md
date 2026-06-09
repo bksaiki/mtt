@@ -258,20 +258,28 @@ type drives every inference the surface leaves implicit:
   partial application keeps its trailing implicit binders instead of spawning
   unsolvable metas. This is what lets `cong`/`sym`/`trans`/`subst` take their
   type/endpoint arguments implicitly (`cong f p`, `sym p`).
-- **Equality sugar and motive inference.** `Eq` is a prelude inductive (see
-  Inductive types), so its surface forms desugar to it: `x = y` is the applied
-  former with `A` synthesized from the left side (a dedicated `eq_term` parser
-  level, looser than `+`/`×` and tighter than `→`; `:=` is the sole definition
-  separator, freeing `=`); `refl` is its constructor with the parameters
-  recovered from the expected type; `J P d p` is `Eq.rec` with the endpoints
-  recovered from `p`'s type. A hole `_` in a motive position, in checking mode,
-  is inferred by **occurrence abstraction**: generalize the expected goal over
-  the scrutinee — for `J`/`Eq.rec`, the proof's endpoint (`P := λ z q ⇒
-  goal[y↦z]`); for any other recursor, the major premise (`P := λ x ⇒
-  goal[major↦x]`). One `abstract`/`lift` primitive over core normal forms
-  suffices — no higher-order unifier or postponement, since in checking position
-  the goal is known up front. (A recursor's minors and major are elaborated in
-  checking position too, so a `refl` base case works.)
+- **Equality sugar.** `Eq` is a prelude inductive (see Inductive types), so its
+  surface forms desugar to it: `x = y` is the applied former with `A` synthesized
+  from the left side (a dedicated `eq_term` parser level, looser than `+`/`×` and
+  tighter than `→`; `:=` is the sole definition separator, freeing `=`); `refl`
+  is its constructor with the parameters recovered from the expected type. The
+  eliminator is the plain recursor `Eq.rec` — there is no `J` keyword.
+- **Recursors.** A recursor's minors and major are elaborated in *checking*
+  position (against the derived minor-premise and `Ind`-applied types), so
+  check-only forms — a `refl` base case, a constructor major — work. Two
+  conveniences fill in the rest:
+  - *Motive inference.* A `_` motive on a **non-indexed** recursor, in checking
+    mode, is synthesized by **occurrence abstraction** — generalize the expected
+    goal over the major (`P := λ x ⇒ goal[major↦x]`), one `abstract`/`lift`
+    primitive over core normal forms, no higher-order unifier or postponement
+    since the goal is known up front. (An indexed recursor like `Eq.rec` would
+    also have to abstract the indices, which is not done — its motive is written
+    out.)
+  - *Parameter/index recovery.* A recursor's parameters and indices may be left
+    `_`; the elaborator infers the major's type `T params indices` and reads them
+    off, so `Eq.rec _ _ P d _ p` and `Vec.rec _ P z s _ xs` recover the type and
+    endpoints/length from the scrutinee. (An explicit argument is elaborated as
+    written and re-checked by the kernel.)
 
 A residual type-free `Ast.to_term` (scope resolution + notation, no types) still
 exists: it backs the inductive-declaration scope-check and the leaf surface forms

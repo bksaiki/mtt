@@ -240,7 +240,7 @@ let%expect_test "holes: solved by unification, rejected when unsolvable" =
 (* implicit arguments ([{x : A}]): the elaborator inserts a fresh metavariable
    for each leading implicit binder when an explicit argument follows, and
    solves it by unifying that argument's type. The prelude's equality lemmas
-   ([cong]/[sym]/[trans]) take their type and endpoint arguments implicitly. *)
+   ([cong]/[symm]/[trans]) take their type and endpoint arguments implicitly. *)
 let%expect_test "implicit arguments: insertion and inference" =
   session
     [ (* an implicit type argument, inferred from the value argument *)
@@ -251,7 +251,7 @@ let%expect_test "implicit arguments: insertion and inference" =
       "#check myid"
     ; (* the prelude's lemmas now take type/endpoints implicitly *)
       "theorem e : Eq Nat 1 1 := refl"
-    ; "#check sym e"
+    ; "#check symm e"
     ; "#check cong (fun n : Nat => Nat.succ n) e"
     ; (* a standalone implicit function type round-trips through the printer *)
       "axiom dup : {A : Type} -> A -> A"
@@ -266,17 +266,14 @@ let%expect_test "implicit arguments: insertion and inference" =
     dup : {A : Type} -> A -> A
     |}]
 
-(* a hole [_] in a motive position, in checking mode, is inferred by abstracting
-   the scrutinee out of the goal: the proof's endpoint for [J], the major
-   premise for a recursor. (In inference position there is no goal to abstract,
-   so the motive must be given.) *)
-let%expect_test "motive inference for J and recursors" =
+(* a hole [_] in a (non-indexed) recursor's motive position, in checking mode,
+   is inferred by abstracting the major premise out of the goal. (An indexed
+   recursor like [Eq.rec] abstracts the indices too, which is not yet done, so
+   its motive must be written out — see the equality lemmas below.) *)
+let%expect_test "motive inference for recursors" =
   session
-    [ (* J: abstract the endpoint [y] of [p : x = y] out of the goal [y = x],
-         recovering the motive [fun z q => z = x] *)
-      "def symm (A : Type) (x y : A) (p : x = y) : y = x := J _ refl p"
-    ; "#check symm Nat 0 0 refl"
-    ; (* a recursor: abstract the major [n] out of the goal [add n 0 = n] *)
+    [ (* abstract the major [n] out of the goal [add n 0 = n], recovering the
+         motive [fun m => add m 0 = m] *)
       "theorem azr (n : Nat) : add n 0 = n :=\n\
       \   Nat.rec _ refl (fun (k : Nat) (ih : add k 0 = k) => cong Nat.succ \
        ih) n"
@@ -286,16 +283,43 @@ let%expect_test "motive inference for J and recursors" =
       "def dbl (n : Nat) : Nat := Nat.rec _ 0 (fun (k s : Nat) => Nat.succ \
        (Nat.succ s)) n"
     ; "#eval dbl 3"
-    ; (* no goal to abstract against (inference position): the motive is
-         required *)
-      "#check J _ refl (refl : (0 : Nat) = 0)"
+    ; (* nothing determines a hole motive without a goal: rejected *)
+      "#check (fun (n : Nat) => Nat.rec _ 0 (fun (k s : Nat) => s) n)"
     ];
   [%expect
     {|
-    refl : 0 = 0
     azr 3 : 3 = 3
     6
-    type error: cannot infer the J motive in inference position; write it out
+    type error: cannot infer the type of a hole _; use it where its type is determined
+    |}]
+
+(* a recursor's parameters and indices may be written [_]: they are recovered
+   from the major premise's type [T params indices]. (The motive is still
+   explicit for an indexed recursor.) *)
+let%expect_test "recursor parameters and indices recovered from the major" =
+  session
+    [ (* Eq.rec's A, x (params) and y (index) recovered from [p : x = y] *)
+      "def symm (A : Type) (x y : A) (p : x = y) : y = x :="
+      ^ " Eq.rec _ _ (fun (z : A) (q : x = z) => z = x) refl _ p"
+    ; "#check_equal (symm Nat 0 0 refl) refl"
+    ; (* an indexed family: Vec.rec's parameter [A] and length index recovered
+         from the vector *)
+      "inductive Vec (A : Type) : Nat -> Type := | vnil : Vec A 0 | vcons : (n \
+       : Nat) -> A -> Vec A n -> Vec A (Nat.succ n)"
+    ; "def v : Vec Nat 2 := Vec.vcons Nat 1 7 (Vec.vcons Nat 0 5 (Vec.vnil \
+       Nat))"
+    ; "def len (n : Nat) (xs : Vec Nat n) : Nat := Vec.rec _ (fun (m : Nat) (w \
+       : Vec Nat m) => Nat) 0 (fun (k : Nat) (a : Nat) (w : Vec Nat k) (ih : \
+       Nat) => Nat.succ ih) _ xs"
+    ; "#eval len 2 v"
+    ; (* the major's type isn't the right inductive: recovery fails clearly *)
+      "axiom n : Nat"
+    ; "#check Eq.rec _ _ (fun (z : Nat) (q : Nat) => Nat) 0 _ n"
+    ];
+  [%expect
+    {|
+    2
+    type error: cannot recover Eq's parameters and indices: the major premise is not Eq applied to arguments
     |}]
 
 (* Σ is the prelude record [Sigma]: pairs check against it (recovering the
@@ -372,16 +396,16 @@ let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
     ; "axiom B : Type"
     ; "axiom a : A"
     ; "axiom b : A"
-    ; (* the standard lemmas, each one J at a different motive *)
+    ; (* the standard lemmas, each one Eq.rec at a different motive *)
       "def sym (x y : A) (p : Eq A x y) : Eq A y x :="
-      ^ " J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq A z x) refl p"
+      ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ Eq A z x) refl y p"
     ; "def trans (x y z : A) (p : Eq A x y) (q : Eq A y z) : Eq A x z :="
-      ^ " J (λ w : A ⇒ λ r : Eq A y w ⇒ Eq A x w) p q"
+      ^ " Eq.rec A y (λ w : A ⇒ λ r : Eq A y w ⇒ Eq A x w) p z q"
     ; "def cong (f : A → B) (x y : A) (p : Eq A x y) : Eq B (f x) (f y) :="
-      ^ " J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl p"
+      ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl y p"
     ; (* subst is large elimination: the motive lands in Type *)
       "def subst (P : A → Type) (x y : A) (p : Eq A x y) (h : P x) : P y :="
-      ^ " J (λ z : A ⇒ λ q : Eq A x z ⇒ P z) h p"
+      ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ P z) h y p"
     ; "#check sym"
     ; "#check subst"
     ; (* ι: transport along refl is the identity, definitionally *)
@@ -455,7 +479,7 @@ let%expect_test "Nat: computation by recursion, and induction" =
          so 0 + n = n holds by computation but n + 0 = n needs induction *)
       "def cong (A B : Type) (f : A → B) (x y : A) (p : Eq A x y)"
       ^ " : Eq B (f x) (f y) :="
-      ^ " J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl p"
+      ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl y p"
     ; "theorem add_zero (n : Nat) : Eq Nat (add n 0) n :="
       ^ " Nat.rec (λ m : Nat ⇒ Eq Nat (add m 0) m) refl"
       ^ " (λ k : Nat ⇒ λ ih : Eq Nat (add k 0) k ⇒"

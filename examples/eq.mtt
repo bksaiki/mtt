@@ -1,4 +1,4 @@
--- Building on the prelude's equality toolkit (sym/trans/cong/subst). This
+-- Building on the prelude's equality toolkit (symm/trans/cong/subst). This
 -- file demonstrates what is special about the native Eq: refl reifies the
 -- checker's own conversion, and UIP holds for free.
 
@@ -12,10 +12,10 @@ def idA (x : A) : A := x
 theorem id_refl : Eq A (idA a) a := refl
 theorem beta_refl : Eq A ((λ x : A ⇒ x) a) a := refl
 
--- the toolkit composes: sym (sym p) is p (both proofs of a = b — and equal
+-- the toolkit composes: symm (symm p) is p (both proofs of a = b — and equal
 -- anyway by UIP)
 axiom p : Eq A a b
-#check_equal (sym (sym p)) p
+#check_equal (symm (symm p)) p
 
 -- ι: transport along refl computes away. The endpoints are implicit, but a bare
 -- refl pins neither, so it is ascribed to fix them (Eq A a a).

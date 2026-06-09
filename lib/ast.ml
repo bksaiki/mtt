@@ -21,7 +21,6 @@ and desc =
   | Sum of t * t (* A + B *)
   | EqInfix of t * t (* x = y: the equality former, with the type inferred *)
   | Refl (* refl: the equality's constructor, parameters recovered *)
-  | J of t * t * t (* J P d p: the equality recursor (based path induction) *)
   | Numeral of int (* a decimal literal, e.g. 0, 5; sugar for succ … zero *)
   | Hole (* _, an elaboration hole (a fresh metavariable) *)
 
@@ -137,17 +136,15 @@ let to_term sg ?(notation = Notation.empty) names s =
     (* + desugars to the registered sum former applied to its two sides *)
     | Sum (a, b) ->
         Type.App (Type.App (Type.Ind (sum_former s.loc), go env a), go env b)
-    (* the equality forms ([x = y], refl, J) all desugar to the registered [Eq]
+    (* the equality forms ([x = y], refl) desugar to the registered [Eq]
        inductive with arguments the type-free pass cannot infer (the equality's
-       type, refl's parameters, J's endpoints), so they are the elaborator's job
-       ({!Elab}) *)
+       type, refl's parameters), so they are the elaborator's job ({!Elab}) *)
     | EqInfix _
-    | Refl
-    | J _ ->
+    | Refl ->
         Error.type_error
           [ Error.txt
-              "= / refl / J require the elaborator (type, parameters, or \
-               endpoints are inferred)"
+              "= / refl require the elaborator (the type or parameters are \
+               inferred)"
           ]
     (* a numeral expands to succ-applications of the registered nat zero/succ *)
     | Numeral n -> (

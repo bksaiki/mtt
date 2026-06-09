@@ -30,7 +30,6 @@ rule token = parse
   | "Type" { TYPE }
   | "Prop" { PROP }
   | "refl" { REFL }
-  | "J" { J }
   | "prelude" { PRELUDE }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }
