@@ -34,8 +34,8 @@ let%expect_test "defs unfold (delta), theorems do not (opaque)" =
   session
     [ "axiom N : Type"
     ; "axiom zero : N"
-    ; "def d : N = zero"
-    ; "theorem t : N = zero"
+    ; "def d : N := zero"
+    ; "theorem t : N := zero"
     ; "#check d"
     ; "#check t"
     ];
@@ -46,7 +46,7 @@ let%expect_test "defs unfold (delta), theorems do not (opaque)" =
 
 let%expect_test "def with inferred type, used at two types" =
   session
-    [ "def id = fun (A : Type) => fun (x : A) => x"
+    [ "def id := fun (A : Type) => fun (x : A) => x"
     ; "axiom N : N"
     ; "axiom N : Type"
     ; "axiom zero : N"
@@ -66,15 +66,15 @@ let%expect_test "a theorem and its use" =
     ; "axiom Q : Type"
     ; "axiom f : P -> Q"
     ; "axiom p : P"
-    ; "theorem q : Q = f p"
-    ; "theorem bad : Q = p"
+    ; "theorem q : Q := f p"
+    ; "theorem bad : Q := p"
     ];
   [%expect {| type error: this term has type P but Q was expected |}]
 
 let%expect_test "declared names are in scope for later annotations" =
   session
     [ "axiom N : Type"
-    ; "def arrow : Type = N -> N"
+    ; "def arrow : Type := N -> N"
     ; "axiom g : arrow"
     ; "#check g"
     ];
@@ -84,8 +84,8 @@ let%expect_test "#eval reports just the normal form" =
   session
     [ "axiom N : Type"
     ; "axiom zero : N"
-    ; "def two = fun (f : N -> N) => fun (x : N) => f (f x)"
-    ; "def add = fun (m : (N -> N) -> N -> N) => fun (n : (N -> N) -> N -> N) \
+    ; "def two := fun (f : N -> N) => fun (x : N) => f (f x)"
+    ; "def add := fun (m : (N -> N) -> N -> N) => fun (n : (N -> N) -> N -> N) \
        => fun (f : N -> N) => fun (x : N) => m f (n f x)"
     ; "#eval add two two"
     ; "#eval Type Type"
@@ -261,8 +261,8 @@ let%expect_test "implicit arguments: insertion and inference" =
     {|
     0 : Nat
     fun {A : Type} => fun (x : A) => x : {A : Type} -> A -> A
-    J (fun (z : Nat) => fun (q : Eq Nat 1 z) => Eq Nat z 1) refl e : Eq Nat 1 1
-    J (fun (z : Nat) => fun (q : Eq Nat 1 z) => Eq Nat 2 (Nat.succ z)) refl e : Eq Nat 2 2
+    J (fun (z : Nat) => fun (q : 1 = z) => z = 1) refl e : 1 = 1
+    J (fun (z : Nat) => fun (q : 1 = z) => 2 = Nat.succ z) refl e : 2 = 2
     dup : {A : Type} -> A -> A
     |}]
 
@@ -288,7 +288,7 @@ let%expect_test "sigma: beta, eta, dependent pairs" =
       "axiom r : Unit × Unit"
     ; "#check_equal r ((), ())"
     ];
-  [%expect {| refl : Eq Nat 0 0 |}]
+  [%expect {| refl : 0 = 0 |}]
 
 (* the binary sum is the prelude inductive [Sum]: [+] is notation, the
    injections and eliminator are the qualified [Sum.inl]/[Sum.inr]/[Sum.rec].
@@ -368,14 +368,13 @@ let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
     {|
     fun (x : A) =>
     fun (y : A) =>
-    fun (p : Eq A x y) =>
-    J (fun (z : A) => fun (q : Eq A x z) => Eq A z x) refl p : (x : A) -> (y : A) -> Eq A x y -> Eq A y x
+    fun (p : x = y) => J (fun (z : A) => fun (q : x = z) => z = x) refl p : (x : A) -> (y : A) -> x = y -> y = x
     fun (P : A -> Type) =>
     fun (x : A) =>
     fun (y : A) =>
-    fun (p : Eq A x y) =>
-    fun (h : P x) => J (fun (z : A) => fun (q : Eq A x z) => P z) h p : (P : A -> Type) -> (x : A) -> (y : A) -> Eq A x y -> P x -> P y
-    J (fun (z : A) => fun (q' : Eq A a z) => Eq A z a) refl q : Eq A b a
+    fun (p : x = y) =>
+    fun (h : P x) => J (fun (z : A) => fun (q : x = z) => P z) h p : (P : A -> Type) -> (x : A) -> (y : A) -> x = y -> P x -> P y
+    J (fun (z : A) => fun (q' : a = z) => z = a) refl q : b = a
     |}]
 
 let%expect_test "constructor parameters may be omitted in checking position" =
@@ -435,8 +434,6 @@ let%expect_test "Nat: computation by recursion, and induction" =
     5
     6
     add_zero : (n : Nat) ->
-    Eq Nat
-    (Nat.rec (fun (x : Nat) => Nat) 0
-     (fun (k : Nat) => fun (ih : Nat) => Nat.succ ih) n)
-    n
+    Nat.rec (fun (x : Nat) => Nat) 0
+    (fun (k : Nat) => fun (ih : Nat) => Nat.succ ih) n = n
     |}]

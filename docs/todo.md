@@ -89,8 +89,14 @@ The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
       follows, solving it by unification; the prelude's `cong`/`sym`/`trans`/
       `subst` now take their type/endpoint arguments implicitly. No `@f` escape
       or trailing/expected-type-driven insertion yet (a bare `refl` whose
-      endpoints only implicits would fix must be ascribed). Still wanted on top:
-      `x = y` infix over `Eq`, motive inference for `J`/`T.rec`
+      endpoints only implicits would fix must be ascribed)
+- [x] `x = y` infix over `Eq` (Phase 5): a new `eq_term` parser level (looser
+      than `+`/`×`, tighter than `->`, non-associative) producing `Ast.EqInfix`;
+      the elaborator synthesizes the type from the left side, and the
+      delaborator prints `Eq A x y` as `x = y`. `:=` is now the sole
+      definition/inductive separator (`=` is equality). Still wanted: motive
+      inference for `J`/`T.rec` (needs occurrence abstraction, ideally a stronger
+      unifier)
 - [ ] `match` expressions — pure surface sugar that compiles to recursor
       (`T.rec`) applications; the kernel never sees it. Needs an equation
       compiler (nested/multiple/overlapping patterns → nested single-level
@@ -116,17 +122,19 @@ The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
         `nat` demands `zero`/`succ`, …), so a malformed or duplicate binding is
         rejected. *Done for the `unit` and `nat` roles* (`@[notation unit]`/
         `@[notation nat]`, the `@[ ]` attribute surface, one-shot + shape
-        check). *Done for `unit`/`nat`/`sigma`/`sum`*; the `eq` role lands with
-        the `Eq` removal.
+        check). *Done for `unit`/`nat`/`sigma`/`sum`*. `=` is handled directly
+        (not via a role) while `Eq` is still a kernel builtin; it moves to an
+        `eq` role when `Eq` becomes an inductive.
       - **forward** (parser/`to_term`/`Elab`): `()`→`Unit.unit` *(done)*,
         `2`→`succ (succ zero)` *(done)*, `A × B`/`Σ`/`+` → the registered
-        inductive applied *(done)*; `=` → `Eq` still to come
+        inductive applied *(done)*; `x = y` → `Eq _ x y` (type inferred) *(done,
+        via `Ast.EqInfix` in the elaborator)*
       - **reverse** (a **delaborator** — the elaborator's mirror, core → surface;
         for now realized as the kernel printer parameterized by a generic
         notation config, not a separate rewriter): the registered unit ctor →
         `()` *(done)*, succ-chains of the registered `Nat` → decimals *(done)*,
         applied `Sigma`/`Sum` formers → infix `×`/`Σ`/`+` and tuples *(done)*;
-        `Eq` → infix `=` still to come
+        `Eq A x y` → infix `x = y` *(done)*
       - the kernel printer stays **faithful/plain** (`Unit.unit`,
         `Nat.succ (… Nat.zero)`, qualified ctors); the delaborator applies sugar
         in the frontend. This forces a decision on error messages: either accept

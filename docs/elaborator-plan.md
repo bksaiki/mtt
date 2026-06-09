@@ -136,8 +136,18 @@ modelled.
 
 Several smaller PRs, built on Phases 3–4.
 
-- Inference-position intros (`Sum.inl a` / `refl` with no expected type), `=`
-  infix over `Eq`, named projections `x.field`, motive inference for `J`/`T.rec`.
+- **`=` infix over `Eq` — done.** A new `eq_term` parser level (looser than
+  `+`/`×`, tighter than `->`, non-associative) produces `Ast.EqInfix`; the
+  elaborator synthesizes the type from the left operand (`x : A ⊢ x = y :
+  Eq A x y`); the delaborator prints `Eq A x y` back as `x = y`. `:=` became the
+  sole definition/inductive separator so `=` is free for equality.
+- **Motive inference for `J`/`T.rec` — still to do.** The hard one: it needs to
+  abstract the occurrences of the scrutinee (and, for `J`, the endpoint + proof)
+  out of the expected goal type to build the motive. That is higher-order, so it
+  wants occurrence-generalization and ideally a stronger (pattern) unifier than
+  the current first-order/lenient one.
+- Inference-position intros (`Sum.inl a` / `refl` with no expected type), named
+  projections `x.field`.
 - `Eq` removal — also needs **indexed inductive families** (a separate kernel
   feature, possibly its own track), so it is the last builtin to go.
 

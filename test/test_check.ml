@@ -151,10 +151,10 @@ let%expect_test "pair inference defaults to the constant family (Lean-style)" =
   infer {|(((), ()) : Unit × Unit)|};
   [%expect {| Unit × Unit |}];
   infer {|((0, refl) : Σ (n : Nat) ⇒ Eq Nat n n)|};
-  [%expect {| Σ (n : Nat) ⇒ Eq Nat n n |}];
+  [%expect {| Σ (n : Nat) ⇒ n = n |}];
   (* the second projection's type mentions the first *)
   infer {|λ p : (Σ (n : Nat) ⇒ Eq Nat n n) ⇒ p.2|};
-  [%expect {| (p : Σ (n : Nat) ⇒ Eq Nat n n) -> Eq Nat p.1 p.1 |}];
+  [%expect {| (p : Σ (n : Nat) ⇒ n = n) -> p.1 = p.1 |}];
   infer "λ u : Unit ⇒ u.1";
   [%expect {| type error: Unit has no field .1 |}]
 
@@ -187,11 +187,11 @@ let%expect_test "equality formation and refl" =
   [%expect
     {| type error: cannot infer the type of refl: ascribe it, e.g. (refl : Eq A x x) |}];
   infer "(refl : Eq Unit () ())";
-  [%expect {| Eq Unit () () |}];
+  [%expect {| () = () |}];
   (* refl reifies definitional equality: it checks because the sides are
      convertible (here by β) *)
   infer {|(refl : Eq Type ((λ A : Type ⇒ A) Unit) Unit)|};
-  [%expect {| Eq Type Unit Unit |}];
+  [%expect {| Unit = Unit |}];
   (* but refl rejects genuinely distinct sides *)
   infer "(refl : Eq Type Unit Nat)";
   [%expect

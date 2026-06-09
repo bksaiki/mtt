@@ -173,13 +173,12 @@ let%expect_test "sums: + precedence; qualified injections and recursor" =
 
 let%expect_test "equality: Eq, refl, J" =
   roundtrip "Eq Unit () ()";
-  [%expect {| Eq Unit () () |}];
+  [%expect {| () = () |}];
   (* Eq is a prefix form at application precedence; refl is an atom *)
   roundtrip "(refl : Eq Unit () ())";
-  [%expect {| (fun (x : Eq Unit () ()) => x) refl |}];
+  [%expect {| (fun (x : () = ()) => x) refl |}];
   roundtrip {|λ A : Type ⇒ λ x : A ⇒ (refl : Eq A x x)|};
-  [%expect
-    {| fun (A : Type) => fun (x : A) => (fun (x' : Eq A x x) => x') refl |}];
+  [%expect {| fun (A : Type) => fun (x : A) => (fun (x' : x = x) => x') refl |}];
   (* J takes three atoms: motive, diagonal, proof *)
   roundtrip
     {|λ A : Type ⇒ λ x : A ⇒ λ p : Eq A x x ⇒ J (λ y : A ⇒ λ q : Eq A x y ⇒ Eq A x x) refl p|};
@@ -187,9 +186,24 @@ let%expect_test "equality: Eq, refl, J" =
     {|
     fun (A : Type) =>
     fun (x : A) =>
-    fun (p : Eq A x x) =>
-    J (fun (y : A) => fun (q : Eq A x y) => Eq A x x) refl p
+    fun (p : x = x) => J (fun (y : A) => fun (q : x = y) => x = x) refl p
     |}]
+
+(* the [=] infix sugars to the same [Eq] core as the prefix [Eq] keyword, with
+   the type inferred from the left side; it is non-associative and sits between
+   the arrow (looser) and +/× (tighter) *)
+let%expect_test "equality: the = infix and its precedence" =
+  roundtrip "(refl : () = ())";
+  [%expect {| (fun (x : () = ()) => x) refl |}];
+  (* application binds tighter than = *)
+  roundtrip "fun (f : Nat -> Nat) => fun (a : Nat) => f a = f a";
+  [%expect {| fun (f : Nat -> Nat) => fun (a : Nat) => f a = f a |}];
+  (* = binds tighter than ->, so [x = y -> P] is [(x = y) -> P] *)
+  roundtrip "fun (A : Type) => fun (x y : A) => x = y -> y = x";
+  [%expect {| fun (A : Type) => fun (x : A) => fun (y : A) => x = y -> y = x |}];
+  (* and looser than +, so [A + B = C] is [(A + B) = C] *)
+  roundtrip "Unit + Unit = Unit";
+  [%expect {| Unit + Unit = Unit |}]
 
 let%expect_test "Nat: numerals, succ-chains, the recursor" =
   roundtrip "Nat";

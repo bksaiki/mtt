@@ -140,6 +140,14 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
     | Value.Sort i -> i
     | _ -> 0
   in
+  (* the inductive registered for the [sigma] role, that [Σ]/[×] desugar to *)
+  let sigma_form () =
+    match notation.Notation.sigma with
+    | Some mk -> mk.Type.ind
+    | None ->
+        Error.type_error
+          [ Error.txt "Σ/× requires the sigma notation to be registered" ]
+  in
   let rec go (ctx : Check.ctx) mode (s : Ast.t) : Type.t =
     match s.desc with
     (* a bare name is a local binder (de Bruijn) first, otherwise a global
@@ -196,6 +204,12 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
        pair underneath — [(a, b).1] — still reaches the elaborator *)
     | Ast.Fst t -> Type.Proj (0, go ctx Infer t)
     | Ast.Snd t -> Type.Proj (1, go ctx Infer t)
+    (* [x = y] is [Eq A x y] with [A] inferred from [x]: synthesize [x]'s type,
+       use it as the equality's type, and check [y] against it *)
+    | Ast.EqInfix (x, y) ->
+        let x' = go ctx Infer x in
+        let tx = Meta.force !ms (elab_infer ctx x') in
+        Type.Eq (Value.quote ctx.Check.lvl tx, x', go ctx (Check tx) y)
     (* a hole becomes a fresh metavariable; in checking position its type is the
        expected one, and unification (at the surrounding application) solves it.
        In inference position there is nothing to determine it. *)
@@ -251,11 +265,40 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                   (fun core x -> Type.App (core, x))
                   (Type.Ctor mk)
                   [ Value.quote ctx.Check.lvl ta; bfun; a'; b' ]))
-    (* the remaining builtin formers and their intro/elim forms (and the
-       [()]/numeral/Σ/×/+ sugar) carry no constructor inference yet; translate
-       them syntactically, exactly as {!Ast.to_term} does, against the binder
-       names. [Sum]'s constructors and recursor are ordinary qualified names
-       ([Sum.inl], [Sum.rec]), so they ride the application spine above. *)
+    (* the equality/J/Σ/×/+ formers contain arbitrary subterms (a J motive, a Σ
+       body) that may themselves use surface sugar like [x = y]; those subterms
+       must elaborate through [go], not {!Ast.to_term} (which is type-free and
+       chokes on an inferred form). We assemble the same core [to_term]
+       would. *)
+    | Ast.Eq (a, x, y) ->
+        Type.Eq (go ctx Infer a, go ctx Infer x, go ctx Infer y)
+    | Ast.J (p, d, pr) ->
+        Type.J (go ctx Infer p, go ctx Infer d, go ctx Infer pr)
+    | Ast.Sum (a, b) -> (
+        match notation.Notation.sum with
+        | Some name ->
+            Type.App (Type.App (Type.Ind name, go ctx Infer a), go ctx Infer b)
+        | None ->
+            Error.type_error
+              [ Error.txt "+ requires the sum notation to be registered" ])
+    | Ast.Sigma (x, a, b) ->
+        let a' = go ctx Infer a in
+        let body =
+          go (Check.bind x (Value.eval ctx.Check.env a') ctx) Infer b
+        in
+        Type.App
+          ( Type.App (Type.Ind (sigma_form ()), a')
+          , Type.Lam (Type.Explicit, x, a', body) )
+    | Ast.Prod (a, b) ->
+        let a' = go ctx Infer a in
+        let body =
+          go (Check.bind "" (Value.eval ctx.Check.env a') ctx) Infer b
+        in
+        Type.App
+          ( Type.App (Type.Ind (sigma_form ()), a')
+          , Type.Lam (Type.Explicit, "", a', body) )
+    (* the remaining leaf forms ([()], numerals, refl) carry no elaborable
+       subterm, so the type-free {!Ast.to_term} (with its notation) suffices *)
     | _ -> Ast.to_term sg ~notation ctx.Check.names s
   (* an application spine [head arg…] *)
   and elab_app ctx mode s : Type.t =

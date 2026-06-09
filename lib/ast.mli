@@ -25,6 +25,7 @@ and desc =
   | Snd of t  (** p.2 *)
   | Sum of t * t  (** A + B *)
   | Eq of t * t * t  (** Eq A x y *)
+  | EqInfix of t * t  (** [x = y]: equality with the type argument inferred *)
   | Refl  (** refl *)
   | J of t * t * t  (** J P d p *)
   | Numeral of int

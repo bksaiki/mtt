@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP TIMES PLUS EQ REFL J COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE EOF
+%token FUN PI SIGMA TYPE PROP TIMES PLUS EQ EQOP REFL J COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -107,7 +107,7 @@ term:
    dependent pi binder. (Consequently extra parens cannot force the
    ascription reading there.) *)
 pi_term:
-  | a = sum_term; ARROW; b = pi_term
+  | a = eq_term; ARROW; b = pi_term
     { match a.Ast.desc with
       | Ast.Ascribe (e, ty) -> (
           (* an ascribed variable spine [(x y : A)] is a pi binder group *)
@@ -120,9 +120,15 @@ pi_term:
      form, so they need their own production.) *)
   | LBRACE; xs = nonempty_list(ID); COLON; a = term; RBRACE; ARROW; b = pi_term
     { Ast.pis $loc [ (Type.Implicit, xs, a) ] b }
+  | t = eq_term { t }
+
+(* equality infix sits between arrows and sums; non-associative, and the type
+   argument is inferred (so [x = y], not [Eq A x y]) *)
+eq_term:
+  | x = sum_term; EQOP; y = sum_term { Ast.mk $loc (Ast.EqInfix (x, y)) }
   | t = sum_term { t }
 
-(* sums sit between arrows and products; right-associative *)
+(* sums sit between equalities and products; right-associative *)
 sum_term:
   | a = prod_term; PLUS; b = sum_term { Ast.mk $loc (Ast.Sum (a, b)) }
   | t = prod_term { t }

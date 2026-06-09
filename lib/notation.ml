@@ -40,6 +40,10 @@ let sugar n ~recurse names term =
   in
   match term with
   | Type.Ctor h when n.unit_ctor = Some h -> Some (11, "()")
+  (* the native equality prints infix, with its type argument dropped: [Eq A x
+     y] → [x = y] (non-associative, looser than + and ×, tighter than ->) *)
+  | Type.Eq (_, x, y) ->
+      Some (2, Printf.sprintf "%s = %s" (recurse 3 names x) (recurse 3 names y))
   | _ -> (
       match peel term with
       (* an applied [Sigma] former: dependent → [Σ (x : A) ⇒ B], else → [A ×
@@ -56,13 +60,13 @@ let sugar n ~recurse names term =
                   (recurse 0 (x :: names) b) )
           else
             Some
-              ( 3
-              , Printf.sprintf "%s × %s" (recurse 4 names a)
-                  (recurse 3 ("" :: names) b) )
+              ( 4
+              , Printf.sprintf "%s × %s" (recurse 5 names a)
+                  (recurse 4 ("" :: names) b) )
       (* an applied [Sum] former → [A + B] (right-associative) *)
       | Type.Ind name, [ a; b ] when n.sum = Some name ->
           Some
-            (2, Printf.sprintf "%s + %s" (recurse 3 names a) (recurse 2 names b))
+            (3, Printf.sprintf "%s + %s" (recurse 4 names a) (recurse 3 names b))
       | _ -> (
           match pair_components term with
           (* tuples right-nest: flatten the right spine to [(a, b, c)] *)

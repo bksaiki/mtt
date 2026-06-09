@@ -20,6 +20,7 @@ and desc =
   | Snd of t (* p.2 *)
   | Sum of t * t (* A + B *)
   | Eq of t * t * t (* Eq A x y *)
+  | EqInfix of t * t (* x = y: equality with the type inferred *)
   | Refl (* refl *)
   | J of t * t * t (* J P d p *)
   | Numeral of int (* a decimal literal, e.g. 0, 5; sugar for succ … zero *)
@@ -138,6 +139,11 @@ let to_term sg ?(notation = Notation.empty) names s =
     | Sum (a, b) ->
         Type.App (Type.App (Type.Ind (sum_former s.loc), go env a), go env b)
     | Eq (a, x, y) -> Type.Eq (go env a, go env x, go env y)
+    (* [x = y] needs the type of [x] (or [y]) to fill the [Eq]'s type argument,
+       so it is the elaborator's job ({!Elab}); this type-free pass cannot *)
+    | EqInfix _ ->
+        Error.type_error
+          [ Error.txt "x = y requires the elaborator (the type is inferred)" ]
     | Refl -> Type.Refl
     | J (p, d, pr) -> Type.J (go env p, go env d, go env pr)
     (* a numeral expands to succ-applications of the registered nat zero/succ *)
