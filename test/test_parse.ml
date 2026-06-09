@@ -171,18 +171,19 @@ let%expect_test "sums: + precedence; qualified injections and recursor" =
     (fun (y : Unit) => y) s
     |}]
 
-let%expect_test "equality: Eq, rfl, Eq.rec" =
+let%expect_test "equality: Eq, Eq.refl prints as rfl, Eq.rec" =
   roundtrip "Eq Unit () ()";
   [%expect {| () = () |}];
-  (* Eq is an ordinary inductive former; rfl is its constructor (sugar) *)
-  roundtrip "(rfl : Eq Unit () ())";
-  [%expect {| (fun (x : () = ()) => x) rfl |}];
-  roundtrip {|λ A : Type ⇒ λ x : A ⇒ (rfl : Eq A x x)|};
-  [%expect {| fun (A : Type) => fun (x : A) => (fun (x' : x = x) => x') rfl |}];
+  (* Eq is an ordinary inductive former; its constructor [Eq.refl] prints back
+     as the [rfl] sugar (now a prelude def, not a keyword) *)
+  roundtrip "Eq.refl Unit ()";
+  [%expect {| rfl |}];
+  roundtrip {|λ A : Type ⇒ λ x : A ⇒ Eq.refl A x|};
+  [%expect {| fun (A : Type) => fun (x : A) => rfl |}];
   (* the eliminator is the plain recursor Eq.rec (there is no J keyword): based
      path induction, motive over the second endpoint *)
   roundtrip
-    {|λ A : Type ⇒ λ x : A ⇒ λ p : Eq A x x ⇒ Eq.rec A x (λ y : A ⇒ λ q : Eq A x y ⇒ Eq A x x) rfl x p|};
+    {|λ A : Type ⇒ λ x : A ⇒ λ p : Eq A x x ⇒ Eq.rec A x (λ y : A ⇒ λ q : Eq A x y ⇒ Eq A x x) (Eq.refl A x) x p|};
   [%expect
     {|
     fun (A : Type) =>
@@ -195,7 +196,7 @@ let%expect_test "equality: Eq, rfl, Eq.rec" =
    the type inferred from the left side; it is non-associative and sits between
    the arrow (looser) and +/× (tighter) *)
 let%expect_test "equality: the = infix and its precedence" =
-  roundtrip "(rfl : () = ())";
+  roundtrip "(Eq.refl Unit () : () = ())";
   [%expect {| (fun (x : () = ()) => x) rfl |}];
   (* application binds tighter than = *)
   roundtrip "fun (f : Nat -> Nat) => fun (a : Nat) => f a = f a";

@@ -1,7 +1,6 @@
 (** The elaborator: a type-directed translation from surface syntax ({!Ast.t})
-    to explicit core ({!Type.t}). It is the frontend's counterpart to the
-    type-free {!Ast.to_term}: where that pass only resolves names, the
-    elaborator additionally uses the {e expected type} to fill in arguments the
+    to explicit core ({!Type.t}). It is the {e sole} surface → core pass: beyond
+    resolving names it uses the {e expected type} to fill in the arguments the
     kernel demands explicitly.
 
     It is {e untrusted}, in the Lean/Rocq tradition: the core it produces is
@@ -10,13 +9,18 @@
     {!Check}) rather than reimplementing it, adding only the meta machinery in
     {!Meta} and its own meta-aware type synthesis.
 
-    What it infers, all driven by the expected type:
-    - constructor applications may {e omit the leading parameters}, recovered
-      from the expected inductive type ([Box.wrap a] for [Box.wrap A a]);
+    What it infers, mostly driven by the expected type:
+    - constructor applications may {e omit the leading parameters} — recovered
+      from the expected inductive type ([Box.wrap a] for [Box.wrap A a]), or, in
+      inference position, solved as metavariables from the field arguments;
     - a surface hole [_] becomes a metavariable, solved by unification;
-    - implicit binders [{x : A}] are inserted as fresh metavariables;
-    - [x = y] is [Eq A x y] with [A] inferred from [x];
-    - a hole motive on [J] or a recursor is synthesized by abstracting the
+    - implicit binders [{x : A}] are inserted as fresh metavariables before an
+      explicit argument and, when a fully-implicit term is checked against a
+      non-implicit goal, to coerce it ([rfl : {A}{x} -> x = x] against [a = a]);
+      [@f] suppresses all insertion, passing every argument explicitly;
+    - [x = y] is the registered equality former with the type inferred from [x];
+    - a named projection [e.field] resolves to the positional record projection;
+    - a hole motive on a non-indexed recursor is synthesized by abstracting the
       scrutinee out of the expected goal.
 
     The result is zonked to meta-free core; an unsolved hole is reported here,

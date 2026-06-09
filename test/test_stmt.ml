@@ -466,6 +466,37 @@ let%expect_test "constructor parameters may be omitted in checking position" =
     Prod2.mk : (A : Type) -> (B : Type) -> A -> B -> Prod2 A B
     |}]
 
+(* the surface-inference conveniences that sit above the kernel: expected-type
+   implicit insertion, the [@f] escape, named field projections, and
+   inference-position constructor intros. *)
+let%expect_test "surface inference: implicits, @, named projections, intros" =
+  session
+    [ "axiom A : Type"
+    ; "axiom a : A"
+    ; "axiom b : A"
+    ; "axiom p : a = b"
+    ; (* a bare fully-implicit term ([rfl : {A}{x} -> x = x]) checked against a
+         concrete goal inserts and solves its implicits *)
+      "def e : a = a := rfl"
+    ; "#check e"
+    ; (* [@f] passes the normally-implicit arguments explicitly, agreeing with
+         the insertion that [symm p] gets *)
+      "#check_equal (symm p) (@symm A a b p)"
+    ; (* named field projections on a record, alongside the positional ones *)
+      "def pr : Σ (n : Nat) ⇒ Eq Nat n n := (0, rfl)"
+    ; "#check_equal pr.fst pr.1"
+    ; "#check pr.snd"
+    ; (* inference position: the parameter is solved from the field argument,
+         with no expected type to recover it from *)
+      "inductive Box (T : Type) : Type := | wrap : T -> Box T"
+    ; "#check Box.wrap a"
+    ];
+  [%expect {|
+    rfl : a = a
+    rfl : 0 = 0
+    Box.wrap A a : Box A
+    |}]
+
 let%expect_test "Nat: computation by recursion, and induction" =
   session
     [ "def add (m n : Nat) : Nat :="

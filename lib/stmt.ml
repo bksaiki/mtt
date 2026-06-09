@@ -44,16 +44,25 @@ let initial = { ctx = Check.empty; notation = Notation.empty }
 let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
   let sg = sess.ctx.Check.signature in
   let notation = sess.notation in
-  (* parameter telescope: each type is scope-checked under the earlier params *)
-  let params, param_names =
+  (* the spec's parameter/index/field types use de Bruijn relative to the
+     parameter telescope alone, with only the parameters and other inductives in
+     scope (not the ambient definitions). They are therefore elaborated in a
+     bare context carrying just the inductive signature. [Elab] in inference
+     position resolves names the right way for this: a bare name is a parameter
+     binder, else an inductive former — never an ambient definition. *)
+  let base sg = { Check.empty with Check.signature = sg } in
+  (* parameter telescope: each type is elaborated under the earlier params *)
+  let params, pctx =
     List.fold_left
-      (fun (params, names) (x, aty) ->
-        (params @ [ (x, Ast.to_term sg ~notation names aty) ], x :: names))
-      ([], []) d.iparams
+      (fun (params, ctx) (x, aty) ->
+        let a = Elab.infer notation ctx aty in
+        (params @ [ (x, a) ], Check.bind x (Value.eval ctx.Check.env a) ctx))
+      ([], base sg)
+      d.iparams
   in
   (* the result is an index telescope ending in a sort; the Π binders the
-     surface arrow introduces are the indices (their scope already threaded by
-     {!Ast.to_term}, so the index types carry the right de Bruijn) *)
+     surface arrow introduces are the indices, elaborated under the
+     parameters *)
   let indices, sort =
     let rec decompose = function
       | Type.Pi (_, x, a, b) ->
@@ -67,12 +76,15 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
                  optionally after an index telescope (e.g. Nat -> Type)"
             ]
     in
-    decompose (Ast.to_term sg ~notation param_names d.isort)
+    decompose (Elab.infer notation pctx d.isort)
   in
   let provisional =
     { Inductive.name = d.iname; params; indices; sort; ctors = [] }
   in
   let sg = Signature.add provisional sg in
+  (* constructor types may mention the inductive being defined, so they see the
+     provisional former; the parameter binders are unchanged *)
+  let cctx = { pctx with Check.signature = sg } in
   let m = List.length params in
   (* [as_self depth ty]: if [ty] is this inductive applied to the parameter
      variables (read at [depth]) and then index instances, those instances; else
@@ -114,9 +126,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
               , result )
           | result -> ([], result)
         in
-        let fields, result =
-          decompose 0 (Ast.to_term sg ~notation param_names cty)
-        in
+        let fields, result = decompose 0 (Elab.infer notation cctx cty) in
         match as_self (m + List.length fields) result with
         | Some result_indices -> { Inductive.cname; fields; result_indices }
         | None ->

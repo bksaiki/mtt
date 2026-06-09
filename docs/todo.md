@@ -15,8 +15,8 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
       This retired the last builtin: `Eq` is now a prelude indexed inductive
       whose recursor `Eq.rec` is based-path induction (below). Motive inference
       does not yet cover indexed recursors (their motive must be written out);
-      `=`/`rfl` are surface sugar, but the eliminator is the plain `Eq.rec` (no
-      `J` keyword)
+      `=` is surface sugar and `rfl` an ordinary prelude def, with the eliminator
+      the plain `Eq.rec` (no `J` keyword)
 - [ ] Mutual and nested inductives
 - [ ] Full strict positivity: accept strictly-positive function-typed recursive
       arguments (`(Nat -> T) -> T`); currently only direct recursive fields
@@ -24,7 +24,8 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 - [x] Definitional η for single-constructor inductives ("records"): an η case in
       `conv` comparing field projections, plus the positional `Proj` node — lets
       `Unit`/`Σ` be replaced without losing their η (see `design.md`). The
-      surface `.i` projection syntax lands with the `Σ` removal.
+      surface positional `.i` projection landed with the `Σ` removal; named
+      field projection `x.field` (resolving to the same `Proj`) followed.
 - [ ] Universe polymorphism (level-polymorphic defs; see questions.md); also
       needed for inductive `Sum`/`Σ`/`Eq` to form at the max of their
       components' levels rather than one fixed level
@@ -73,8 +74,8 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
       - [x] `Eq`: a prelude indexed inductive
             `inductive Eq (A : Type) (x : A) : A -> Prop := | refl : Eq A x x`
             with `@[notation eq]`; `x = y` is the applied former (type inferred)
-            and `rfl` its constructor (parameters recovered, printed back as
-            `rfl`). Its recursor `Eq.rec` is based-path induction, used directly
+            and `rfl` a prelude def `Eq.refl A x` over its constructor (printed
+            back as `rfl`). Its recursor `Eq.rec` is based-path induction, used directly
             (no `J` keyword) — its parameters/index recovered from the major.
             Deleted the `Eq`/`Refl`/`J` core+value nodes, `vj`, and their
             eval/quote/conv/infer cases — the last builtin gone. **Fixed at
@@ -104,9 +105,8 @@ remains is below.
       like the binder name — the Lean design). The elaborator inserts a fresh
       metavariable for each leading implicit binder when an explicit argument
       follows, solving it by unification; the prelude's `cong`/`symm`/`trans`/
-      `subst` now take their type/endpoint arguments implicitly. No `@f` escape
-      or trailing/expected-type-driven insertion yet (a bare `rfl` whose
-      endpoints only implicits would fix must be ascribed)
+      `subst` now take their type/endpoint arguments implicitly. Expected-type
+      insertion and the `@f` escape are below
 - [x] `x = y` infix over `Eq`: a new `eq_term` parser level (looser
       than `+`/`×`, tighter than `->`, non-associative) producing `Ast.EqInfix`;
       the elaborator synthesizes the type from the left side, and the
@@ -124,20 +124,22 @@ remains is below.
       (`Eq.rec _ _ P d _ p`, `Vec.rec _ P z s _ xs`); an explicit argument is
       elaborated as written and re-checked. The prelude's equality toolkit uses
       it
-- [ ] Expected-type-driven implicit insertion: when a term of fully-implicit
-      type `{a : A} -> …` is *checked* against a non-implicit goal, insert fresh
-      metavariables for the leading implicits and unify the result against the
-      goal (today implicits are inserted only before an explicit argument, so a
-      bare implicit-typed term fails to check). Lets any fully-implicit function
-      be used bare (e.g. a `{A} -> List A` against `List Nat`), and in particular
-      would let `rfl` move into the prelude as
-      `def rfl {A : Type} {x : A} : x = x := Eq.refl A x`, retiring the `rfl`
-      keyword and its special elaborator case (see the Surface syntax section)
-- [ ] Remaining surface inference: inference-position intros (`Sum.inl a` /
-      `rfl` with no expected type), named projections `x.field` (currently only
-      positional `.1`/`.2`), and an `@f` escape to pass implicit arguments
-      explicitly. With these the type-free `Ast.to_term` catch-all can go,
-      leaving `Elab` the sole surface → core pass
+- [x] Expected-type-driven implicit insertion: when a term of fully-implicit
+      type `{a : A} -> …` is *checked* against a goal that is not itself an
+      implicit `Pi`, the `coerce` step inserts fresh metavariables for the
+      leading implicits and unifies the result against the goal (gated on having
+      inserted ≥1 meta, so meta-free terms are untouched). Applied at a spine's
+      tail and at bare `Var`/named-projection leaves. This let `rfl` move into the
+      prelude as `def rfl {A : Type} {x : A} : x = x := Eq.refl A x`, retiring the
+      `rfl` keyword and its special elaborator case (the `=` infix stays sugar)
+- [x] Remaining surface inference, retiring `Ast.to_term`: inference-position
+      constructor intros (`Box.wrap a` solves the parameter from the field; a
+      genuinely-undetermined one like `Sum.inl a` errors), named projections
+      `x.field` (alongside positional `.1`/`.2`), and an `@f` escape that passes
+      every argument explicitly (suppressing implicit insertion). With these
+      `Elab` covers every surface form — `()` and numerals included — so the
+      type-free `Ast.to_term` is **deleted**: `Elab` is the sole surface → core
+      pass, used even for inductive declarations (`Stmt.elaborate_inductive`)
 - [ ] `match` expressions — pure surface sugar that compiles to recursor
       (`T.rec`) applications; the kernel never sees it. Needs an equation
       compiler (nested/multiple/overlapping patterns → nested single-level
@@ -166,10 +168,10 @@ remains is below.
         check). *Done for all roles: `unit`/`nat`/`sigma`/`sum`/`eq`* (the `eq`
         role registers the equality inductive, now that `Eq` is no longer a
         builtin — see the Eq removal above).
-      - **forward** (parser/`to_term`/`Elab`): `()`→`Unit.unit` *(done)*,
+      - **forward** (parser/`Elab`): `()`→`Unit.unit` *(done)*,
         `2`→`succ (succ zero)` *(done)*, `A × B`/`Σ`/`+` → the registered
-        inductive applied *(done)*; `x = y` → the `Eq` former (type inferred) and
-        `rfl` → its constructor *(done, in `Elab`)*
+        inductive applied *(done)*; `x = y` → the `Eq` former, type inferred
+        *(done)* (`rfl` is no longer notation — it is an ordinary prelude def)
       - **reverse** (a **delaborator** — the elaborator's mirror, core → surface;
         for now realized as the kernel printer parameterized by a generic
         notation config, not a separate rewriter): the registered unit ctor →

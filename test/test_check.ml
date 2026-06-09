@@ -150,7 +150,7 @@ let%expect_test "pair inference defaults to the constant family (Lean-style)" =
   (* a dependent type is recovered by checking against the Σ *)
   infer {|(((), ()) : Unit × Unit)|};
   [%expect {| Unit × Unit |}];
-  infer {|((0, rfl) : Σ (n : Nat) ⇒ Eq Nat n n)|};
+  infer {|((0, Eq.refl Nat 0) : Σ (n : Nat) ⇒ Eq Nat n n)|};
   [%expect {| Σ (n : Nat) ⇒ n = n |}];
   (* the second projection's type mentions the first *)
   infer {|λ p : (Σ (n : Nat) ⇒ Eq Nat n n) ⇒ p.2|};
@@ -179,22 +179,23 @@ let%expect_test "sum formation and injections (Type-fixed inductive)" =
     {|λ s : Unit + Nat ⇒ Sum.rec Unit Nat (λ x : Unit + Nat ⇒ Type) (λ x : Unit ⇒ Unit) (λ h : Nat ⇒ Nat) s|};
   [%expect {| Unit + Nat -> Type |}]
 
-let%expect_test "equality formation and rfl" =
+let%expect_test "equality formation and Eq.refl" =
   infer "Eq Unit () ()";
   [%expect {| Prop |}];
-  (* rfl is check-only *)
-  infer "rfl";
-  [%expect
-    {| type error: cannot infer the type of rfl; ascribe it (e.g. (rfl : x = x)) |}];
-  infer "(rfl : Eq Unit () ())";
+  (* [rfl] is now an ordinary prelude def (tested in test_stmt); here we
+     exercise the underlying constructor [Eq.refl], whose parameters are
+     explicit *)
+  infer "Eq.refl";
+  [%expect {| (A : Type) -> (x : A) -> x = x |}];
+  infer "Eq.refl Unit ()";
   [%expect {| () = () |}];
-  (* rfl reifies definitional equality: it checks because the sides are
-     convertible (here by β) *)
-  infer {|(rfl : Eq Type ((λ A : Type ⇒ A) Unit) Unit)|};
-  [%expect {| type error: this term has type Type 1 but Type was expected |}];
-  (* but rfl rejects genuinely distinct sides *)
-  infer "(rfl : Eq Type Unit Nat)";
-  [%expect {| type error: this term has type Type 1 but Type was expected |}];
+  (* Eq.refl reifies definitional equality: it checks against an equation whose
+     endpoints are convertible (here by β) but not syntactically equal *)
+  infer {|(Eq.refl Nat 0 : Eq Nat ((λ n : Nat ⇒ n) 0) 0)|};
+  [%expect {| 0 = 0 |}];
+  (* but it rejects genuinely distinct sides *)
+  infer "(Eq.refl Nat 0 : Eq Nat 0 (Nat.succ 0))";
+  [%expect {| type error: this term has type 0 = 0 but 0 = 1 was expected |}];
   (* the endpoints must share the type A *)
   infer "Eq Unit () Type";
   [%expect {| type error: this term has type Type 1 but Unit was expected |}]

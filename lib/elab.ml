@@ -1,21 +1,25 @@
 (* Bidirectional elaboration. [go ctx mode s] produces a core term for the
    surface term [s]; [mode] is the elaboration direction — [Infer] for a
    synthesizing position, [Check ty] when [s] is expected to have type [ty]. The
-   expected type drives every inference the surface syntax leaves implicit:
+   expected type drives the inference the surface syntax leaves implicit, e.g.:
    constructor applications may drop the leading parameters (recovered from the
-   expected inductive type); a surface hole [_] becomes a metavariable, solved
-   by unifying argument types during application (see {!Meta}); implicit binders
-   [{x : A}] are inserted as fresh metavariables before each explicit argument;
-   [x = y] infers the equality's type from the left side; and a hole motive on a
-   (non-indexed) recursor is synthesized by abstracting the scrutinee out of the
-   expected goal.
+   expected inductive type, or solved as metavariables from the fields); a
+   surface hole [_] becomes a metavariable, solved by unifying argument types
+   during application (see {!Meta}); implicit binders [{x : A}] are inserted as
+   fresh metavariables before an explicit argument and to coerce a
+   fully-implicit term against a non-implicit goal ([@f] suppresses both); [x =
+   y] infers the equality's type from the left side; [e.field] is a named
+   projection; and a hole motive on a (non-indexed) recursor is synthesized by
+   abstracting the scrutinee out of the expected goal. (The full account is in
+   [elab.mli].)
 
    The elaborator is untrusted: whatever it produces is re-checked by {!Check}
    (on meta-free, zonked core), so a bug here is a usability bug, not a
    soundness one. It reuses the kernel's NbE ({!Value}) for the types it needs,
    plus its own meta-aware synthesis ([elab_infer]) for terms still carrying
-   metavariables, which the kernel no longer knows. Forms with no inference to
-   do ([()], numerals) fall through to the type-free {!Ast.to_term}. *)
+   metavariables, which the kernel no longer knows. It is the sole surface →
+   core pass — every surface form, down to the leaves ([()], numerals), is
+   handled here. *)
 
 type mode =
   | Infer
@@ -199,9 +203,9 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         Error.type_error
           [ Error.txt "Σ/× requires the sigma notation to be registered" ]
   in
-  (* the inductive registered for the [eq] role, that [x = y] / [rfl] desugar to
-     (its former and the [Eq.refl] constructor; the recursor [Eq.rec] is an
-     ordinary qualified name, used directly) *)
+  (* the inductive registered for the [eq] role, that the infix [x = y] desugars
+     to (its applied former; [rfl] is now an ordinary prelude def over
+     [Eq.refl], and the recursor [Eq.rec] an ordinary qualified name) *)
   let eq_spec () =
     match notation.Notation.eq with
     | Some name -> (
@@ -212,22 +216,77 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
               [ Error.txt "the eq notation names an unknown inductive" ])
     | None ->
         Error.type_error
-          [ Error.txt "= and rfl require the eq notation to be registered" ]
+          [ Error.txt "= requires the eq notation to be registered" ]
+  in
+  (* expected-type-driven implicit insertion. [core] has (use-site) type [ty];
+     in checking position, if [ty] begins with implicit binders [{a : A} -> …]
+     and the goal does *not* itself expect an implicit binder, insert a fresh
+     metavariable for each leading implicit and unify the instantiated type
+     against the goal (which solves them). This lets a fully-implicit term be
+     used bare — [rfl : {A}{x} -> x = x] checked against [a = a] — where the
+     spine rule (which only inserts before an explicit argument) cannot. The
+     unify is gated on having inserted at least one meta, so a meta-free term is
+     left untouched for the kernel's own conversion. *)
+  let coerce (ctx : Check.ctx) mode core ty : Type.t =
+    match mode with
+    | Infer -> core
+    | Check g ->
+        let goal_implicit =
+          match Meta.force !ms g with
+          | Value.Pi (Type.Implicit, _, _, _) -> true
+          | _ -> false
+        in
+        if goal_implicit then
+          core
+        else
+          let rec walk core ty inserted =
+            match Meta.force !ms ty with
+            | Value.Pi (Type.Implicit, _, dom, c) ->
+                let m = fresh_meta_core ctx dom in
+                walk
+                  (Type.App (core, m))
+                  (Value.apply_closure c (Value.eval ctx.Check.env m))
+                  true
+            | _ ->
+                if inserted then ms := Meta.unify !ms ctx.Check.lvl ty g;
+                core
+          in
+          walk core ty false
+  in
+  (* coerce a head leaf (a bare variable or projection) in checking position:
+     synthesize its type and insert leading implicits as above. A no-op in
+     inference position. *)
+  let coerce_leaf ctx mode core : Type.t =
+    match mode with
+    | Infer -> core
+    | Check _ -> coerce ctx mode core (Meta.force !ms (elab_infer ctx core))
   in
   let rec go (ctx : Check.ctx) mode (s : Ast.t) : Type.t =
     match s.desc with
     (* a bare name is a local binder (de Bruijn) first, otherwise a global
-       inductive former — matching {!Ast.to_term} *)
-    | Ast.Var x -> (
-        match List.find_index (String.equal x) ctx.Check.names with
-        | Some i -> Type.Var i
-        | None -> (
-            match Signature.find sg x with
-            | Some spec -> Type.Ind spec.Inductive.name
-            | None -> raise (Ast.Unbound_variable (s.loc, x))))
-    | Ast.Field ({ desc = Ast.Var tname; _ }, field) -> (
-        match Signature.find sg tname with
-        | None -> raise (Ast.Unbound_variable (s.loc, tname))
+       inductive former *)
+    | Ast.Var x ->
+        let core =
+          match List.find_index (String.equal x) ctx.Check.names with
+          | Some i -> Type.Var i
+          | None -> (
+              match Signature.find sg x with
+              | Some spec -> Type.Ind spec.Inductive.name
+              | None -> raise (Ast.Unbound_variable (s.loc, x)))
+        in
+        coerce_leaf ctx mode core
+    | Ast.Field (e, field) -> (
+        (* qualified access on an inductive *name* [T] (not shadowed by a
+           local): [T.rec] is its recursor, [T.c] one of its constructors.
+           Otherwise [e.f] is a named field projection on the record value
+           [e]. *)
+        let qualified =
+          match e.Ast.desc with
+          | Ast.Var t when not (List.mem t ctx.Check.names) ->
+              Signature.find sg t
+          | _ -> None
+        in
+        match qualified with
         | Some spec -> (
             if String.equal field "rec" then
               Type.Rec (Inductive.rec_head spec)
@@ -239,8 +298,38 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
               with
               | Some i -> Type.Ctor (Inductive.ctor_head spec i)
               | None ->
-                  raise (Ast.Unbound_variable (s.loc, tname ^ "." ^ field))))
-    | Ast.Field (_, f) -> raise (Ast.Unbound_variable (s.loc, "_." ^ f))
+                  raise
+                    (Ast.Unbound_variable
+                       (s.loc, spec.Inductive.name ^ "." ^ field)))
+        | None -> (
+            (* a named field projection: [field] is one of [e]'s single
+               constructor's field names, resolving to the positional [Proj] *)
+            let e' = go ctx Infer e in
+            match Meta.force !ms (elab_infer ctx e') with
+            | Value.VInd (name, _) -> (
+                let spec = Check.lookup_ind ctx name in
+                if not (Inductive.is_record spec) then
+                  Error.type_error
+                    [ Error.txtf
+                        "%s is not a record (single-constructor) type, so it \
+                         has no named field .%s"
+                        name field
+                    ];
+                let ctor = List.hd spec.Inductive.ctors in
+                match
+                  List.find_index
+                    (fun (a : Inductive.arg) ->
+                      String.equal a.Inductive.aname field)
+                    ctor.Inductive.fields
+                with
+                | Some i -> coerce_leaf ctx mode (Type.Proj (i, e'))
+                | None ->
+                    Error.type_error
+                      [ Error.txtf "%s has no field .%s" name field ])
+            | _ ->
+                Error.type_error
+                  [ Error.txtf "the projection .%s expects a record value" field
+                  ]))
     | Ast.Sort i -> Type.Sort i
     | Ast.Pi (i, x, a, b) ->
         let a' = go ctx Infer a in
@@ -265,7 +354,9 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           | Infer -> Infer
         in
         Type.Lam (i, x, a', go (Check.bind x va ctx) body_mode b)
-    | Ast.App _ -> elab_app ctx mode s
+    | Ast.App _
+    | Ast.At _ ->
+        elab_app ctx mode s
     (* the generic record projections; handled here (not delegated) so a literal
        pair underneath — [(a, b).1] — still reaches the elaborator *)
     | Ast.Fst t -> Type.Proj (0, go ctx Infer t)
@@ -281,29 +372,6 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           (fun f a -> Type.App (f, a))
           (Type.Ind spec.Inductive.name)
           [ Value.quote ctx.Check.lvl tx; x'; go ctx (Check tx) y ]
-    (* [rfl] is the equality's nullary constructor (Eq.refl) with its parameters
-       [(A, x)] recovered from the expected equality type; the kernel re-check
-       enforces that the equation's two endpoints actually coincide *)
-    | Ast.Refl -> (
-        let spec = eq_spec () in
-        match mode with
-        | Check e -> (
-            match Meta.force !ms e with
-            | Value.VInd (name, p0 :: p1 :: _)
-              when String.equal name spec.Inductive.name ->
-                List.fold_left
-                  (fun f a -> Type.App (f, a))
-                  (Type.Ctor (Inductive.ctor_head spec 0))
-                  [ Value.quote ctx.Check.lvl p0; Value.quote ctx.Check.lvl p1 ]
-            | _ ->
-                Error.type_error
-                  [ Error.txt "rfl: an equality type was expected here" ])
-        | Infer ->
-            Error.type_error
-              [ Error.txt
-                  "cannot infer the type of rfl; ascribe it (e.g. (rfl : x = \
-                   x))"
-              ])
     (* a hole becomes a fresh metavariable; in checking position its type is the
        expected one, and unification (at the surrounding application) solves it.
        In inference position there is nothing to determine it. *)
@@ -317,7 +385,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                    determined"
               ])
     (* ascription is the typed identity: it forces a checking judgment for [t],
-       and the redex evaporates under evaluation (as in {!Ast.to_term}) *)
+       and the redex evaporates under evaluation *)
     | Ast.Ascribe (t, a) ->
         let a' = go ctx Infer a in
         let va = Value.eval ctx.Check.env a' in
@@ -383,12 +451,40 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         Type.App
           ( Type.App (Type.Ind (sigma_form ()), a')
           , Type.Lam (Type.Explicit, "", a', body) )
-    (* the remaining leaf forms ([()], numerals) carry no elaborable subterm, so
-       the type-free {!Ast.to_term} (with its notation) suffices *)
-    | _ -> Ast.to_term sg ~notation ctx.Check.names s
+    (* [()] is the constructor registered for the [unit] notation (the prelude's
+       [Unit.unit]); the unit type itself is an ordinary inductive, resolved as
+       a [Var] above *)
+    | Ast.MkUnit -> (
+        match notation.Notation.unit_ctor with
+        | Some h -> Type.Ctor h
+        | None ->
+            Error.type_error
+              [ Error.txt "() requires the unit notation to be registered" ])
+    (* a numeral expands to succ-applications of the registered nat zero/succ *)
+    | Ast.Numeral k -> (
+        match notation.Notation.nat with
+        | Some (zero, succ) ->
+            let rec build k =
+              if k = 0 then
+                Type.Ctor zero
+              else
+                Type.App (Type.Ctor succ, build (k - 1))
+            in
+            build k
+        | None ->
+            Error.type_error
+              [ Error.txt "a numeral requires the nat notation to be registered"
+              ])
   (* an application spine [head arg…] *)
   and elab_app ctx mode s : Type.t =
     let head, args = peel s in
+    (* [@f …]: the head is wrapped in [At], and every binder of [f]'s type —
+       implicit included — consumes a written argument (no insertion) *)
+    let explicit, head =
+      match head.Ast.desc with
+      | Ast.At h -> (true, h)
+      | _ -> (false, head)
+    in
     match classify_head sg head with
     (* a recursor application. The minors and major are elaborated in *checking*
        position (against their derived types), so check-only forms — a [rfl]
@@ -518,22 +614,55 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
               | _ -> None)
           | Infer -> None
         in
+        let cty = Value.eval [] (Inductive.ctor_type spec h.Type.cindex) in
         match recovered with
         | Some pvals -> checked_ctor ctx h pvals args
+        (* the parameters are omitted but no expected inductive type pins them
+           (inference position, or a non-matching goal): insert a fresh
+           metavariable per parameter and let unifying the field arguments solve
+           the ones they determine ([Box.wrap a] fixes [A] from [a]; a genuinely
+           undetermined parameter — [Sum.inl a] leaving [B] free — surfaces as
+           an unsolved-hole error). Gated off under [@f], which forces the
+           parameters explicit. *)
+        | None
+          when (not explicit)
+               && h.Type.nparams > 0
+               && List.length args = nfields ->
+            let rec params core ty k =
+              if k = 0 then
+                (core, ty)
+              else
+                match Meta.force !ms ty with
+                | Value.Pi (_, _, dom, c) ->
+                    let m = fresh_meta_core ctx dom in
+                    params
+                      (Type.App (core, m))
+                      (Value.apply_closure c (Value.eval ctx.Check.env m))
+                      (k - 1)
+                | _ -> (core, ty)
+            in
+            let head_core, field_ty = params (Type.Ctor h) cty h.Type.nparams in
+            elab_spine ctx head_core field_ty args
         (* otherwise the parameters are explicit (or we are inferring): walk the
            constructor's full type *)
-        | None ->
-            let cty = Value.eval [] (Inductive.ctor_type spec h.Type.cindex) in
-            elab_spine ctx (Type.Ctor h) cty args)
+        | None -> elab_spine ctx (Type.Ctor h) cty args)
     | Other ->
         let head_core = go ctx Infer head in
-        elab_spine ctx head_core (elab_infer ctx head_core) args
+        elab_spine ~explicit ~mode ctx head_core (elab_infer ctx head_core) args
   (* elaborate each argument against the domain read off the head's (function)
      type, advancing that type as arguments are consumed so each argument is in
-     checking position *)
-  and elab_spine ctx head_core head_ty args : Type.t =
+     checking position. [~explicit] (set under an [@f] head) makes an implicit
+     binder consume the next written argument instead of inserting a meta; once
+     the arguments run out, [~mode] drives expected-type implicit insertion on
+     the result (suppressed under [@f]). *)
+  and elab_spine ?(explicit = false) ?(mode = Infer) ctx head_core head_ty args
+      : Type.t =
     let rec walk core ty = function
-      | [] -> core
+      | [] ->
+          if explicit then
+            core
+          else
+            coerce ctx mode core ty
       | a :: rest -> (
           match Meta.force !ms ty with
           (* an implicit binder while an explicit argument is still to come:
@@ -541,8 +670,9 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
              explicit argument lands below) and retry against the next binder.
              Insertion is gated on a remaining argument, so a partially-applied
              head keeps its trailing implicit binders rather than spawning
-             unsolvable metas. *)
-          | Value.Pi (Type.Implicit, _, dom, c) ->
+             unsolvable metas. Under [@f] ([explicit]) the binder instead
+             consumes the written argument, like an explicit one. *)
+          | Value.Pi (Type.Implicit, _, dom, c) when not explicit ->
               let m = fresh_meta_core ctx dom in
               walk
                 (Type.App (core, m))

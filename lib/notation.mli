@@ -1,8 +1,8 @@
 (** The frontend's notation registry, config, and rendering. The kernel is fully
     notation-ignorant — it never names [Unit]/[Nat], and its printer knows only
     a generic [sugar] hook ({!Type.pp_in}). This module owns the config that
-    drives that hook in reverse (printing) and {!Ast.to_term} forward (parsing).
-*)
+    drives that hook in reverse (printing) and the elaborator ({!Elab}) forward
+    (parsing). *)
 
 (** which inductive constructors fill each notation role *)
 type t =

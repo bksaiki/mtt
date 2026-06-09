@@ -29,8 +29,6 @@ rule token = parse
   | "Type" [' ' '\t']+ (digits as n) { TYPELEVEL (int_of_string n) }
   | "Type" { TYPE }
   | "Prop" { PROP }
-  (* the reflexivity term [rfl]; sugar for the equality's constructor Eq.refl *)
-  | "rfl" { REFL }
   | "prelude" { PRELUDE }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }
@@ -55,6 +53,9 @@ rule token = parse
   | "|" { BAR }
   | "@[" { ATTR_OPEN }
   | "]" { ATTR_CLOSE }
+  (* [@f] makes every argument explicit (suppresses implicit insertion); the
+     longer [@[] above wins by maximal munch, so a lone [@] is unambiguous *)
+  | "@" { AT }
   | ".1" { FST }
   | ".2" { SND }
   | "." digits as s
