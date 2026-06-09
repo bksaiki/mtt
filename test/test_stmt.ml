@@ -397,7 +397,7 @@ let%expect_test "equality: Eq.rec lemmas, iota, stuck recursion, UIP" =
     ; "axiom a : A"
     ; "axiom b : A"
     ; (* the standard lemmas, each one Eq.rec at a different motive *)
-      "def sym (x y : A) (p : Eq A x y) : Eq A y x :="
+      "def symm (x y : A) (p : Eq A x y) : Eq A y x :="
       ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ Eq A z x) rfl y p"
     ; "def trans (x y z : A) (p : Eq A x y) (q : Eq A y z) : Eq A x z :="
       ^ " Eq.rec A y (λ w : A ⇒ λ r : Eq A y w ⇒ Eq A x w) p z q"
@@ -406,16 +406,17 @@ let%expect_test "equality: Eq.rec lemmas, iota, stuck recursion, UIP" =
     ; (* subst is large elimination: the motive lands in Type *)
       "def subst (P : A → Type) (x y : A) (p : Eq A x y) (h : P x) : P y :="
       ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ P z) h y p"
-    ; "#check sym"
+    ; "#check symm"
     ; "#check subst"
     ; (* ι: transport along rfl is the identity, definitionally *)
       "axiom P : A → Type"
     ; "axiom h : P a"
     ; "#check_equal (subst P a a rfl h) h"
-    ; (* a stuck J (proof is a variable) is a neutral, equal to itself *)
+    ; (* a stuck recursion (proof is a variable) is a neutral, equal to
+         itself *)
       "axiom q : Eq A a b"
-    ; "#check sym a b q"
-    ; "#check_equal (sym a b q) (sym a b q)"
+    ; "#check symm a b q"
+    ; "#check_equal (symm a b q) (symm a b q)"
     ; (* UIP for free: any two proofs of the same equation are equal *)
       "axiom q2 : Eq A a b"
     ; "#check_equal q q2"
