@@ -31,7 +31,7 @@ def comp (A B C : Type) (g : B → C) (f : A → B) (x : A) : C := g (f x)
 -- Σ that lands at the max of its components awaits universe polymorphism).
 @[notation sigma]
 inductive Sigma (A : Type) (B : A → Type) : Type :=
-| mk : (a : A) → B a → Sigma A B
+| mk : (fst : A) → (snd : B fst) → Sigma A B
 
 -- the binary sum (coproduct). `@[notation sum]` registers it for the infix `+`
 -- former; its injections and eliminator are the ordinary qualified names

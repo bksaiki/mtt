@@ -225,22 +225,51 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
             match Signature.find sg x with
             | Some spec -> Type.Ind spec.Inductive.name
             | None -> raise (Ast.Unbound_variable (s.loc, x))))
-    | Ast.Field ({ desc = Ast.Var tname; _ }, field) -> (
-        match Signature.find sg tname with
-        | None -> raise (Ast.Unbound_variable (s.loc, tname))
-        | Some spec -> (
-            if String.equal field "rec" then
-              Type.Rec (Inductive.rec_head spec)
-            else
-              match
-                List.find_index
-                  (fun (c : Inductive.ctor) -> String.equal c.cname field)
-                  spec.Inductive.ctors
-              with
-              | Some i -> Type.Ctor (Inductive.ctor_head spec i)
-              | None ->
-                  raise (Ast.Unbound_variable (s.loc, tname ^ "." ^ field))))
-    | Ast.Field (_, f) -> raise (Ast.Unbound_variable (s.loc, "_." ^ f))
+    (* qualified access on an inductive *name* [T] (not shadowed by a local):
+       [T.rec] is its recursor, [T.c] one of its constructors. Otherwise [e.f]
+       is a named field projection on the record value [e]. *)
+    | Ast.Field ({ desc = Ast.Var tname; _ }, field)
+      when (not (List.mem tname ctx.Check.names))
+           && Option.is_some (Signature.find sg tname) -> (
+        let spec = Option.get (Signature.find sg tname) in
+        if String.equal field "rec" then
+          Type.Rec (Inductive.rec_head spec)
+        else
+          match
+            List.find_index
+              (fun (c : Inductive.ctor) -> String.equal c.cname field)
+              spec.Inductive.ctors
+          with
+          | Some i -> Type.Ctor (Inductive.ctor_head spec i)
+          | None -> raise (Ast.Unbound_variable (s.loc, tname ^ "." ^ field)))
+    (* a named field projection [e.f]: [e] is a record value, [f] one of its
+       single constructor's field names; resolves to the positional [Proj] *)
+    | Ast.Field (e, field) -> (
+        let e' = go ctx Infer e in
+        match Meta.force !ms (elab_infer ctx e') with
+        | Value.VInd (name, _) -> (
+            let spec = Check.lookup_ind ctx name in
+            if not (Inductive.is_record spec) then
+              Error.type_error
+                [ Error.txtf
+                    "%s is not a record (single-constructor) type, so it has \
+                     no named field .%s"
+                    name field
+                ];
+            let ctor = List.hd spec.Inductive.ctors in
+            match
+              List.find_index
+                (fun (a : Inductive.arg) ->
+                  String.equal a.Inductive.aname field)
+                ctor.Inductive.fields
+            with
+            | Some i -> Type.Proj (i, e')
+            | None ->
+                Error.type_error [ Error.txtf "%s has no field .%s" name field ]
+            )
+        | _ ->
+            Error.type_error
+              [ Error.txtf "the projection .%s expects a record value" field ])
     | Ast.Sort i -> Type.Sort i
     | Ast.Pi (i, x, a, b) ->
         let a' = go ctx Infer a in
