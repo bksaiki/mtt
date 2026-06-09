@@ -1,15 +1,21 @@
 (* Bidirectional elaboration. [go ctx mode s] produces a core term for the
    surface term [s]; [mode] is the elaboration direction — [Infer] for a
    synthesizing position, [Check ty] when [s] is expected to have type [ty]. The
-   mode is consulted only where it lets us drop an argument: at a constructor
-   application (to recover omitted parameters) and through a lambda body.
-   Elsewhere the core is produced purely structurally, exactly as {!Ast.to_term}
-   would, and the kernel's later re-check supplies the typing.
+   expected type drives every inference the surface syntax leaves implicit:
+   constructor applications may drop the leading parameters (recovered from the
+   expected inductive type); a surface hole [_] becomes a metavariable, solved
+   by unifying argument types during application (see {!Meta}); implicit binders
+   [{x : A}] are inserted as fresh metavariables before each explicit argument;
+   [x = y] infers the equality's type from the left side; and a hole motive on
+   [J] or a recursor is synthesized by abstracting the scrutinee out of the
+   expected goal.
 
-   Types are computed (reusing {!Value} and {!Check}) only where they drive a
-   decision: a function application needs its head's Pi type to know each
-   argument's domain, and constructor inference needs the expected inductive's
-   parameters. *)
+   The elaborator is untrusted: whatever it produces is re-checked by {!Check}
+   (on meta-free, zonked core), so a bug here is a usability bug, not a
+   soundness one. It reuses the kernel's NbE ({!Value}) for the types it needs,
+   plus its own meta-aware synthesis ([elab_infer]) for terms still carrying
+   metavariables, which the kernel no longer knows. Forms with no inference to
+   do ([()], numerals, [refl]) fall through to the type-free {!Ast.to_term}. *)
 
 type mode =
   | Infer
@@ -288,8 +294,9 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         let t' = go ctx (Check va) t in
         Type.App (Type.Lam (Type.Explicit, "x", a', Type.Var 0), t')
     (* a pair is sugar for the dependent-pair record's constructor [mk]: checked
-       against the Σ it recovers the parameters (Phase-1 omission); inferred it
-       defaults to the constant family, as the old (Pair-infer) rule did *)
+       against the Σ it recovers the parameters and elaborates only the
+       components; inferred (no expected Σ) it falls back to a constant second
+       component family *)
     | Ast.Pair (a, b) -> (
         match notation.Notation.sigma with
         | None ->

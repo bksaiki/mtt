@@ -7,12 +7,13 @@ type t =
 
 let empty = { unit_ctor = None; nat = None; sigma = None; sum = None }
 
-(* renders a subterm as surface notation if it matches a registered role: the
-   unit constructor as [()], a closed succ-chain as a decimal; otherwise None,
-   so the kernel prints it plainly. This is the hook the kernel printer
-   ({!Type.pp_in}) consults — all notation knowledge lives here. Returns [(prec,
-   text)] so the printer can parenthesize; atoms use precedence 11. [recurse] /
-   [names] are unused for the (atomic) unit and nat roles. *)
+(* renders a subterm as surface notation, or None to let the kernel print it
+   plainly: the unit constructor as [()], a succ-chain as a decimal, an applied
+   Σ/Sum former as [×]/[Σ]/[+], a tuple, and native equality [Eq A x y] as infix
+   [x = y]. This is the hook the kernel printer ({!Type.pp_in}) consults — all
+   notation knowledge lives here. Returns [(prec, text)] so the printer can
+   parenthesize (atoms use precedence 11); [recurse] renders a subterm at a
+   given precedence for the infix forms. *)
 let sugar n ~recurse names term =
   let nat_lit term =
     match n.nat with
