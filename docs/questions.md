@@ -25,20 +25,20 @@ be encoded. Lean keeps both `Unit : Type` and `True : Prop` as separate
 types.
 
 **Status**: open; nothing has needed it yet. **Revisit**: if an example
-wants ⊤ as a proposition (e.g. as a `case` motive default once sums land).
+wants ⊤ as a proposition.
 
 ## Eliminator style for sums (and later inductives)
 
-The sums plan uses a primitive recursor (`case P s u v`, explicit motive)
-because there is no elaborator to infer motives. `match`-style syntax with
-an inferred constant motive could be layered on later without kernel
-changes.
+Inductives eliminate through their generic recursor (`T.rec`, explicit
+motive), the verbosity of which we worried would need `match`-style sugar.
 
-**Status**: recursor implemented; the verbosity is real but largely
-absorbed by library combinators (`elim` in `sum.mtt`, `ife` in `bool.mtt`)
-— the motive is written once per combinator, not per use. **Revisit**: when
-dependent eliminations (where combinators can't help) become common, or
-with the elaborator.
+**Status**: largely resolved. The recursor is implemented (qualified
+`T.rec`, no bespoke `case`), and the elaborator now **infers the motive** —
+a `_` in the motive position is recovered by abstracting the scrutinee out
+of the goal (see `design.md`, Elaboration), so a dependent elimination no
+longer writes its motive by hand. Remaining verbosity (binding the minor
+premises) is what a `match`/equation compiler would absorb; that is tracked
+in `todo.md`. **Revisit**: when `match` is taken on.
 
 ## Statement boundaries in files
 

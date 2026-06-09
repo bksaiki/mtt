@@ -68,9 +68,9 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 
 Inference that sits above the kernel, turning concise surface terms into fully
 explicit core terms. Its mirror — the delaborator (core → surface) — lives with
-the notation registry under Surface syntax; the two share that registry.
-
-The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
+the notation registry under Surface syntax; the two share that registry. The
+settled architecture is in `design.md` (Elaboration); what is done and what
+remains is below.
 
 - [x] Constructor-argument inference in *checking* position: a constructor
       application checked against its inductive omits the leading parameters
@@ -104,6 +104,11 @@ The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
       `trans`/`subst`, `add`/`mul`/`pred`, the Nat lemmas, `absurd`) now writes
       `_` for its motives. Inference position (no goal) still needs an explicit
       motive
+- [ ] Remaining surface inference: inference-position intros (`Sum.inl a` /
+      `refl` with no expected type), named projections `x.field` (currently only
+      positional `.1`/`.2`), and an `@f` escape to pass implicit arguments
+      explicitly. With these (and `Eq` retired) the type-free `Ast.to_term`
+      catch-all can go, leaving `Elab` the sole surface → core pass
 - [ ] `match` expressions — pure surface sugar that compiles to recursor
       (`T.rec`) applications; the kernel never sees it. Needs an equation
       compiler (nested/multiple/overlapping patterns → nested single-level
