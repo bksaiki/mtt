@@ -421,8 +421,10 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         match mode with
         (* a hole motive on a saturated recursor in checking position is
            inferred by abstracting the major premise out of the goal: [P := λ (x
-           : T params) ⇒ goal[major ↦ x]] *)
-        | Check g when saturated && motive_is_hole ->
+           : T params) ⇒ goal[major ↦ x]]. Restricted to non-indexed families:
+           an indexed motive abstracts the indices too, which this does not yet
+           do, so an indexed recursor's motive must be written out. *)
+        | Check g when saturated && motive_is_hole && rh.Type.nindices = 0 ->
             let g = Meta.force !ms g in
             let param_asts = List.filteri (fun i _ -> i < m) args in
             let minor_asts =

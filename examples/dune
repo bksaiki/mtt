@@ -71,3 +71,9 @@
  (deps inductive.mtt %{bin:mtt})
  (action
   (run mtt inductive.mtt)))
+
+(rule
+ (alias runtest)
+ (deps vec.mtt %{bin:mtt})
+ (action
+  (run mtt vec.mtt)))

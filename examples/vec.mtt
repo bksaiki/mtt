@@ -1,0 +1,44 @@
+-- Indexed inductive families. Building on the prelude's Nat. A parameter (A) is
+-- fixed across the definition; an index (the length) varies per constructor:
+-- `nil` builds a `Vec A 0` and `cons` a `Vec A (succ n)` from a `Vec A n`, so
+-- the length lives in the type and the checker tracks it.
+inductive Vec (A : Type) : Nat -> Type :=
+| nil  : Vec A 0
+| cons : (n : Nat) -> A -> Vec A n -> Vec A (Nat.succ n)
+
+-- the former takes the parameter then the index; the constructors' result types
+-- pin specific lengths
+#check Vec
+#check Vec.nil
+#check Vec.cons
+
+-- a literal Vec Nat 3 (each `cons` states the tail's length, and the checker
+-- insists they line up)
+def v3 : Vec Nat 3 :=
+  Vec.cons Nat 2 10 (Vec.cons Nat 1 20 (Vec.cons Nat 0 30 (Vec.nil Nat)))
+
+#check v3
+
+-- `replicate` *builds* an indexed value: recursion on n, with the index-
+-- dependent motive `fun m => Vec A m` (Nat.rec eliminating into a type family —
+-- large elimination). nil at 0, a cons at each succ.
+def replicate (A : Type) (a : A) (n : Nat) : Vec A n :=
+  Nat.rec (fun (m : Nat) => Vec A m)
+    (Vec.nil A)
+    (fun (k : Nat) (ih : Vec A k) => Vec.cons A k a ih)
+    n
+
+#check replicate Nat 7 5
+
+-- `length` *consumes* one: the recursor's ι rule must recover each tail's index
+-- to form the induction hypothesis. (Here it recomputes the index — the point
+-- is that the recursion goes through.)
+def length (A : Type) (n : Nat) (v : Vec A n) : Nat :=
+  Vec.rec A
+    (fun (m : Nat) (w : Vec A m) => Nat)
+    0
+    (fun (k : Nat) (x : A) (w : Vec A k) (ih : Nat) => Nat.succ ih)
+    n v
+
+#check_equal (length Nat 3 v3) 3
+#check_equal (length Nat 5 (replicate Nat 7 5)) 5

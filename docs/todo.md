@@ -6,9 +6,15 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 `inductive.ml`/`signature.ml`); everything here is checked, not elaborated.
 
 - [ ] Local `let` expressions
-- [ ] Indexed inductive families: the motive abstracts over indices and the
-      target, ι matches index instances, and the recursor generalizes `J`.
-      Unlocks `Vec`/`Fin` and an indexed `Eq`
+- [~] Indexed inductive families: the motive abstracts over the indices and the
+      target, the recursor's spine carries index arguments before the major, and
+      its ι rule recovers each recursive field's indices (baked into the
+      `rec_head` skeleton) to form the induction hypothesis. *Kernel + surface
+      done* (`inductive Vec (A : Type) : Nat -> Type := …`, see `examples/vec.mtt`
+      and `docs/indexed-inductives-plan.md`); non-indexed types are the
+      `indices = []` case. Remaining: retire `Eq` into a prelude indexed
+      inductive (`Eq.rec` = `J`), the last builtin. Motive inference does not yet
+      cover indexed recursors (their motive must be written out)
 - [ ] Mutual and nested inductives
 - [ ] Full strict positivity: accept strictly-positive function-typed recursive
       arguments (`(Nat -> T) -> T`); currently only direct recursive fields

@@ -469,3 +469,31 @@ let%expect_test "Nat: computation by recursion, and induction" =
     Nat.rec (fun (x : Nat) => Nat) 0
     (fun (k : Nat) => fun (ih : Nat) => Nat.succ ih) n = n
     |}]
+
+(* indexed inductive families: a constructor result pins an index ([Vec A 0],
+   [Vec A (succ n)]), the recursor's motive abstracts over the index, and the
+   checker tracks the index through application. *)
+let%expect_test "indexed families: Vec, its recursor, and index enforcement" =
+  session
+    [ "inductive Vec (A : Type) : Nat -> Type := | nil : Vec A 0 | cons : (n : \
+       Nat) -> A -> Vec A n -> Vec A (Nat.succ n)"
+    ; "#check Vec"
+    ; "#check Vec.cons"
+    ; "def v : Vec Nat 2 := Vec.cons Nat 1 7 (Vec.cons Nat 0 5 (Vec.nil Nat))"
+    ; "#check v"
+    ; (* length by recursion — ι must recover each tail's index *)
+      "def len (A : Type) (n : Nat) (xs : Vec A n) : Nat := Vec.rec A (fun (m \
+       : Nat) (w : Vec A m) => Nat) 0 (fun (k : Nat) (x : A) (w : Vec A k) (ih \
+       : Nat) => Nat.succ ih) n xs"
+    ; "#eval len Nat 2 v"
+    ; (* the index is enforced: a Vec Nat 2 is not a Vec Nat 3 *)
+      "def bad : Vec Nat 3 := v"
+    ];
+  [%expect
+    {|
+    Vec : Type -> Nat -> Type
+    Vec.cons : (A : Type) -> (n : Nat) -> A -> Vec A n -> Vec A (Nat.succ n)
+    Vec.cons Nat 1 7 (Vec.cons Nat 0 5 (Vec.nil Nat)) : Vec Nat 2
+    2
+    type error: this term has type Vec Nat 2 but Vec Nat 3 was expected
+    |}]
