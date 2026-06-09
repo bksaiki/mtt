@@ -38,7 +38,10 @@ The source follows the `string → Ast → Type → Value` pipeline (diagram in
 - `lib/kernel/inductive`, `lib/kernel/signature` — inductive declarations and
   the global signature of declared types.
 - `lib/lexer.mll`, `lib/parser.mly`, `lib/parse`, `lib/ast` — surface syntax
-  and scope-checking to core terms.
+  (parsing to a located AST).
+- `lib/elab` (with `lib/meta`, `lib/notation`) — the type-directed elaborator:
+  the sole surface → core pass, filling in the arguments the kernel demands
+  explicitly; its output is re-checked by the kernel.
 - `lib/stmt`, `lib/prelude` — top-level statements and the standard library.
 - `bin/main.ml` — the REPL and file runner.
 
