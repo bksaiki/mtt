@@ -306,10 +306,12 @@ type drives every inference the surface leaves implicit:
   constructor's fields to the pattern variables, with each recursive field's
   induction hypothesis bound to `_`. It is therefore **case analysis, not
   recursion** (recursion still uses the recursor directly), and **forward-only**
-  sugar: a `match` prints back as the `T.rec` it compiles to. The MVP is flat
-  (one variable-pattern branch per constructor, exhaustive) and non-indexed;
-  wildcard/nested patterns, an equation compiler, and dependent (convoy) match on
-  indexed families are future work (`todo.md`).
+  sugar: a `match` prints back as the `T.rec` it compiles to. A `_` in a field
+  position binds that field anonymously, and a trailing `| _ ⇒ b` is a catch-all
+  covering every unlisted constructor (its fields bound to `_`). The match is
+  flat (one branch per constructor) and non-indexed; nested/multiple patterns
+  (an equation compiler) and dependent (convoy) match on indexed families are
+  future work (`todo.md`).
 
 `Elab` handles **every** surface form, down to the leaves (`()` → the registered
 unit constructor, numerals → succ-chains), so there is no second pass: inductive

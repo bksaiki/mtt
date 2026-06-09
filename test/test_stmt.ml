@@ -549,6 +549,35 @@ let%expect_test "match: coverage and well-formedness are checked" =
   [%expect
     {| type error: cannot infer the result type of a match; annotate it (e.g. (match … end : T)) |}]
 
+(* a [_] in a field position binds that field anonymously; a [| _ => b] branch
+   is a catch-all covering every unlisted constructor *)
+let%expect_test "match: wildcard fields and a catch-all branch" =
+  session
+    [ "inductive RGB : Type := | red : RGB | green : RGB | blue : RGB"
+    ; (* catch-all covers green and blue *)
+      "def isRed (c : RGB) : Nat := match c with | red => 1 | _ => 0 end"
+    ; "#eval isRed RGB.red"
+    ; "#eval isRed RGB.blue"
+    ; (* a wildcard field pattern, and the catch-all desugars to the same core
+         as the explicit recursor *)
+      "def isZero (n : Nat) : Nat := match n with | zero => 1 | succ _ => 0 end"
+    ; "def isZero2 (n : Nat) : Nat := match n with | zero => 1 | _ => 0 end"
+    ; "#check_equal isZero isZero2"
+    ; "#eval isZero 4"
+    ];
+  [%expect {|
+    1
+    0
+    0
+    |}]
+
+let%expect_test "match: catch-all must be last and bind nothing" =
+  let case s = session [ s ] in
+  case "def f (n : Nat) : Nat := match n with | _ => 0 | zero => 1 end";
+  [%expect {| type error: a catch-all branch | _ => … must come last |}];
+  case "def f (n : Nat) : Nat := match n with | zero => 0 | _ x => x end";
+  [%expect {| type error: a catch-all branch | _ => … cannot bind variables |}]
+
 let%expect_test "Nat: computation by recursion, and induction" =
   session
     [ "def add (m n : Nat) : Nat :="

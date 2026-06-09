@@ -727,7 +727,9 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
      becomes the constructor's minor premise — a λ binding the constructor's
      fields to the pattern variables, with each recursive field's induction
      hypothesis bound to [_] (case analysis ignores it; recursion uses the
-     recursor directly). *)
+     recursor directly). A trailing [| _ ⇒ b] is a catch-all covering every
+     unlisted constructor (its fields bound to [_], so [b] cannot inspect
+     them). *)
   and elab_match ctx mode scrut arms : Type.t =
     let scrut_core = go ctx Infer scrut in
     match Meta.force !ms (elab_infer ctx scrut_core) with
@@ -742,7 +744,32 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                  %s.rec"
                 tname tname
             ];
-        (* every arm names an actual constructor *)
+        (* a trailing [| _ ⇒ b] is a catch-all; it must be last, singular, and
+           bind no variables. Everything else is an explicit constructor arm. *)
+        let is_wild (cn, _, _) = String.equal cn "_" in
+        let nargs = List.length arms in
+        List.iteri
+          (fun i ((_, xs, _) as arm) ->
+            if is_wild arm then (
+              if i <> nargs - 1 then
+                Error.type_error
+                  [ Error.txt "a catch-all branch | _ => … must come last" ];
+              if xs <> [] then
+                Error.type_error
+                  [ Error.txt
+                      "a catch-all branch | _ => … cannot bind variables"
+                  ]
+            ))
+          arms;
+        let catchall =
+          match List.rev arms with
+          | last :: _ when is_wild last ->
+              let _, _, b = last in
+              Some b
+          | _ -> None
+        in
+        let explicit = List.filter (fun a -> not (is_wild a)) arms in
+        (* every explicit arm names an actual constructor *)
         List.iter
           (fun (cn, _, _) ->
             if
@@ -753,13 +780,15 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
             then
               Error.type_error
                 [ Error.txtf "%s is not a constructor of %s" cn tname ])
-          arms;
-        (* the arm for constructor [c]: exactly one, with the right arity *)
+          explicit;
+        (* the (binder names, body) for constructor [c]: its explicit arm if any
+           (variables checked for arity), else the catch-all (all fields bound
+           to [_]), else a missing-branch error *)
         let arm_for (c : Inductive.ctor) =
           match
             List.filter
               (fun (cn, _, _) -> String.equal cn c.Inductive.cname)
-              arms
+              explicit
           with
           | [ (_, xs, b) ] ->
               let nfields = List.length c.Inductive.fields in
@@ -771,11 +800,14 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                       tname c.Inductive.cname (List.length xs) nfields
                   ];
               (xs, b)
-          | [] ->
-              Error.type_error
-                [ Error.txtf "match is missing a branch for %s.%s" tname
-                    c.Inductive.cname
-                ]
+          | [] -> (
+              match catchall with
+              | Some b -> (List.map (fun _ -> "_") c.Inductive.fields, b)
+              | None ->
+                  Error.type_error
+                    [ Error.txtf "match is missing a branch for %s.%s" tname
+                        c.Inductive.cname
+                    ])
           | _ ->
               Error.type_error
                 [ Error.txtf "match has more than one branch for %s.%s" tname

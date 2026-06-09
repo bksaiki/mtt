@@ -151,7 +151,9 @@ remains is below.
             the fields with the recursive constructors' IHs bound to `_` — so it
             is **case analysis, not recursion** (recursion stays explicit via
             `T.rec`). Forward-only sugar (prints back as the recursor).
-      - [ ] wildcard `_` patterns and a catch-all branch
+      - [x] wildcard `_` field patterns (bind a field anonymously) and a
+            trailing `| _ => b` catch-all branch (covers the unlisted
+            constructors, fields bound to `_`; must be last and bind nothing)
       - [ ] the equation compiler proper: nested / multiple / overlapping
             patterns → nested single-level `.rec` calls
       - [ ] dependent (convoy) matching on **indexed** families: motive and

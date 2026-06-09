@@ -23,6 +23,25 @@ def not (b : Bool) : Bool :=
 #eval not Bool.true
 #eval not (not Bool.false)
 
+-- a [_] field pattern binds a field anonymously; a trailing [| _ => b] branch is
+-- a catch-all covering every unlisted constructor (its fields bound to [_]).
+def isZero (n : Nat) : Nat :=
+  match n with
+  | zero => 1
+  | succ _ => 0
+  end
+
+inductive RGB : Type := | red : RGB | green : RGB | blue : RGB
+
+def isRed (c : RGB) : Nat :=
+  match c with
+  | red => 1
+  | _ => 0
+  end
+
+#eval isZero 0
+#eval isRed RGB.green
+
 -- a match on a binary sum; the parameters of the result injections are recovered
 axiom A : Type
 axiom B : Type
