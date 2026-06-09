@@ -1,14 +1,17 @@
 (* Bidirectional elaboration. [go ctx mode s] produces a core term for the
    surface term [s]; [mode] is the elaboration direction — [Infer] for a
    synthesizing position, [Check ty] when [s] is expected to have type [ty]. The
-   expected type drives every inference the surface syntax leaves implicit:
+   expected type drives the inference the surface syntax leaves implicit, e.g.:
    constructor applications may drop the leading parameters (recovered from the
-   expected inductive type); a surface hole [_] becomes a metavariable, solved
-   by unifying argument types during application (see {!Meta}); implicit binders
-   [{x : A}] are inserted as fresh metavariables before each explicit argument;
-   [x = y] infers the equality's type from the left side; and a hole motive on a
-   (non-indexed) recursor is synthesized by abstracting the scrutinee out of the
-   expected goal.
+   expected inductive type, or solved as metavariables from the fields); a
+   surface hole [_] becomes a metavariable, solved by unifying argument types
+   during application (see {!Meta}); implicit binders [{x : A}] are inserted as
+   fresh metavariables before an explicit argument and to coerce a
+   fully-implicit term against a non-implicit goal ([@f] suppresses both); [x =
+   y] infers the equality's type from the left side; [e.field] is a named
+   projection; and a hole motive on a (non-indexed) recursor is synthesized by
+   abstracting the scrutinee out of the expected goal. (The full account is in
+   [elab.mli].)
 
    The elaborator is untrusted: whatever it produces is re-checked by {!Check}
    (on meta-free, zonked core), so a bug here is a usability bug, not a
@@ -272,51 +275,61 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
               | None -> raise (Ast.Unbound_variable (s.loc, x)))
         in
         coerce_leaf ctx mode core
-    (* qualified access on an inductive *name* [T] (not shadowed by a local):
-       [T.rec] is its recursor, [T.c] one of its constructors. Otherwise [e.f]
-       is a named field projection on the record value [e]. *)
-    | Ast.Field ({ desc = Ast.Var tname; _ }, field)
-      when (not (List.mem tname ctx.Check.names))
-           && Option.is_some (Signature.find sg tname) -> (
-        let spec = Option.get (Signature.find sg tname) in
-        if String.equal field "rec" then
-          Type.Rec (Inductive.rec_head spec)
-        else
-          match
-            List.find_index
-              (fun (c : Inductive.ctor) -> String.equal c.cname field)
-              spec.Inductive.ctors
-          with
-          | Some i -> Type.Ctor (Inductive.ctor_head spec i)
-          | None -> raise (Ast.Unbound_variable (s.loc, tname ^ "." ^ field)))
-    (* a named field projection [e.f]: [e] is a record value, [f] one of its
-       single constructor's field names; resolves to the positional [Proj] *)
     | Ast.Field (e, field) -> (
-        let e' = go ctx Infer e in
-        match Meta.force !ms (elab_infer ctx e') with
-        | Value.VInd (name, _) -> (
-            let spec = Check.lookup_ind ctx name in
-            if not (Inductive.is_record spec) then
-              Error.type_error
-                [ Error.txtf
-                    "%s is not a record (single-constructor) type, so it has \
-                     no named field .%s"
-                    name field
-                ];
-            let ctor = List.hd spec.Inductive.ctors in
-            match
-              List.find_index
-                (fun (a : Inductive.arg) ->
-                  String.equal a.Inductive.aname field)
-                ctor.Inductive.fields
-            with
-            | Some i -> coerce_leaf ctx mode (Type.Proj (i, e'))
-            | None ->
-                Error.type_error [ Error.txtf "%s has no field .%s" name field ]
-            )
-        | _ ->
-            Error.type_error
-              [ Error.txtf "the projection .%s expects a record value" field ])
+        (* qualified access on an inductive *name* [T] (not shadowed by a
+           local): [T.rec] is its recursor, [T.c] one of its constructors.
+           Otherwise [e.f] is a named field projection on the record value
+           [e]. *)
+        let qualified =
+          match e.Ast.desc with
+          | Ast.Var t when not (List.mem t ctx.Check.names) ->
+              Signature.find sg t
+          | _ -> None
+        in
+        match qualified with
+        | Some spec -> (
+            if String.equal field "rec" then
+              Type.Rec (Inductive.rec_head spec)
+            else
+              match
+                List.find_index
+                  (fun (c : Inductive.ctor) -> String.equal c.cname field)
+                  spec.Inductive.ctors
+              with
+              | Some i -> Type.Ctor (Inductive.ctor_head spec i)
+              | None ->
+                  raise
+                    (Ast.Unbound_variable
+                       (s.loc, spec.Inductive.name ^ "." ^ field)))
+        | None -> (
+            (* a named field projection: [field] is one of [e]'s single
+               constructor's field names, resolving to the positional [Proj] *)
+            let e' = go ctx Infer e in
+            match Meta.force !ms (elab_infer ctx e') with
+            | Value.VInd (name, _) -> (
+                let spec = Check.lookup_ind ctx name in
+                if not (Inductive.is_record spec) then
+                  Error.type_error
+                    [ Error.txtf
+                        "%s is not a record (single-constructor) type, so it \
+                         has no named field .%s"
+                        name field
+                    ];
+                let ctor = List.hd spec.Inductive.ctors in
+                match
+                  List.find_index
+                    (fun (a : Inductive.arg) ->
+                      String.equal a.Inductive.aname field)
+                    ctor.Inductive.fields
+                with
+                | Some i -> coerce_leaf ctx mode (Type.Proj (i, e'))
+                | None ->
+                    Error.type_error
+                      [ Error.txtf "%s has no field .%s" name field ])
+            | _ ->
+                Error.type_error
+                  [ Error.txtf "the projection .%s expects a record value" field
+                  ]))
     | Ast.Sort i -> Type.Sort i
     | Ast.Pi (i, x, a, b) ->
         let a' = go ctx Infer a in
