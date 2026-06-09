@@ -144,7 +144,24 @@ app_term:
   | f = app_term; a = atom { Ast.mk $loc (Ast.App (f, a)) }
   | t = atom { t }
 
+(* an atom is a projection chain, optionally prefixed by [@]. Splitting [@] off
+   from the projection level ([proj_atom]) keeps it unambiguous: [@] always takes
+   a whole projection chain, so [@T.rec] is [@(T.rec)] — no shift/reduce against
+   the postfix projections. *)
 atom:
+  | a = proj_atom { a }
+  (* [@f] makes every argument explicit (no implicit insertion for this head) *)
+  | AT; a = proj_atom { Ast.mk $loc (Ast.At a) }
+
+(* postfix projections bind tightest: [f p.1] is [f (p.1)] *)
+proj_atom:
+  | p = proj_atom; FST { Ast.mk $loc (Ast.Fst p) }
+  | p = proj_atom; SND { Ast.mk $loc (Ast.Snd p) }
+  (* a named projection: the recursor [Nat.rec], or a record field [p.fst] *)
+  | e = proj_atom; f = DOTID { Ast.mk $loc (Ast.Field (e, f)) }
+  | a = base_atom { a }
+
+base_atom:
   (* a bare [_] is an elaboration hole; any other identifier is a variable *)
   | x = ID
     { Ast.mk $loc (if String.equal x "_" then Ast.Hole else Ast.Var x) }
@@ -153,8 +170,6 @@ atom:
   | TYPE { Ast.mk $loc (Ast.Sort 1) }
   | PROP { Ast.mk $loc (Ast.Sort 0) }
   | REFL { Ast.mk $loc Ast.Refl }
-  (* [@f] makes every argument explicit (no implicit insertion for this head) *)
-  | AT; e = atom { Ast.mk $loc (Ast.At e) }
   (* a decimal literal; expands to the registered nat's succ/zero in to_term *)
   | n = INT { Ast.mk $loc (Ast.Numeral n) }
   (* () is the unit element, like OCaml; whitespace between the parens is
@@ -169,10 +184,5 @@ atom:
         | [] -> assert false
       in
       build (t :: ts) }
-  (* postfix projections bind tightest: f p.1 is f (p.1) *)
-  | p = atom; FST { Ast.mk $loc (Ast.Fst p) }
-  | p = atom; SND { Ast.mk $loc (Ast.Snd p) }
-  (* a named projection, e.g. the recursor [Nat.rec] *)
-  | e = atom; f = DOTID { Ast.mk $loc (Ast.Field (e, f)) }
   | LPAREN; t = term; COLON; a = term; RPAREN
     { Ast.mk $loc (Ast.Ascribe (t, a)) }
