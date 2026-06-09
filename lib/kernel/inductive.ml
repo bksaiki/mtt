@@ -6,25 +6,36 @@
 type arg =
   { aname : string (* the field's binder name (display only) *)
   ; aty : Type.t (* its type, in the context [params, earlier fields] *)
-  ; recursive : bool (* whether [aty] is the inductive's own type [T params] *)
+  ; recursive : Type.t list option
+        (* [None] if not recursive; [Some idxs] if [aty] is the inductive's own
+           type [Ind params idxs], recording the index instances [idxs] (in the
+           context [params, earlier fields]) *)
   }
 
-(* a constructor records only its *fields* (the parameters are shared and live
-   on the spec); its result is always [T params] *)
+(* a constructor records its *fields* (the parameters are shared and live on the
+   spec) and the index instances of its result [Ind params result_indices] (in
+   the context [params, fields]); for a non-indexed type [result_indices] is
+   empty and the result is just [Ind params] *)
 type ctor =
   { cname : string
   ; fields : arg list
+  ; result_indices : Type.t list
   }
 
 type spec =
   { name : string
   ; params :
       (string * Type.t) list (* the parameter telescope (x1:P1)...(xm:Pm) *)
-  ; sort : int (* the result sort: [T params : Sort sort] *)
+  ; indices : (string * Type.t) list
+        (* the index telescope (i1:I1)...(ik:Ik), in the context [params]; empty
+           for a non-indexed type *)
+  ; sort : int (* the result sort: [T params indices : Sort sort] *)
   ; ctors : ctor list
   }
 
 let nparams spec = List.length spec.params
+
+let nindices spec = List.length spec.indices
 
 (* the skeleton (see {!Type.ctor_head}) of the [i]-th constructor *)
 let ctor_head spec i =
@@ -36,19 +47,32 @@ let ctor_head spec i =
   ; nparams = nparams spec
   }
 
-(* a record is a single-constructor inductive with no recursive fields; it gets
-   field projections and definitional η *)
+(* a record is a single-constructor, non-recursive, *non-indexed* inductive; it
+   gets field projections and definitional η. Indexed families (e.g. [Eq]) are
+   excluded: their [VInd] spine carries indices, which the record-η path would
+   mistake for parameters. *)
 let is_record spec =
   match spec.ctors with
-  | [ c ] -> List.for_all (fun a -> not a.recursive) c.fields
+  | [ c ] ->
+      spec.indices = []
+      && List.for_all (fun a -> Option.is_none a.recursive) c.fields
   | _ -> false
 
 (* the skeleton (see {!Type.rec_head}) of the recursor *)
 let rec_head spec =
   { Type.rind = spec.name
   ; nparams = nparams spec
+  ; nindices = nindices spec
   ; recs =
-      List.map (fun c -> List.map (fun a -> a.recursive) c.fields) spec.ctors
+      List.map
+        (fun c ->
+          List.map
+            (fun a ->
+              match a.recursive with
+              | None -> Type.Nonrec
+              | Some idxs -> Type.Recursive idxs)
+            c.fields)
+        spec.ctors
   }
 
 (* [apply spec depth] is the inductive applied to its parameters as variables,
@@ -65,22 +89,31 @@ let apply spec depth =
   in
   go (Type.Ind spec.name) 0
 
-(* wrap [body] in the parameter telescope as Π binders (parameters are always
-   explicit) *)
-let pi_params spec body =
+(* wrap [body] in a telescope of explicit Π binders *)
+let pi_telescope tele body =
   List.fold_right
-    (fun (x, pty) acc -> Type.Pi (Type.Explicit, x, pty, acc))
-    spec.params body
+    (fun (x, ty) acc -> Type.Pi (Type.Explicit, x, ty, acc))
+    tele body
 
-(* the type former's type: [(params) -> Sort sort] *)
-let former_type spec = pi_params spec (Type.Sort spec.sort)
+(* wrap [body] in the parameter telescope (parameters are always explicit) *)
+let pi_params spec body = pi_telescope spec.params body
 
-(* the [i]-th constructor's type: [(params) -> (fields) -> Ind params]. Field
-   types are stored in the context [params, earlier fields], which is exactly
-   where their Π binders sit, so no shifting is needed. *)
+(* the type former's type: [(params) -> (indices) -> Sort sort] *)
+let former_type spec =
+  pi_params spec (pi_telescope spec.indices (Type.Sort spec.sort))
+
+(* the [i]-th constructor's type: [(params) -> (fields) -> Ind params
+   result_indices]. Field types are stored in the context [params, earlier
+   fields], which is exactly where their Π binders sit, so no shifting is
+   needed; the result's index instances live in [params, fields]. *)
 let ctor_type spec i =
   let c = List.nth spec.ctors i in
-  let result = apply spec (nparams spec + List.length c.fields) in
+  let result =
+    List.fold_left
+      (fun acc idx -> Type.App (acc, idx))
+      (apply spec (nparams spec + List.length c.fields))
+      c.result_indices
+  in
   pi_params spec
     (List.fold_right
        (fun a acc -> Type.Pi (Type.Explicit, a.aname, a.aty, acc))

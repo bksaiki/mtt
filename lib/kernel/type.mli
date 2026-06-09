@@ -14,16 +14,6 @@ type ctor_head =
   ; nparams : int  (** leading parameters, so a projection can skip them *)
   }
 
-(** The skeleton of a recursor, enough to drive ι. [recs] has one entry per
-    constructor; each flags, for that constructor's {e fields} (its
-    non-parameter arguments), which are recursive. Parameters are shared and
-    never recursive, so they are excluded. *)
-type rec_head =
-  { rind : string  (** the inductive being eliminated; prints as ["rind.rec"] *)
-  ; nparams : int  (** leading parameter arguments, shared and fixed *)
-  ; recs : bool list list
-  }
-
 (** A binder's visibility. An [Explicit] [(x : A)] argument is supplied at every
     application; an [Implicit] [{x : A}] one is inserted automatically by the
     elaborator. The kernel carries this on {!Pi}/{!Lam} but ignores it in
@@ -54,12 +44,36 @@ type t =
           [p : Eq A x y] at motive [P : Π (y : A) ⇒ Eq A x y → Sort j], given
           the diagonal case [d : P x refl]; yields [P y p] *)
   | Ind of string
-      (** an inductive type former, applied to its parameters via [App] *)
+      (** an inductive type former, applied to its parameters then indices via
+          [App] *)
   | Ctor of ctor_head
       (** an inductive constructor, applied to its arguments via [App] *)
   | Rec of rec_head
-      (** an inductive's recursor, applied to parameters, motive, minor premises
-          and the major premise via [App] *)
+      (** an inductive's recursor, applied to parameters, motive, minor
+          premises, index arguments and the major premise via [App] *)
+
+(** The skeleton of a recursor, enough to drive ι without the signature. [recs]
+    has one entry per constructor (in order), each listing that constructor's
+    {e fields} (its non-parameter arguments) and which are recursive. Parameters
+    are shared and never recursive, so they are excluded. For an indexed family
+    the recursor's spine is [params @ motive :: minors @ indices @ [major]]:
+    [nindices] index arguments sit just before the major, and a recursive field
+    records the index instances it sits at (so ι forms the induction hypothesis
+    at the right indices). *)
+and rec_head =
+  { rind : string  (** the inductive being eliminated; prints as ["rind.rec"] *)
+  ; nparams : int  (** leading parameter arguments, shared and fixed *)
+  ; nindices : int  (** index arguments, between the minors and the major *)
+  ; recs : field_rec list list
+  }
+
+(** whether a constructor field is recursive, and if so the index instances of
+    its type [Ind params indices] — terms in the context
+    [params, earlier fields], which ι evaluates against the constructor's actual
+    arguments *)
+and field_rec =
+  | Nonrec
+  | Recursive of t list
 
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool

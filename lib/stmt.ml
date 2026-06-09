@@ -61,7 +61,12 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
                n)"
           ]
   in
-  let provisional = { Inductive.name = d.iname; params; sort; ctors = [] } in
+  (* the surface still declares only non-indexed types ([indices = []]); the
+     kernel supports indexed families, but parsing an index telescope and the
+     constructors' result indices is a later phase *)
+  let provisional =
+    { Inductive.name = d.iname; params; indices = []; sort; ctors = [] }
+  in
   let sg = Signature.add provisional sg in
   let m = List.length params in
   (* a field/result at depth [d] is recursive iff it is the inductive applied to
@@ -80,7 +85,14 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
           match (ty : Type.t) with
           | Pi (_, x, a, b) ->
               let fields, result = decompose (j + 1) b in
-              ( { Inductive.aname = x; aty = a; recursive = is_self (m + j) a }
+              ( { Inductive.aname = x
+                ; aty = a
+                ; recursive =
+                    (if is_self (m + j) a then
+                       Some []
+                     else
+                       None)
+                }
                 :: fields
               , result )
           | result -> ([], result)
@@ -94,10 +106,10 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
                 "constructor %s must construct %s applied to its parameters"
                 cname d.iname
             ];
-        { Inductive.cname; fields })
+        { Inductive.cname; fields; result_indices = [] })
       d.ictors
   in
-  { Inductive.name = d.iname; params; sort; ctors }
+  { Inductive.name = d.iname; params; indices = []; sort; ctors }
 
 let run (sess : session) stmt =
   let ctx = sess.ctx in

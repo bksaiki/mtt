@@ -112,7 +112,8 @@ let register role spec n =
         Error.type_error [ Error.txt "the nat notation is already registered" ];
       (match spec.Inductive.ctors with
       | [ { Inductive.fields = []; _ }; { Inductive.fields = [ f ]; _ } ]
-        when Inductive.nparams spec = 0 && f.Inductive.recursive ->
+        when Inductive.nparams spec = 0 && Option.is_some f.Inductive.recursive
+        ->
           ()
       | _ ->
           Error.type_error

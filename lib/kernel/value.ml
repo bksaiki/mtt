@@ -67,9 +67,11 @@ and apply f a =
   | VCtor (h, args) -> VCtor (h, args @ [ a ])
   | VRec (h, args) ->
       let args = args @ [ a ] in
-      (* params, then the motive, one minor premise per constructor, the
-         major *)
-      let needed = h.Type.nparams + 1 + List.length h.Type.recs + 1 in
+      (* params, the motive, one minor premise per constructor, the index
+         arguments, then the major *)
+      let needed =
+        h.Type.nparams + 1 + List.length h.Type.recs + h.Type.nindices + 1
+      in
       if List.length args < needed then
         VRec (h, args)
       else
@@ -95,6 +97,10 @@ and vrec h args =
     | [] -> assert false
   in
   let minors, rest = split_at (List.length h.Type.recs) rest in
+  (* the index arguments sit between the minors and the major; ι ignores them
+     (they are determined by the constructor), but they must be split off, and a
+     stuck recursion keeps them in its frame *)
+  let indices, rest = split_at h.Type.nindices rest in
   let major =
     match rest with
     | [ m ] -> m
@@ -106,24 +112,28 @@ and vrec h args =
       let recs = List.nth h.Type.recs ch.Type.cindex in
       (* drop the leading parameters: the minor premise abstracts only fields *)
       let _, fields = split_at h.Type.nparams cargs in
-      let rec go acc fields recs =
+      (* [seen] accumulates the field values already consumed (newest first); a
+         recursive field's recorded index expressions are evaluated against
+         [seen, params] to form the induction hypothesis at the right indices *)
+      let rec go acc seen fields recs =
         match (fields, recs) with
         | [], [] -> acc
-        | f :: fs, r :: rs ->
+        | f :: fs, fr :: rs ->
             let acc = apply acc f in
             let acc =
-              if r then
-                (* the induction hypothesis: the recursor on the recursive
-                   field *)
-                apply acc (vrec h (params @ (motive :: minors) @ [ f ]))
-              else
-                acc
+              match fr with
+              | Type.Nonrec -> acc
+              | Type.Recursive idx_exprs ->
+                  let env = seen @ List.rev params in
+                  let idx_vals = List.map (eval env) idx_exprs in
+                  apply acc
+                    (vrec h (params @ (motive :: minors) @ idx_vals @ [ f ]))
             in
-            go acc fs rs
+            go acc (f :: seen) fs rs
         | _ -> assert false
       in
-      go minor fields recs
-  | Neutral n -> Neutral (Rec (h, params @ (motive :: minors), n))
+      go minor [] fields recs
+  | Neutral n -> Neutral (Rec (h, params @ (motive :: minors) @ indices, n))
   | _ -> assert false
 
 (* the [i]-th field projection of a record: on a constructor, the matching
