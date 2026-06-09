@@ -82,10 +82,7 @@ let rec lift d c (t : Type.t) : Type.t =
   | Type.Lam (ic, x, a, b) -> Type.Lam (ic, x, lift d c a, lift d (c + 1) b)
   | Type.App (f, a) -> Type.App (lift d c f, lift d c a)
   | Type.Proj (i, e) -> Type.Proj (i, lift d c e)
-  | Type.Eq (a, x, y) -> Type.Eq (lift d c a, lift d c x, lift d c y)
-  | Type.J (p, dd, pr) -> Type.J (lift d c p, lift d c dd, lift d c pr)
   | Type.Sort _
-  | Type.Refl
   | Type.Ind _
   | Type.Ctor _
   | Type.Rec _
@@ -115,10 +112,7 @@ let abstract needle t =
       | Type.Lam (ic, x, a, b) -> Type.Lam (ic, x, go k a, go (k + 1) b)
       | Type.App (f, a) -> Type.App (go k f, go k a)
       | Type.Proj (i, e) -> Type.Proj (i, go k e)
-      | Type.Eq (a, x, y) -> Type.Eq (go k a, go k x, go k y)
-      | Type.J (p, d, pr) -> Type.J (go k p, go k d, go k pr)
       | Type.Sort _
-      | Type.Refl
       | Type.Ind _
       | Type.Ctor _
       | Type.Rec _
@@ -191,13 +185,6 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                 (Value.eval ctx.Check.env e)
                 i
           | _ -> assert false)
-      | Type.J (p, _, pr) -> (
-          match Meta.force !ms (elab_infer ctx pr) with
-          | Value.Eq (_, _, vy) ->
-              Value.apply
-                (Value.apply (Value.eval ctx.Check.env p) vy)
-                (Value.eval ctx.Check.env pr)
-          | _ -> assert false)
       | _ -> Check.infer ctx t
   and sort_of_ty ctx a =
     match Meta.force !ms (elab_infer ctx a) with
@@ -211,6 +198,20 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
     | None ->
         Error.type_error
           [ Error.txt "Σ/× requires the sigma notation to be registered" ]
+  in
+  (* the inductive registered for the [eq] role, that [x = y] / [refl] / [J]
+     desugar to (its former, the [refl] constructor, and the recursor) *)
+  let eq_spec () =
+    match notation.Notation.eq with
+    | Some name -> (
+        match Signature.find sg name with
+        | Some spec -> spec
+        | None ->
+            Error.type_error
+              [ Error.txt "the eq notation names an unknown inductive" ])
+    | None ->
+        Error.type_error
+          [ Error.txt "=, refl and J require the eq notation to be registered" ]
   in
   let rec go (ctx : Check.ctx) mode (s : Ast.t) : Type.t =
     match s.desc with
@@ -268,12 +269,40 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
        pair underneath — [(a, b).1] — still reaches the elaborator *)
     | Ast.Fst t -> Type.Proj (0, go ctx Infer t)
     | Ast.Snd t -> Type.Proj (1, go ctx Infer t)
-    (* [x = y] is [Eq A x y] with [A] inferred from [x]: synthesize [x]'s type,
-       use it as the equality's type, and check [y] against it *)
+    (* [x = y] is the registered equality former [Eq A x y] with [A] inferred
+       from [x]: synthesize [x]'s type, then apply the former to it, [x], and
+       [y] (checked at that type) *)
     | Ast.EqInfix (x, y) ->
+        let spec = eq_spec () in
         let x' = go ctx Infer x in
         let tx = Meta.force !ms (elab_infer ctx x') in
-        Type.Eq (Value.quote ctx.Check.lvl tx, x', go ctx (Check tx) y)
+        List.fold_left
+          (fun f a -> Type.App (f, a))
+          (Type.Ind spec.Inductive.name)
+          [ Value.quote ctx.Check.lvl tx; x'; go ctx (Check tx) y ]
+    (* [refl] is the equality's nullary constructor with its parameters [(A, x)]
+       recovered from the expected equality type; the kernel re-check enforces
+       that the equation's two endpoints actually coincide *)
+    | Ast.Refl -> (
+        let spec = eq_spec () in
+        match mode with
+        | Check e -> (
+            match Meta.force !ms e with
+            | Value.VInd (name, p0 :: p1 :: _)
+              when String.equal name spec.Inductive.name ->
+                List.fold_left
+                  (fun f a -> Type.App (f, a))
+                  (Type.Ctor (Inductive.ctor_head spec 0))
+                  [ Value.quote ctx.Check.lvl p0; Value.quote ctx.Check.lvl p1 ]
+            | _ ->
+                Error.type_error
+                  [ Error.txt "refl: an equality type was expected here" ])
+        | Infer ->
+            Error.type_error
+              [ Error.txt
+                  "cannot infer the type of refl; ascribe it (e.g. (refl : x = \
+                   x))"
+              ])
     (* a hole becomes a fresh metavariable; in checking position its type is the
        expected one, and unification (at the surrounding application) solves it.
        In inference position there is nothing to determine it. *)
@@ -330,53 +359,60 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                   (fun core x -> Type.App (core, x))
                   (Type.Ctor mk)
                   [ Value.quote ctx.Check.lvl ta; bfun; a'; b' ]))
-    (* the equality/J/Σ/×/+ formers contain arbitrary subterms (a J motive, a Σ
-       body) that may themselves use surface sugar like [x = y]; those subterms
-       must elaborate through [go], not {!Ast.to_term} (which is type-free and
-       chokes on an inferred form). We assemble the same core [to_term]
-       would. *)
-    | Ast.Eq (a, x, y) ->
-        Type.Eq (go ctx Infer a, go ctx Infer x, go ctx Infer y)
-    (* a hole motive in checking position is inferred by abstracting the proof's
-       (second) endpoint out of the goal — based path induction's motive [P : Π
-       (z : A) ⇒ Eq A x z → Sort] with [P y p ≡ goal] *)
-    | Ast.J ({ desc = Ast.Hole; _ }, d, pr) when mode <> Infer -> (
-        let g =
-          match mode with
-          | Check g -> Meta.force !ms g
-          | Infer -> assert false
-        in
+    (* [J motive d pr] is the equality recursor [Eq.rec] (based path induction):
+       from [pr : Eq A x y] recover [A], [x], [y], and produce [Eq.rec A x
+       motive d y pr]. The motive [(z : A) -> Eq A x z -> Sort] is exactly
+       Eq.rec's, so a hole motive is inferred by abstracting the endpoint [y]
+       out of the goal, just as for any recursor's motive. *)
+    | Ast.J (motive_ast, d, pr) -> (
+        let spec = eq_spec () in
+        let name = spec.Inductive.name in
         let pr_core = go ctx Infer pr in
         match Meta.force !ms (elab_infer ctx pr_core) with
-        | Value.Eq (a, x, y) ->
+        | Value.VInd (n, [ a; x; y ]) when String.equal n name ->
             let lvl = ctx.Check.lvl in
             let a_c = Value.quote lvl a
             and x_c = Value.quote lvl x
-            and y_c = Value.quote lvl y
-            and g_c = Value.quote lvl g in
-            (* [λ z ⇒ λ q ⇒ goal[y ↦ z]]: abstract [y] (one binder, [z]), then
-               lift over the unused proof binder [q] *)
-            let body = lift 1 0 (abstract y_c g_c) in
-            let qty = Type.Eq (lift 1 0 a_c, lift 1 0 x_c, Type.Var 0) in
+            and y_c = Value.quote lvl y in
             let motive =
-              Type.Lam
-                ( Type.Explicit
-                , "z"
-                , a_c
-                , Type.Lam (Type.Explicit, "q", qty, body) )
+              match (motive_ast.Ast.desc, mode) with
+              | Ast.Hole, Check g ->
+                  let g_c = Value.quote lvl (Meta.force !ms g) in
+                  (* [λ z ⇒ λ q ⇒ goal[y ↦ z]]: abstract [y] (binder [z]), then
+                     lift over the unused proof binder [q] *)
+                  let body = lift 1 0 (abstract y_c g_c) in
+                  let qty =
+                    List.fold_left
+                      (fun f a -> Type.App (f, a))
+                      (Type.Ind name)
+                      [ lift 1 0 a_c; lift 1 0 x_c; Type.Var 0 ]
+                  in
+                  Type.Lam
+                    ( Type.Explicit
+                    , "z"
+                    , a_c
+                    , Type.Lam (Type.Explicit, "q", qty, body) )
+              | Ast.Hole, Infer ->
+                  Error.type_error
+                    [ Error.txt
+                        "cannot infer the J motive in inference position; \
+                         write it out"
+                    ]
+              | _ -> go ctx Infer motive_ast
             in
             (* the diagonal proves [P x refl]; check [d] against it *)
             let pmot = Value.eval ctx.Check.env motive in
-            let d_ty = Value.apply (Value.apply pmot x) Value.Refl in
-            Type.J (motive, go ctx (Check d_ty) d, pr_core)
+            let refl_val = Value.VCtor (Inductive.ctor_head spec 0, [ a; x ]) in
+            let d_ty = Value.apply (Value.apply pmot x) refl_val in
+            let d_core = go ctx (Check d_ty) d in
+            (* Eq.rec params(A, x) motive minors(d) indices(y) major(pr) *)
+            List.fold_left
+              (fun f arg -> Type.App (f, arg))
+              (Type.Rec (Inductive.rec_head spec))
+              [ a_c; x_c; motive; d_core; y_c; pr_core ]
         | _ ->
             Error.type_error
-              [ Error.txt
-                  "cannot infer the J motive: the proof's type is not an \
-                   equality"
-              ])
-    | Ast.J (p, d, pr) ->
-        Type.J (go ctx Infer p, go ctx Infer d, go ctx Infer pr)
+              [ Error.txt "J: the proof's type is not an equality" ])
     | Ast.Sum (a, b) -> (
         match notation.Notation.sum with
         | Some name ->
@@ -407,60 +443,79 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
   and elab_app ctx mode s : Type.t =
     let head, args = peel s in
     match classify_head sg head with
-    (* a recursor is motive-polymorphic; produce its core structurally and let
-       the kernel's bespoke rule type the saturated spine *)
-    | Rec rh -> (
-        let m = rh.Type.nparams in
+    (* a recursor application. The minors and major are elaborated in *checking*
+       position (against their derived types), so check-only forms — a [refl]
+       base case, a constructor major — work; a hole motive on a non-indexed
+       recursor is inferred by abstracting the major out of the goal. *)
+    | Rec rh ->
+        let spec = Check.lookup_ind ctx rh.Type.rind in
+        let m = rh.Type.nparams and nidx = rh.Type.nindices in
+        let nmin = List.length rh.Type.recs in
         let n = List.length args in
-        let saturated = n = m + 1 + List.length rh.Type.recs + 1 in
-        let motive_is_hole =
-          match List.nth_opt args m with
-          | Some { desc = Ast.Hole; _ } -> true
-          | _ -> false
-        in
-        match mode with
-        (* a hole motive on a saturated recursor in checking position is
-           inferred by abstracting the major premise out of the goal: [P := λ (x
-           : T params) ⇒ goal[major ↦ x]]. Restricted to non-indexed families:
-           an indexed motive abstracts the indices too, which this does not yet
-           do, so an indexed recursor's motive must be written out. *)
-        | Check g when saturated && motive_is_hole && rh.Type.nindices = 0 ->
-            let g = Meta.force !ms g in
-            let param_asts = List.filteri (fun i _ -> i < m) args in
-            let minor_asts =
-              List.filteri (fun i _ -> i > m && i < n - 1) args
-            in
-            let major_ast = List.nth args (n - 1) in
-            let param_cores = List.map (go ctx Infer) param_asts in
-            let param_vals = List.map (Value.eval ctx.Check.env) param_cores in
-            let t_val =
-              List.fold_left Value.apply
-                (Value.VInd (rh.Type.rind, []))
-                param_vals
-            in
-            let t_c =
-              List.fold_left
-                (fun c p -> Type.App (c, p))
-                (Type.Ind rh.Type.rind) param_cores
-            in
-            let major_core = go ctx (Check t_val) major_ast in
-            let lvl = ctx.Check.lvl in
-            let major_nf =
-              Value.quote lvl (Value.eval ctx.Check.env major_core)
-            in
-            let motive =
-              Type.Lam
-                (Type.Explicit, "x", t_c, abstract major_nf (Value.quote lvl g))
-            in
-            let minor_cores = List.map (go ctx Infer) minor_asts in
-            List.fold_left
-              (fun core a -> Type.App (core, a))
-              (Type.Rec rh)
-              (param_cores @ [ motive ] @ minor_cores @ [ major_core ])
-        | _ ->
-            List.fold_left
-              (fun core a -> Type.App (core, go ctx Infer a))
-              (Type.Rec rh) args)
+        if n <> m + 1 + nmin + nidx + 1 then
+          (* not saturated: produce structurally and let the kernel report it *)
+          List.fold_left
+            (fun core a -> Type.App (core, go ctx Infer a))
+            (Type.Rec rh) args
+        else
+          let param_asts = List.filteri (fun i _ -> i < m) args in
+          let motive_ast = List.nth args m in
+          let minor_asts =
+            List.filteri (fun i _ -> i > m && i <= m + nmin) args
+          in
+          let index_asts =
+            List.filteri (fun i _ -> i > m + nmin && i < n - 1) args
+          in
+          let major_ast = List.nth args (n - 1) in
+          let param_cores = List.map (go ctx Infer) param_asts in
+          let pvals = List.map (Value.eval ctx.Check.env) param_cores in
+          let index_cores = List.map (go ctx Infer) index_asts in
+          let ivals = List.map (Value.eval ctx.Check.env) index_cores in
+          let major_core =
+            go ctx
+              (Check
+                 (List.fold_left Value.apply
+                    (Value.VInd (rh.Type.rind, []))
+                    (pvals @ ivals)))
+              major_ast
+          in
+          let motive_core =
+            match (motive_ast.Ast.desc, mode) with
+            (* infer a non-indexed recursor's hole motive by abstracting the
+               major out of the goal: [P := λ (x : T params) ⇒ goal[major ↦ x]].
+               An indexed motive abstracts the indices too (not done here), so
+               an indexed recursor's motive must be written out. *)
+            | Ast.Hole, Check g when nidx = 0 ->
+                let lvl = ctx.Check.lvl in
+                let t_c =
+                  List.fold_left
+                    (fun c p -> Type.App (c, p))
+                    (Type.Ind rh.Type.rind) param_cores
+                in
+                let major_nf =
+                  Value.quote lvl (Value.eval ctx.Check.env major_core)
+                in
+                Type.Lam
+                  ( Type.Explicit
+                  , "x"
+                  , t_c
+                  , abstract major_nf (Value.quote lvl (Meta.force !ms g)) )
+            | _ -> go ctx Infer motive_ast
+          in
+          let pmot = Value.eval ctx.Check.env motive_core in
+          let minor_cores =
+            List.mapi
+              (fun i ma ->
+                go ctx (Check (Check.minor_type ctx spec pvals pmot i)) ma)
+              minor_asts
+          in
+          List.fold_left
+            (fun core a -> Type.App (core, a))
+            (Type.Rec rh)
+            (param_cores
+            @ (motive_core :: minor_cores)
+            @ index_cores
+            @ [ major_core ])
     | Ctor (spec, h) -> (
         let nfields = h.Type.carity - h.Type.nparams in
         (* checked against its own inductive with the parameters omitted:

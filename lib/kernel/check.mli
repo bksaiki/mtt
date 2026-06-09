@@ -155,6 +155,13 @@ val lookup_ind : ctx -> string -> Inductive.spec
 *)
 val field_type : Inductive.spec -> Value.t list -> Value.t -> int -> Value.t
 
+(** [minor_type ctx spec pvals pmot i] is the type of the [i]-th constructor's
+    minor premise in a recursor on [spec], given the parameter values [pvals]
+    and motive value [pmot]. (Exposed so the elaborator can check a recursor's
+    minor premises — e.g. a [refl] base case — in checking position.) *)
+val minor_type :
+  ctx -> Inductive.spec -> Value.t list -> Value.t -> int -> Value.t
+
 (** [check_inductive ctx spec] validates an inductive declaration: kind-checks
     the parameter telescope and each constructor's field types, and enforces
     strict positivity (the inductive may appear only as a direct recursive

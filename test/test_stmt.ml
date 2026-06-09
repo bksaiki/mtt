@@ -261,8 +261,8 @@ let%expect_test "implicit arguments: insertion and inference" =
     {|
     0 : Nat
     fun {A : Type} => fun (x : A) => x : {A : Type} -> A -> A
-    J (fun (z : Nat) => fun (q : 1 = z) => z = 1) refl e : 1 = 1
-    J (fun (z : Nat) => fun (q : 1 = z) => 2 = Nat.succ z) refl e : 2 = 2
+    Eq.rec Nat 1 (fun (z : Nat) => fun (q : 1 = z) => z = 1) refl 1 e : 1 = 1
+    Eq.rec Nat 1 (fun (z : Nat) => fun (q : 1 = z) => 2 = Nat.succ z) refl 1 e : 2 = 2
     dup : {A : Type} -> A -> A
     |}]
 
@@ -295,7 +295,7 @@ let%expect_test "motive inference for J and recursors" =
     refl : 0 = 0
     azr 3 : 3 = 3
     6
-    type error: cannot infer the type of a hole _; use it where its type is determined
+    type error: cannot infer the J motive in inference position; write it out
     |}]
 
 (* Σ is the prelude record [Sigma]: pairs check against it (recovering the
@@ -400,13 +400,14 @@ let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
     {|
     fun (x : A) =>
     fun (y : A) =>
-    fun (p : x = y) => J (fun (z : A) => fun (q : x = z) => z = x) refl p : (x : A) -> (y : A) -> x = y -> y = x
+    fun (p : x = y) =>
+    Eq.rec A x (fun (z : A) => fun (q : x = z) => z = x) refl y p : (x : A) -> (y : A) -> x = y -> y = x
     fun (P : A -> Type) =>
     fun (x : A) =>
     fun (y : A) =>
     fun (p : x = y) =>
-    fun (h : P x) => J (fun (z : A) => fun (q : x = z) => P z) h p : (P : A -> Type) -> (x : A) -> (y : A) -> x = y -> P x -> P y
-    J (fun (z : A) => fun (q' : a = z) => z = a) refl q : b = a
+    fun (h : P x) => Eq.rec A x (fun (z : A) => fun (q : x = z) => P z) h y p : (P : A -> Type) -> (x : A) -> (y : A) -> x = y -> P x -> P y
+    Eq.rec A a (fun (z : A) => fun (q' : a = z) => z = a) refl b q : b = a
     |}]
 
 let%expect_test "constructor parameters may be omitted in checking position" =

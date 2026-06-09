@@ -57,9 +57,6 @@ let imax i j =
 (* the fresh variable for going under a binder *)
 let fresh ctx = Value.Neutral (Value.Var ctx.lvl)
 
-(* a J motive [p] applied to an endpoint [y] and a proof [pr], i.e. [P y pr] *)
-let motive_at p y pr = Value.apply (Value.apply p y) pr
-
 (* builds a dependent function type [Π (name : aval) ⇒ B] as a value, where the
    codomain is computed by [k] given the extended context and the bound
    variable's value. The quote/eval round-trip handles the de Bruijn
@@ -150,11 +147,6 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       | Value.VInd (name, params) ->
           field_type (lookup_ind ctx name) params (Value.Neutral n) i
       | _ -> assert false)
-  (* J P d p : P y p; recover y from the stuck proof's type Eq A x y *)
-  | Value.J (p, _, n) -> (
-      match infer_neutral ctx n with
-      | Value.Eq (_, _, y) -> motive_at p y (Value.Neutral n)
-      | _ -> assert false)
   (* T.rec params P minors major : P major; the motive sits after the params in
      the recorded pre-major spine *)
   | Value.Rec (h, pre, n) ->
@@ -168,7 +160,6 @@ let rec sort_of ctx (ty : Value.t) : int =
   | Value.Pi (_, x, a, c) ->
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
       imax (sort_of ctx a) j
-  | Value.Eq _ -> 0 (* Eq : Prop *)
   | Value.Neutral n -> (
       match infer_neutral ctx n with
       | Value.Sort i -> i
@@ -178,8 +169,7 @@ let rec sort_of ctx (ty : Value.t) : int =
   (* not types *)
   | Value.VCtor _
   | Value.VRec _
-  | Value.Lam _
-  | Value.Refl ->
+  | Value.Lam _ ->
       assert false
 
 (* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
@@ -246,10 +236,6 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
       let v = fresh ctx in
       conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
         (Value.apply_closure c2 v)
-  (* equality: invariant in the type, and the endpoints are compared at it.
-     (Both are Prop, so cumulativity adds nothing.) *)
-  | Value.Eq (a1, x1, y1), Value.Eq (a2, x2, y2) ->
-      conv_ty ~cumul:false ctx a1 a2 && conv ctx a1 x1 x2 && conv ctx a1 y1 y2
   (* an inductive type former is invariant in its parameters and indices: same
      name, and arguments convertible along the combined (instantiated) telescope
      (the index types may mention the parameters, which [conv_params]
@@ -308,26 +294,6 @@ and conv_neutral ctx n1 n2 : Value.t option =
       | Some (Value.VInd (name, params)) ->
           Some (field_type (lookup_ind ctx name) params (Value.Neutral m1) i1)
       | _ -> None)
-  (* stuck J: the proofs are equality proofs (a Prop), so by irrelevance only
-     their *types* must agree (giving equal endpoints); then compare motives
-     extensionally and the diagonal cases *)
-  | Value.J (p1, d1, n1), Value.J (p2, d2, n2) -> (
-      match (infer_neutral ctx n1, infer_neutral ctx n2) with
-      | (Value.Eq (a, x, y) as t1), t2 ->
-          let yv = fresh ctx in
-          let ctx1 = bind "y" a ctx in
-          let pv = fresh ctx1 in
-          let ctx2 = bind "p" (Value.Eq (a, x, yv)) ctx1 in
-          if
-            conv_ty ~cumul:false ctx t1 t2
-            && conv_ty ~cumul:false ctx2 (motive_at p1 yv pv)
-                 (motive_at p2 yv pv)
-            && conv ctx (motive_at p1 x Value.Refl) d1 d2
-          then
-            Some (motive_at p1 y (Value.Neutral n1))
-          else
-            None
-      | _ -> assert false)
   (* stuck inductive recursion: the recorded pre-major spine is [params @ motive
      :: minors @ indices], each part compared along the inductive's
      telescopes *)
@@ -497,81 +463,6 @@ let rec infer ctx t =
             ; Error.txt " has type "
             ; vl ctx ty
             ])
-  (* (Eq): propositional equality is a proposition *)
-  | Type.Eq (a, x, y) ->
-      let _ = infer_univ ctx a in
-      let va = Value.eval ctx.env a in
-      check ctx x va;
-      check ctx y va;
-      Value.Sort 0
-  (* refl does not determine its endpoints: it is checked, not inferred *)
-  | Type.Refl ->
-      Error.type_error
-        [ Error.txt
-            "cannot infer the type of refl: ascribe it, e.g. (refl : Eq A x x)"
-        ]
-  (* (J): based path induction. The motive abstracts over the endpoint and the
-     proof; the diagonal proves it for [refl]. No large-elimination restriction
-     — Eq is a single-constructor subsingleton (like Empty), so eliminating into
-     any sort is sound. *)
-  | Type.J (p, d, pr) -> (
-      match infer ctx pr with
-      | Value.Eq (va, vx, vy) ->
-          (* validate the motive P : Π (y : A) ⇒ Eq A x y → Sort *)
-          (match infer ctx p with
-          | Value.Pi (_, _, dom1, c1) -> (
-              if not (conv_ty ~cumul:false ctx dom1 va) then
-                Error.type_error
-                  [ Error.txt "the motive should take an endpoint of type "
-                  ; vl ctx va
-                  ; Error.txt ", but takes "
-                  ; vl ctx dom1
-                  ];
-              let yv = fresh ctx in
-              let ctx1 = bind "y" va ctx in
-              match Value.apply_closure c1 yv with
-              | Value.Pi (_, _, dom2, c2) -> (
-                  let expected = Value.Eq (va, vx, yv) in
-                  if not (conv_ty ~cumul:false ctx1 dom2 expected) then
-                    Error.type_error
-                      [ Error.txt "the motive should take a proof of "
-                      ; vl ctx1 expected
-                      ; Error.txt ", but takes "
-                      ; vl ctx1 dom2
-                      ];
-                  match Value.apply_closure c2 (fresh ctx1) with
-                  | Value.Sort _ -> ()
-                  | cod ->
-                      Error.type_error
-                        [ Error.txt "the motive must land in a sort, not "
-                        ; vl ctx1 cod
-                        ])
-              | cod ->
-                  Error.type_error
-                    [ Error.txt
-                        "the motive must also take the equality proof, but its \
-                         body is "
-                    ; vl ctx1 cod
-                    ])
-          | ty ->
-              Error.type_error
-                [ Error.txt "expected a motive, but "
-                ; tm ctx p
-                ; Error.txt " has type "
-                ; vl ctx ty
-                ]);
-          let vp = Value.eval ctx.env p in
-          (* the diagonal proves P x refl *)
-          check ctx d (motive_at vp vx Value.Refl);
-          (* result: P y p *)
-          motive_at vp vy (Value.eval ctx.env pr)
-      | ty ->
-          Error.type_error
-            [ Error.txt "expected an equality proof, but "
-            ; tm ctx pr
-            ; Error.txt " has type "
-            ; vl ctx ty
-            ])
   (* an inductive type former and its constructors have fixed (non-polymorphic)
      types derived from the declaration; they ride the normal (App) machinery *)
   | Type.Ind name -> Value.eval [] (Inductive.former_type (lookup_ind ctx name))
@@ -736,15 +627,6 @@ and check ctx t expected =
           ];
       check (bind x va ctx) b
         (Value.apply_closure c (Value.Neutral (Value.Var ctx.lvl)))
-  (* (Refl): reflexivity proves x = y exactly when x ≡ y *)
-  | Type.Refl, Value.Eq (va, vx, vy) ->
-      if not (conv ctx va vx vy) then
-        Error.type_error
-          [ Error.txt "refl requires the sides to be equal, but "
-          ; vl ctx vx
-          ; Error.txt " is not "
-          ; vl ctx vy
-          ]
   (* subsumption: infer and compare up to definitional equality (βδη plus proof
      irrelevance) and cumulativity *)
   | _ ->

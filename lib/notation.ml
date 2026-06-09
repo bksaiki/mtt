@@ -3,9 +3,11 @@ type t =
   ; nat : (Type.ctor_head * Type.ctor_head) option
   ; sigma : Type.ctor_head option
   ; sum : string option
+  ; eq : string option (* the inductive registered for [x = y] / refl / J *)
   }
 
-let empty = { unit_ctor = None; nat = None; sigma = None; sum = None }
+let empty =
+  { unit_ctor = None; nat = None; sigma = None; sum = None; eq = None }
 
 (* renders a subterm as surface notation, or None to let the kernel print it
    plainly: the unit constructor as [()], a succ-chain as a decimal, an applied
@@ -41,12 +43,17 @@ let sugar n ~recurse names term =
   in
   match term with
   | Type.Ctor h when n.unit_ctor = Some h -> Some (11, "()")
-  (* the native equality prints infix, with its type argument dropped: [Eq A x
-     y] → [x = y] (non-associative, looser than + and ×, tighter than ->) *)
-  | Type.Eq (_, x, y) ->
-      Some (2, Printf.sprintf "%s = %s" (recurse 3 names x) (recurse 3 names y))
   | _ -> (
       match peel term with
+      (* the registered equality former [Eq A x y] prints infix, dropping its
+         type argument: [x = y] (non-associative, looser than + and ×, tighter
+         than ->) *)
+      | Type.Ind name, [ _A; x; y ] when n.eq = Some name ->
+          Some
+            (2, Printf.sprintf "%s = %s" (recurse 3 names x) (recurse 3 names y))
+      (* the equality's constructor [Eq.rfl A x] prints as the bare [refl],
+         dropping its recovered parameters *)
+      | Type.Ctor h, [ _A; _x ] when n.eq = Some h.Type.ind -> Some (11, "refl")
       (* an applied [Sigma] former: dependent → [Σ (x : A) ⇒ B], else → [A ×
          B] *)
       | Type.Ind name, [ a; Type.Lam (_, x, _, b) ]
@@ -153,8 +160,23 @@ let register role spec n =
                  single-field constructors"
             ]);
       { n with sum = Some spec.Inductive.name }
+  | "eq" ->
+      if n.eq <> None then
+        Error.type_error [ Error.txt "the eq notation is already registered" ];
+      (match spec.Inductive.ctors with
+      | [ { Inductive.fields = []; _ } ]
+        when Inductive.nparams spec = 2 && Inductive.nindices spec = 1 ->
+          ()
+      | _ ->
+          Error.type_error
+            [ Error.txt
+                "@[notation eq] needs a two-parameter, one-index inductive \
+                 with a single nullary constructor (refl)"
+            ]);
+      { n with eq = Some spec.Inductive.name }
   | _ ->
       Error.type_error
         [ Error.txtf
-            "unknown notation role %s (expected: unit, nat, sigma, sum)" role
+            "unknown notation role %s (expected: unit, nat, sigma, sum, eq)"
+            role
         ]

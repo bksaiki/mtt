@@ -6,15 +6,16 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 `inductive.ml`/`signature.ml`); everything here is checked, not elaborated.
 
 - [ ] Local `let` expressions
-- [~] Indexed inductive families: the motive abstracts over the indices and the
+- [x] Indexed inductive families: the motive abstracts over the indices and the
       target, the recursor's spine carries index arguments before the major, and
       its ι rule recovers each recursive field's indices (baked into the
-      `rec_head` skeleton) to form the induction hypothesis. *Kernel + surface
-      done* (`inductive Vec (A : Type) : Nat -> Type := …`, see `examples/vec.mtt`
-      and `docs/indexed-inductives-plan.md`); non-indexed types are the
-      `indices = []` case. Remaining: retire `Eq` into a prelude indexed
-      inductive (`Eq.rec` = `J`), the last builtin. Motive inference does not yet
-      cover indexed recursors (their motive must be written out)
+      `rec_head` skeleton) to form the induction hypothesis (see `design.md`,
+      Inductive types). Non-indexed types are the `indices = []` case; surface
+      `inductive Vec (A : Type) : Nat -> Type := …` (see `examples/vec.mtt`).
+      This retired the last builtin: `Eq` is now a prelude indexed inductive
+      whose recursor is `J` (below). Motive inference does not yet cover indexed
+      recursors (their motive must be written out); `J`/`refl` are still surface
+      sugar, but a stuck `J` now prints as its core `Eq.rec`
 - [ ] Mutual and nested inductives
 - [ ] Full strict positivity: accept strictly-positive function-typed recursive
       arguments (`(Nat -> T) -> T`); currently only direct recursive fields
@@ -26,13 +27,13 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 - [ ] Universe polymorphism (level-polymorphic defs; see questions.md); also
       needed for inductive `Sum`/`Σ`/`Eq` to form at the max of their
       components' levels rather than one fixed level
-- [~] Replace the inductively-describable builtins: move them into
+- [x] Replace the inductively-describable builtins: move them into
       `std/prelude.mtt` as `inductive` declarations and delete their
       `Type.t`/`Value.t` constructors, eval/quote/conv/infer cases, and lexer
-      keywords — collapsing the kernel to Sort/Pi/Lam/App/Var/Ind/Ctor/Rec
-      (`Π`/`Sort` stay primitive), with the current builtin tests as the
-      regression spec. Order and prerequisites below; `Sum`/`Σ`/`Eq`
-      introductions are gated on the elaborator.
+      keywords. **Done** — the kernel is now collapsed to
+      `Sort`/`Π`/`λ`/`App`/`Var`/`Ind`/`Ctor`/`Rec` (the generic inductive
+      machinery), with the former builtin tests as the regression spec. Each
+      retired builtin below.
       - [x] `Empty` (pilot): `inductive Empty : Prop`, `absurd` a prelude def
             over `Empty.rec`; generic recursor conversion now respects
             Prop-scrutinee irrelevance
@@ -68,7 +69,16 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
             over the universe (`Σ (A : Type) ⇒ A`) or a proof-irrelevant pair of
             Props (`p × q : Prop`) no longer forms — that needs universe
             polymorphism (above), as does a Prop-level `And`
-      - [ ] `Eq` (needs indexed families, above)
+      - [x] `Eq`: a prelude indexed inductive
+            `inductive Eq (A : Type) (x : A) : A -> Prop := | rfl : Eq A x x`
+            with `@[notation eq]`; `x = y` is the applied former (type inferred),
+            `refl` its constructor (parameters recovered, printed back as `refl`),
+            and `J` its recursor `Eq.rec` (based path induction, endpoints
+            recovered from the proof, motive inferred). Deleted the
+            `Eq`/`Refl`/`J` core+value nodes, `vj`, and their
+            eval/quote/conv/infer cases — the last builtin gone. **Fixed at
+            `Type`** like `Σ`/`Sum`: equality *of types* (`Unit = Unit`) no longer
+            forms, pending universe polymorphism
 
 ## Elaborator (type-directed surface → core)
 
@@ -140,19 +150,20 @@ remains is below.
         `nat` demands `zero`/`succ`, …), so a malformed or duplicate binding is
         rejected. *Done for the `unit` and `nat` roles* (`@[notation unit]`/
         `@[notation nat]`, the `@[ ]` attribute surface, one-shot + shape
-        check). *Done for `unit`/`nat`/`sigma`/`sum`*. `=` is handled directly
-        (not via a role) while `Eq` is still a kernel builtin; it moves to an
-        `eq` role when `Eq` becomes an inductive.
+        check). *Done for all roles: `unit`/`nat`/`sigma`/`sum`/`eq`* (the `eq`
+        role registers the equality inductive, now that `Eq` is no longer a
+        builtin — see the Eq removal above).
       - **forward** (parser/`to_term`/`Elab`): `()`→`Unit.unit` *(done)*,
         `2`→`succ (succ zero)` *(done)*, `A × B`/`Σ`/`+` → the registered
-        inductive applied *(done)*; `x = y` → `Eq _ x y` (type inferred) *(done,
-        via `Ast.EqInfix` in the elaborator)*
+        inductive applied *(done)*; `x = y` → the `Eq` former (type inferred),
+        `refl` → its constructor, `J` → its recursor *(done, in `Elab`)*
       - **reverse** (a **delaborator** — the elaborator's mirror, core → surface;
         for now realized as the kernel printer parameterized by a generic
         notation config, not a separate rewriter): the registered unit ctor →
         `()` *(done)*, succ-chains of the registered `Nat` → decimals *(done)*,
         applied `Sigma`/`Sum` formers → infix `×`/`Σ`/`+` and tuples *(done)*;
-        `Eq A x y` → infix `x = y` *(done)*
+        applied `Eq` former → infix `x = y` and its constructor → `refl`
+        *(done)* (a stuck `Eq.rec`, i.e. `J`, still prints in full)
       - the kernel printer stays **faithful/plain** (`Unit.unit`,
         `Nat.succ (… Nat.zero)`, qualified ctors); the delaborator applies sugar
         in the frontend. This forces a decision on error messages: either accept

@@ -59,8 +59,20 @@ def absurd (A : Type) (h : Empty) : A := Empty.rec _ h
 -- applies to data as well as propositions
 def not (A : Type) := A → Empty
 
--- === Equality === (each lemma is one J; the motive is a hole `_`, inferred by
--- abstracting the proof's endpoint out of the goal)
+-- === Equality ===
+
+-- propositional equality as an indexed inductive family: the first endpoint is
+-- a parameter, the second an index, and the sole constructor `rfl` proves
+-- `Eq A x x`. Its recursor *is* J (based path induction), so the surface forms
+-- `x = y` / `refl` / `J` are sugar for this inductive (the `@[notation eq]`
+-- role). It is the last builtin retired into the prelude — the kernel now knows
+-- only Sort/Π/λ/App/Var and the generic inductive machinery.
+@[notation eq]
+inductive Eq (A : Type) (x : A) : A -> Prop :=
+| rfl : Eq A x x
+
+-- each lemma is one J; the motive is a hole `_`, inferred by abstracting the
+-- proof's endpoint out of the goal.
 
 -- congruence: equal arguments give equal images. The types and endpoints are
 -- implicit ({…}) — the elaborator recovers them from the equality proof — so a

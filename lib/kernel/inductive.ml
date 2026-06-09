@@ -128,14 +128,10 @@ let rec occurs name (t : Type.t) =
   | Rec h -> String.equal h.rind name
   | Var _
   | Sort _
-  | Meta _
-  | Refl ->
+  | Meta _ ->
       false
   | Proj (_, a) -> occurs name a
   | Pi (_, _, a, b)
   | Lam (_, _, a, b) ->
       occurs name a || occurs name b
   | App (a, b) -> occurs name a || occurs name b
-  | Eq (a, b, c)
-  | J (a, b, c) ->
-      occurs name a || occurs name b || occurs name c

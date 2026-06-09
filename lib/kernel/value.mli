@@ -8,8 +8,6 @@ type t =
   | Sort of int
   | Pi of Type.icit * string * t * closure
   | Lam of Type.icit * string * t * closure
-  | Eq of t * t * t
-  | Refl
   | VInd of string * t list
       (** an inductive type former applied to its parameters: a type once
           complete, a type-returning function while partial *)
@@ -27,8 +25,6 @@ and neutral =
   | Meta of int  (** a metavariable head (by id), flexible until solved *)
   | App of neutral * t
   | Proj of int * neutral  (** a stuck record field projection *)
-  | J of t * t * neutral
-      (** a stuck J: motive, diagonal case, stuck equality proof *)
   | Rec of Type.rec_head * t list * neutral
       (** a stuck inductive recursion: the recursor skeleton, the arguments
           before the major ([params @ motive :: minors]), and the stuck major *)

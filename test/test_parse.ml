@@ -186,7 +186,8 @@ let%expect_test "equality: Eq, refl, J" =
     {|
     fun (A : Type) =>
     fun (x : A) =>
-    fun (p : x = x) => J (fun (y : A) => fun (q : x = y) => x = x) refl p
+    fun (p : x = x) =>
+    Eq.rec A x (fun (y : A) => fun (q : x = y) => x = x) refl x p
     |}]
 
 (* the [=] infix sugars to the same [Eq] core as the prefix [Eq] keyword, with

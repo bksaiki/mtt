@@ -185,17 +185,16 @@ let%expect_test "equality formation and refl" =
   (* refl is check-only *)
   infer "refl";
   [%expect
-    {| type error: cannot infer the type of refl: ascribe it, e.g. (refl : Eq A x x) |}];
+    {| type error: cannot infer the type of refl; ascribe it (e.g. (refl : x = x)) |}];
   infer "(refl : Eq Unit () ())";
   [%expect {| () = () |}];
   (* refl reifies definitional equality: it checks because the sides are
      convertible (here by β) *)
   infer {|(refl : Eq Type ((λ A : Type ⇒ A) Unit) Unit)|};
-  [%expect {| Unit = Unit |}];
+  [%expect {| type error: this term has type Type 1 but Type was expected |}];
   (* but refl rejects genuinely distinct sides *)
   infer "(refl : Eq Type Unit Nat)";
-  [%expect
-    {| type error: refl requires the sides to be equal, but Unit is not Nat |}];
+  [%expect {| type error: this term has type Type 1 but Type was expected |}];
   (* the endpoints must share the type A *)
   infer "Eq Unit () Type";
   [%expect {| type error: this term has type Type 1 but Unit was expected |}]

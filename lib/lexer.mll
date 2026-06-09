@@ -29,7 +29,6 @@ rule token = parse
   | "Type" [' ' '\t']+ (digits as n) { TYPELEVEL (int_of_string n) }
   | "Type" { TYPE }
   | "Prop" { PROP }
-  | "Eq" { EQ }
   | "refl" { REFL }
   | "J" { J }
   | "prelude" { PRELUDE }

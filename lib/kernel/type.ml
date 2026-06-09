@@ -27,9 +27,6 @@ type t =
   | Proj of int * t (* x.(i+1): the i-th field projection of a record *)
   | Meta of
       int (* a metavariable, by id; elaboration-only, never in final core *)
-  | Eq of t * t * t (* Eq A x y: propositional equality of x, y : A *)
-  | Refl (* the reflexivity proof; check-only *)
-  | J of t * t * t (* J P d p: eliminates p : Eq A x y at motive P *)
   | Ind of
       string (* an inductive type former, applied to params/indices via App *)
   | Ctor of ctor_head (* a constructor, applied to args via App *)
@@ -68,9 +65,6 @@ let rec occurs k = function
   (* a metavariable carries no de Bruijn index of its own; its dependencies ride
      the enclosing [App] spine *)
   | Meta _ -> false
-  | Eq (a, x, y) -> occurs k a || occurs k x || occurs k y
-  | Refl -> false
-  | J (p, d, pr) -> occurs k p || occurs k d || occurs k pr
   (* inductive heads are closed: they carry no de Bruijn indices, only the
      skeleton; any arguments ride along as App nodes *)
   | Ind _
@@ -84,7 +78,6 @@ let rec has_meta = function
   | Meta _ -> true
   | Var _
   | Sort _
-  | Refl
   | Ind _
   | Ctor _
   | Rec _ ->
@@ -94,9 +87,6 @@ let rec has_meta = function
   | Lam (_, _, a, b) ->
       has_meta a || has_meta b
   | App (a, b) -> has_meta a || has_meta b
-  | Eq (a, b, c)
-  | J (a, b, c) ->
-      has_meta a || has_meta b || has_meta c
 
 (* makes the hint [x] distinct from every name in scope *)
 let freshen names x =
@@ -193,15 +183,6 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
             Format.fprintf fmt "@[%a@ %a@]" (go 10 names) f (go 11 names) a)
     | Proj (i, t) -> Format.fprintf fmt "%a.%d" (go 11 names) t (i + 1)
     | Meta n -> Format.fprintf fmt "?%d" n
-    | Eq (a, x, y) ->
-        paren_if fmt (prec > 10) (fun fmt ->
-            Format.fprintf fmt "@[Eq@ %a@ %a@ %a@]" (go 11 names) a
-              (go 11 names) x (go 11 names) y)
-    | Refl -> Format.pp_print_string fmt "refl"
-    | J (p, d, pr) ->
-        paren_if fmt (prec > 10) (fun fmt ->
-            Format.fprintf fmt "@[J@ %a@ %a@ %a@]" (go 11 names) p (go 11 names)
-              d (go 11 names) pr)
     (* inductive heads are atoms; their arguments print via the enclosing App
        nodes (so [Nat.rec P z s n] renders through application). Constructors
        and the recursor print qualified by their type; surface sugar like [()]

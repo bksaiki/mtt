@@ -2,8 +2,6 @@ type t =
   | Sort of int
   | Pi of Type.icit * string * t * closure
   | Lam of Type.icit * string * t * closure
-  | Eq of t * t * t
-  | Refl
   (* an inductive type former applied to its parameters (a type once the
      parameters are complete; a type-returning function while partial) *)
   | VInd of string * t list
@@ -20,7 +18,6 @@ and neutral =
   | Meta of int (* a metavariable head, by id; flexible until solved *)
   | App of neutral * t
   | Proj of int * neutral (* a stuck record field projection *)
-  | J of t * t * neutral (* a stuck J: motive, diagonal, stuck proof *)
   | Rec of Type.rec_head * t list * neutral
 (* a stuck inductive recursion: the recursor skeleton, the arguments before the
    major ([params @ motive :: minors]), and the stuck major *)
@@ -46,9 +43,6 @@ let rec eval env t =
   | Type.Lam (i, x, a, b) -> Lam (i, x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
   | Type.Proj (i, t) -> vproj i (eval env t)
-  | Type.Eq (a, x, y) -> Eq (eval env a, eval env x, eval env y)
-  | Type.Refl -> Refl
-  | Type.J (p, d, pr) -> vj (eval env p) (eval env d) (eval env pr)
   (* inductive heads start empty and accumulate their arguments via [apply] *)
   | Type.Ind name -> VInd (name, [])
   | Type.Ctor h -> VCtor (h, [])
@@ -144,19 +138,9 @@ and vproj i = function
   | Neutral n -> Neutral (Proj (i, n))
   | _ -> assert false
 
-(* ι-reduction: J on refl picks the diagonal case; a stuck proof freezes the
-   whole elimination as a neutral frame *)
-and vj p d pr =
-  match pr with
-  | Refl -> d
-  | Neutral n -> Neutral (J (p, d, n))
-  | _ -> assert false
-
 let rec quote l v =
   match v with
   | Sort i -> Type.Sort i
-  | Eq (a, x, y) -> Type.Eq (quote l a, quote l x, quote l y)
-  | Refl -> Type.Refl
   | Pi (i, x, a, c) -> Type.Pi (i, x, quote l a, quote_closure l c)
   | Lam (i, x, a, c) -> Type.Lam (i, x, quote l a, quote_closure l c)
   | VInd (name, args) -> quote_spine l (Type.Ind name) args
@@ -179,7 +163,6 @@ and quote_neutral l = function
   | Meta i -> Type.Meta i
   | App (n, a) -> Type.App (quote_neutral l n, quote l a)
   | Proj (i, n) -> Type.Proj (i, quote_neutral l n)
-  | J (p, d, n) -> Type.J (quote l p, quote l d, quote_neutral l n)
   | Rec (h, pre, n) ->
       (* pre = params @ motive :: minors; the stuck major closes the spine *)
       Type.App (quote_spine l (Type.Rec h) pre, quote_neutral l n)

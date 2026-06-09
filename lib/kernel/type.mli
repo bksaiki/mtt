@@ -37,12 +37,6 @@ type t =
           resolved by unification, then zonked away — it never reaches the
           trusted check of final core. Its local dependencies ride the enclosing
           [App] spine ([?m a b] is [App (App (Meta m, a), b)]). *)
-  | Eq of t * t * t  (** [Eq A x y]: propositional equality of [x y : A] *)
-  | Refl  (** the reflexivity proof [refl : Eq A x x]; check-only *)
-  | J of t * t * t
-      (** [J (P, d, p)]: the eliminator (based path induction) — eliminates
-          [p : Eq A x y] at motive [P : Π (y : A) ⇒ Eq A x y → Sort j], given
-          the diagonal case [d : P x refl]; yields [P y p] *)
   | Ind of string
       (** an inductive type former, applied to its parameters then indices via
           [App] *)

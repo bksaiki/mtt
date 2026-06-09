@@ -82,10 +82,7 @@ let as_flex (v : Value.t) : (int * Value.t list) option =
 let scope_ok ms blvl m entry rhs =
   let rec ok lvl v =
     match force ms v with
-    | Value.Sort _
-    | Value.Refl ->
-        true
-    | Value.Eq (a, x, y) -> ok lvl a && ok lvl x && ok lvl y
+    | Value.Sort _ -> true
     | Value.Pi (_, _, a, c)
     | Value.Lam (_, _, a, c) ->
         ok lvl a
@@ -101,7 +98,6 @@ let scope_ok ms blvl m entry rhs =
     | Value.Meta m' -> m' <> m
     | Value.App (f, a) -> okn lvl f && ok lvl a
     | Value.Proj (_, f) -> okn lvl f
-    | Value.J (p, d, f) -> ok lvl p && ok lvl d && okn lvl f
     | Value.Rec (_, pre, f) -> List.for_all (ok lvl) pre && okn lvl f
   in
   ok entry rhs
@@ -132,8 +128,6 @@ and unify_rigid ms lvl v1 v2 =
       let ms = unify ms lvl a1 a2 in
       let v = Value.Neutral (Value.Var lvl) in
       unify ms (lvl + 1) (Value.apply_closure c1 v) (Value.apply_closure c2 v)
-  | Value.Eq (a1, x1, y1), Value.Eq (a2, x2, y2) ->
-      unify (unify (unify ms lvl a1 a2) lvl x1 x2) lvl y1 y2
   | Value.VInd (n1, as1), Value.VInd (n2, as2) when String.equal n1 n2 ->
       unify_args ms lvl as1 as2
   | Value.VCtor (h1, as1), Value.VCtor (h2, as2)
@@ -158,8 +152,6 @@ and unify_neutral ms lvl (n1 : Value.neutral) (n2 : Value.neutral) =
       unify (unify_neutral ms lvl f1 f2) lvl a1 a2
   | Value.Proj (i1, f1), Value.Proj (i2, f2) when i1 = i2 ->
       unify_neutral ms lvl f1 f2
-  | Value.J (p1, d1, f1), Value.J (p2, d2, f2) ->
-      unify_neutral (unify (unify ms lvl p1 p2) lvl d1 d2) lvl f1 f2
   | Value.Rec (h1, pre1, f1), Value.Rec (h2, pre2, f2)
     when String.equal h1.Type.rind h2.Type.rind ->
       unify_neutral (unify_args ms lvl pre1 pre2) lvl f1 f2
@@ -177,7 +169,6 @@ let rec zonk ms lvl (t : Type.t) : Type.t =
       | None -> t)
   | Type.Var _
   | Type.Sort _
-  | Type.Refl
   | Type.Ind _
   | Type.Ctor _
   | Type.Rec _ ->
@@ -186,5 +177,3 @@ let rec zonk ms lvl (t : Type.t) : Type.t =
   | Type.Pi (i, x, a, b) -> Type.Pi (i, x, zonk ms lvl a, zonk ms (lvl + 1) b)
   | Type.Lam (i, x, a, b) -> Type.Lam (i, x, zonk ms lvl a, zonk ms (lvl + 1) b)
   | Type.App (f, a) -> Type.App (zonk ms lvl f, zonk ms lvl a)
-  | Type.Eq (a, x, y) -> Type.Eq (zonk ms lvl a, zonk ms lvl x, zonk ms lvl y)
-  | Type.J (p, d, pr) -> Type.J (zonk ms lvl p, zonk ms lvl d, zonk ms lvl pr)

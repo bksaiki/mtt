@@ -1,11 +1,13 @@
 # Design
 
 A small dependent type theory in the Calculus of Constructions family: Π types
-and parameterized inductive types — with propositional equality still built in,
-and `Σ`/`Sum`/`Unit`/`Empty`/`Nat` now ordinary inductive declarations in the
-prelude — under an impredicative `Prop` and a predicative cumulative `Type`
-tower, checked bidirectionally with normalization by evaluation (NbE),
-type-directed conversion, and definitional proof irrelevance.
+and indexed inductive families — under an impredicative `Prop` and a predicative
+cumulative `Type` tower, checked bidirectionally with normalization by evaluation
+(NbE), type-directed conversion, and definitional proof irrelevance. The kernel
+has no built-in datatypes at all: `Unit`/`Empty`/`Nat`/`Σ`/`Sum`/`Eq` (with its
+recursor `J`) are ordinary inductive declarations in the prelude, leaving the
+trusted core just `Sort`/`Π`/`λ`/`App`/`Var` and the generic inductive machinery
+(`Ind`/`Ctor`/`Rec`).
 
 This file records *settled* decisions; open questions live in
 `questions.md`, agreed-on work in `todo.md`.
@@ -82,10 +84,10 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
   (a prelude record, `()` = `Unit.unit`) gets its η — and the dependent pair
   `Σ`/`(a,b)` is just the two-field case, so `p ≡ (p.1, p.2)` for neutral `p`
   falls out of the same rule.
-- **ι** — `case` on an injection picks the branch (`vcase`), `J` on `refl`
-  picks the diagonal (`vj`), and a recursor on a constructor picks the matching
-  minor premise (`vrec`), feeding each recursive field its induction hypothesis
-  (the recursor called on that field). These positive types have **no η**, so a
+- **ι** — a recursor on a constructor picks the matching minor premise (`vrec`),
+  feeding each recursive field its induction hypothesis (the recursor called on
+  that field, at the field's indices). This one rule covers every eliminator —
+  `Nat.rec`, `Sum.rec`, `J` (= `Eq.rec`), …. Positive types have **no η**, so a
   stuck eliminator equals only another with convertible parts.
 - **proof irrelevance** — at a type in `Prop`, any two values are equal
   (a one-line guard in `conv`, made possible by type direction); applies
@@ -116,38 +118,53 @@ large-elimination rule. That rule is general: a `Prop` inductive may eliminate
 into a larger sort only when it is a subsingleton (≤ 1 constructor, all fields
 proofs), so a `Type`-valued motive can never distinguish definitionally equal
 proofs (`examples/` has an `Or : Prop` that is rejected at large elimination).
-`Eq A x y : Prop` is the other side of that
-coin: a single-constructor subsingleton, so — like `Empty`/`absurd` — its
-eliminator `J` carries *no* restriction and may land in any sort (this is
-what lets `subst` transport between types). UIP holds definitionally for
-free: `Eq` is a `Prop`, so proof irrelevance already equates all of its
-proofs.
+Equality (`Eq A x y : Prop`, a prelude indexed inductive — see Inductive types)
+is the other side of that coin: a single-constructor subsingleton, so — like
+`Empty`/`absurd` — its recursor `Eq.rec` (which is `J`) carries *no* restriction
+and may land in any sort (this is what lets `subst` transport between types). UIP
+holds definitionally for free: `Eq` is a `Prop`, so proof irrelevance already
+equates all of its proofs.
 
 ## Inductive types
 
-`inductive T (params) : sort := | c : ty | ...` declares a parameterized
-inductive type (no indices yet). It generalizes what used to be the hardcoded
+`inductive T (params) : (indices) -> sort := | c : ty | ...` declares an indexed
+inductive family. Parameters are **fixed** across the definition (passed
+uniformly to the former, constructors, and recursor); indices **vary** per
+constructor result. It generalizes what used to be the hardcoded
 `Nat`/`zero`/`succ`/`natrec` quadruple (now itself a prelude inductive): a
 declaration introduces a type former (`Ind`), constructors (`Ctor`), and a
 recursor (`Rec`), all driven by the constructor signatures. These are mtt's
 first **global named constants** — a signature `Σ` (`signature.ml`) keyed by
 name, beside the de Bruijn context.
 
+- **Parameters vs. indices.** The former is `T : (params) -> (indices) -> sort`;
+  each constructor's *result* pins specific index values (`nil : Vec A 0`,
+  `cons : … -> Vec A (succ n)`), and a recursive field may sit at a *different*
+  index than the result. Everything that was "`Ind params`" for a parameterized
+  type becomes "`Ind params indices`"; a non-indexed type is the `indices = []`
+  case. See `examples/vec.mtt`.
 - **Representation.** The NbE core stays signature-free: the *computational
-  skeleton* (constructor index/arity and a per-constructor flag list marking
-  recursive fields) is baked into the `Ctor`/`Rec` syntax nodes — all `vrec`
-  (the generic ι-rule) needs. The full types (former, constructors, recursor)
-  are derived from the spec (`inductive.ml`) and consulted only by the
-  scope-checker and `infer`, which holds `Σ` in its context.
-- **Recursor.** Fully dependent: the motive is `P : T params → Sort`, with one
-  minor premise per constructor — a Π over the constructor's fields, an
-  induction hypothesis `P fⱼ` after each recursive field, concluding in
-  `P (c …)`. A recursor is motive-polymorphic, so (like `J`) it has no type as a
-  constant; `infer` types a saturated application as a bespoke rule.
+  skeleton* (constructor index/arity, and a per-constructor list flagging which
+  fields are recursive and, for each, the index instances it sits at) is baked
+  into the `Ctor`/`Rec` syntax nodes — all `vrec` (the generic ι-rule) needs.
+  The full types (former, constructors, recursor) are derived from the spec
+  (`inductive.ml`) and consulted only by the scope-checker and `infer`, which
+  holds `Σ` in its context.
+- **Recursor.** Fully dependent: the motive is `P : (indices) -> T params indices
+  -> Sort`, with one minor premise per constructor — a Π over the constructor's
+  fields, an induction hypothesis `P field_indices fⱼ` after each recursive
+  field, concluding in `P result_indices (c …)`. Its argument spine is `params @
+  motive :: minors @ indices @ [major]` (the index arguments just before the
+  major), and the result of an application is `P indices major`. To fire ι on a
+  recursive field, `vrec` evaluates that field's recorded index instances against
+  the constructor's actual arguments, forming the induction hypothesis at the
+  right indices (this is what the skeleton bakes in — keeping the NbE core
+  signature-free, as Lean bakes recursive calls into a recursor's rule). A
+  recursor is motive-polymorphic, so it has no type as a constant; `infer` types
+  a saturated application as a bespoke rule.
 - **Surface.** Parameters are explicit; constructors and the recursor are
-  qualified by their type (`Bool.true`, `Nat.succ`, `Nat.rec`), so constructor
-  names need only be unique within a type. (`Eq` is still reserved for the
-  remaining builtin.)
+  qualified by their type (`Bool.true`, `Nat.succ`, `Vec.rec`), so constructor
+  names need only be unique within a type.
 - **Records.** A single-constructor, non-recursive inductive is a record: it
   has positional field projections (`x.i`) and definitional η (see "η for
   records" above). Projections are a *primitive* node (`Proj`), not derived from
@@ -172,21 +189,27 @@ name, beside the de Bruijn context.
   infix `+`; its injections and eliminator are the *qualified* `Sum.inl`/
   `Sum.inr`/`Sum.rec` like any other inductive — the `inl`/`inr`/`case` keywords
   are gone — deleting the `Sum`/`Inl`/`Inr`/`Case` nodes, `vcase`, and their
-  machinery). Both `Σ` and `Sum` are **fixed at `Type`**: a Σ/sum over the
-  universe, or a proof-irrelevant pair/disjunction of Props, no longer forms,
-  pending universe polymorphism. The one remaining inductively-describable
-  builtin (`Eq`) follows; `todo.md` tracks the sequence and prerequisites (its
-  introduction is gated on the elaborator and indexed families).
+  machinery), and — the last one — `Eq` (a prelude **indexed** inductive
+  `Eq (A : Type) (x : A) : A → Prop := | rfl : Eq A x x` with `@[notation eq]`;
+  `x = y` is the applied former with the type inferred, `refl` its constructor
+  with parameters recovered, and `J` its recursor `Eq.rec` — based path induction
+  — with the endpoints recovered from the proof and the motive inferred; deleting
+  the `Eq`/`Refl`/`J` nodes, `vj`, and their cases). `Σ`/`Sum`/`Eq` are **fixed
+  at `Type`**: a Σ/sum over the universe, a proof-irrelevant pair/disjunction of
+  Props, or equality *of types* (`Unit = Unit`) no longer forms, pending universe
+  polymorphism. With `Eq` gone the kernel has **no built-in datatypes** — only
+  `Sort`/`Π`/`λ`/`App`/`Var` and `Ind`/`Ctor`/`Rec`.
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
-  only as a *direct* recursive field `T params`, never under an arrow or nested
-  (more conservative than full strict positivity, a later extension);
-  predicativity — a field's sort fits the inductive's, except for an
-  impredicative `Prop`; and the large-elimination restriction — a `Prop`
-  inductive eliminates into a larger sort only when it is a subsingleton (≤ 1
-  constructor, all fields proofs).
+  only as a *direct* recursive field `T params idxs` (never under an arrow or
+  nested, and never inside the `idxs` of such a field — more conservative than
+  full strict positivity, a later extension); predicativity — a field's sort
+  fits the inductive's, except for an impredicative `Prop`; and the
+  large-elimination restriction — a `Prop` inductive eliminates into a larger
+  sort only when it is a subsingleton (≤ 1 constructor, all fields proofs), which
+  is exactly what lets `Eq.rec`/`J` and `Empty.rec`/`absurd` land in any sort.
 
-See `examples/inductive.mtt`; deferred work (indices, mutual/nested, `open`,
-replacing the builtins) is tracked in `todo.md`.
+See `examples/inductive.mtt` and `examples/vec.mtt`; deferred work
+(mutual/nested, full strict positivity, `open`) is tracked in `todo.md`.
 
 ## Elaboration
 
@@ -235,22 +258,26 @@ type drives every inference the surface leaves implicit:
   partial application keeps its trailing implicit binders instead of spawning
   unsolvable metas. This is what lets `cong`/`sym`/`trans`/`subst` take their
   type/endpoint arguments implicitly (`cong f p`, `sym p`).
-- **`=` infix and motive inference.** `x = y` is `Eq A x y` with `A` synthesized
-  from the left side (a dedicated `eq_term` parser level, looser than `+`/`×` and
-  tighter than `→`; `:=` is the sole definition separator, freeing `=`). A hole
-  `_` in a motive position, in checking mode, is inferred by **occurrence
-  abstraction**: generalize the expected goal over the scrutinee — for `J`, the
-  proof's endpoint (`P := λ z q ⇒ goal[y↦z]`); for a recursor, the major premise
-  (`P := λ x ⇒ goal[major↦x]`). One `abstract`/`lift` primitive over core normal
-  forms suffices — no higher-order unifier or postponement, since in checking
-  position the goal is known up front.
+- **Equality sugar and motive inference.** `Eq` is a prelude inductive (see
+  Inductive types), so its surface forms desugar to it: `x = y` is the applied
+  former with `A` synthesized from the left side (a dedicated `eq_term` parser
+  level, looser than `+`/`×` and tighter than `→`; `:=` is the sole definition
+  separator, freeing `=`); `refl` is its constructor with the parameters
+  recovered from the expected type; `J P d p` is `Eq.rec` with the endpoints
+  recovered from `p`'s type. A hole `_` in a motive position, in checking mode,
+  is inferred by **occurrence abstraction**: generalize the expected goal over
+  the scrutinee — for `J`/`Eq.rec`, the proof's endpoint (`P := λ z q ⇒
+  goal[y↦z]`); for any other recursor, the major premise (`P := λ x ⇒
+  goal[major↦x]`). One `abstract`/`lift` primitive over core normal forms
+  suffices — no higher-order unifier or postponement, since in checking position
+  the goal is known up front. (A recursor's minors and major are elaborated in
+  checking position too, so a `refl` base case works.)
 
 A residual type-free `Ast.to_term` (scope resolution + notation, no types) still
 exists: it backs the inductive-declaration scope-check and the leaf surface forms
-the elaborator has no inference to do for (`()`, numerals, `refl`). It retires
-once the elaborator covers the last builtin forms. Remaining inference work
-(inference-position intros, named projections `x.field`, retiring `Eq`) is
-tracked in `todo.md`.
+the elaborator has no inference to do for (`()`, numerals). Remaining inference
+work that would retire it (inference-position intros, named projections
+`x.field`, an `@f` escape) is tracked in `todo.md`.
 
 ## Notation
 
@@ -261,12 +288,14 @@ opts an inductive into a notation **role** with an attribute,
 `()`), `nat` (a `zero`/`succ` pair, so decimal literals expand to succ-chains
 and the printer folds them back), `sigma` (a two-parameter record, so
 `Σ (x : A) ⇒ B` / `A × B` abbreviate the applied former and `(a, b)` its
-constructor), and `sum` (a two-parameter inductive, so `A + B` abbreviates the
-applied former). Only *symbolic* sugar lives here: a constructor that wants a
-short name keeps its qualified spelling instead (`Sum.inl`, `Sum.rec`, like
-`Nat.succ`), so `sum` registers only the `+` former. Registration is
-**one-shot** and **shape-checked**: the role demands a particular constructor
-shape, and a malformed or duplicate binding is a type error.
+constructor), `sum` (a two-parameter inductive, so `A + B` abbreviates the
+applied former), and `eq` (a two-parameter, one-index inductive, so `x = y`
+abbreviates the applied former and `refl` its constructor; its recursor is `J`).
+Only *symbolic* sugar lives here: a constructor that wants a short name keeps its
+qualified spelling instead (`Sum.inl`, `Sum.rec`, like `Nat.succ`), so `sum`
+registers only the `+` former. Registration is **one-shot** and
+**shape-checked**: the role demands a particular constructor shape, and a
+malformed or duplicate binding is a type error.
 
 **The kernel is notation-ignorant** — it never names `Unit`/`Nat` and holds no
 notation type at all. The registry lives entirely in the frontend (the
