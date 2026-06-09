@@ -19,7 +19,7 @@ type t =
             ([Sum.inl], [Sum.rec]), so they need no sugar. *)
   ; eq : string option
         (** the equality inductive, by name: an applied former [Eq A x y]
-            renders as [x = y] and its constructor [Eq.rfl A x] as [refl]. The
+            renders as [x = y] and its constructor [Eq.refl A x] as [rfl]. The
             recursor ([Eq.rec], i.e. [J]) is an ordinary qualified name. *)
   }
 

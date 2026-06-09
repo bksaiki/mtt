@@ -250,7 +250,7 @@ let%expect_test "implicit arguments: insertion and inference" =
          its full implicit type prints with braces *)
       "#check myid"
     ; (* the prelude's lemmas now take type/endpoints implicitly *)
-      "theorem e : Eq Nat 1 1 := refl"
+      "theorem e : Eq Nat 1 1 := rfl"
     ; "#check symm e"
     ; "#check cong (fun n : Nat => Nat.succ n) e"
     ; (* a standalone implicit function type round-trips through the printer *)
@@ -261,8 +261,8 @@ let%expect_test "implicit arguments: insertion and inference" =
     {|
     0 : Nat
     fun {A : Type} => fun (x : A) => x : {A : Type} -> A -> A
-    Eq.rec Nat 1 (fun (z : Nat) => fun (q : 1 = z) => z = 1) refl 1 e : 1 = 1
-    Eq.rec Nat 1 (fun (z : Nat) => fun (q : 1 = z) => 2 = Nat.succ z) refl 1 e : 2 = 2
+    Eq.rec Nat 1 (fun (z : Nat) => fun (q : 1 = z) => z = 1) rfl 1 e : 1 = 1
+    Eq.rec Nat 1 (fun (z : Nat) => fun (q : 1 = z) => 2 = Nat.succ z) rfl 1 e : 2 = 2
     dup : {A : Type} -> A -> A
     |}]
 
@@ -275,8 +275,8 @@ let%expect_test "motive inference for recursors" =
     [ (* abstract the major [n] out of the goal [add n 0 = n], recovering the
          motive [fun m => add m 0 = m] *)
       "theorem azr (n : Nat) : add n 0 = n :=\n\
-      \   Nat.rec _ refl (fun (k : Nat) (ih : add k 0 = k) => cong Nat.succ \
-       ih) n"
+      \   Nat.rec _ rfl (fun (k : Nat) (ih : add k 0 = k) => cong Nat.succ ih) \
+       n"
     ; "#check azr 3"
     ; (* a non-dependent goal: abstraction finds no occurrence, giving a
          constant motive (ordinary, non-dependent recursion) *)
@@ -300,8 +300,8 @@ let%expect_test "recursor parameters and indices recovered from the major" =
   session
     [ (* Eq.rec's A, x (params) and y (index) recovered from [p : x = y] *)
       "def symm (A : Type) (x y : A) (p : x = y) : y = x :="
-      ^ " Eq.rec _ _ (fun (z : A) (q : x = z) => z = x) refl _ p"
-    ; "#check_equal (symm Nat 0 0 refl) refl"
+      ^ " Eq.rec _ _ (fun (z : A) (q : x = z) => z = x) rfl _ p"
+    ; "#check_equal (symm Nat 0 0 rfl) rfl"
     ; (* an indexed family: Vec.rec's parameter [A] and length index recovered
          from the vector *)
       "inductive Vec (A : Type) : Nat -> Type := | vnil : Vec A 0 | vcons : (n \
@@ -335,7 +335,7 @@ let%expect_test "sigma: beta, eta, dependent pairs" =
     ; "#check_equal p.1 zero"
     ; (* a dependent pair, recovered by checking against the Σ; its second
          component's type mentions the first *)
-      "def package : Σ (n : Nat) ⇒ Eq Nat n n := (0, refl)"
+      "def package : Σ (n : Nat) ⇒ Eq Nat n n := (0, rfl)"
     ; "#check package.2"
     ; (* eta (surjective pairing) on a neutral pair *)
       "axiom q : N × N"
@@ -344,7 +344,7 @@ let%expect_test "sigma: beta, eta, dependent pairs" =
       "axiom r : Unit × Unit"
     ; "#check_equal r ((), ())"
     ];
-  [%expect {| refl : 0 = 0 |}]
+  [%expect {| rfl : 0 = 0 |}]
 
 (* the binary sum is the prelude inductive [Sum]: [+] is notation, the
    injections and eliminator are the qualified [Sum.inl]/[Sum.inr]/[Sum.rec].
@@ -390,7 +390,7 @@ let%expect_test "sums: iota, stuck recursions" =
     (fun (y : A) => Sum.inr A A y) t is not convertible with t
     |}]
 
-let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
+let%expect_test "equality: Eq.rec lemmas, iota, stuck recursion, UIP" =
   session
     [ "axiom A : Type"
     ; "axiom B : Type"
@@ -398,20 +398,20 @@ let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
     ; "axiom b : A"
     ; (* the standard lemmas, each one Eq.rec at a different motive *)
       "def sym (x y : A) (p : Eq A x y) : Eq A y x :="
-      ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ Eq A z x) refl y p"
+      ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ Eq A z x) rfl y p"
     ; "def trans (x y z : A) (p : Eq A x y) (q : Eq A y z) : Eq A x z :="
       ^ " Eq.rec A y (λ w : A ⇒ λ r : Eq A y w ⇒ Eq A x w) p z q"
     ; "def cong (f : A → B) (x y : A) (p : Eq A x y) : Eq B (f x) (f y) :="
-      ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl y p"
+      ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) rfl y p"
     ; (* subst is large elimination: the motive lands in Type *)
       "def subst (P : A → Type) (x y : A) (p : Eq A x y) (h : P x) : P y :="
       ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ P z) h y p"
     ; "#check sym"
     ; "#check subst"
-    ; (* ι: transport along refl is the identity, definitionally *)
+    ; (* ι: transport along rfl is the identity, definitionally *)
       "axiom P : A → Type"
     ; "axiom h : P a"
-    ; "#check_equal (subst P a a refl h) h"
+    ; "#check_equal (subst P a a rfl h) h"
     ; (* a stuck J (proof is a variable) is a neutral, equal to itself *)
       "axiom q : Eq A a b"
     ; "#check sym a b q"
@@ -425,13 +425,13 @@ let%expect_test "equality: J lemmas, iota, stuck J, UIP" =
     fun (x : A) =>
     fun (y : A) =>
     fun (p : x = y) =>
-    Eq.rec A x (fun (z : A) => fun (q : x = z) => z = x) refl y p : (x : A) -> (y : A) -> x = y -> y = x
+    Eq.rec A x (fun (z : A) => fun (q : x = z) => z = x) rfl y p : (x : A) -> (y : A) -> x = y -> y = x
     fun (P : A -> Type) =>
     fun (x : A) =>
     fun (y : A) =>
     fun (p : x = y) =>
     fun (h : P x) => Eq.rec A x (fun (z : A) => fun (q : x = z) => P z) h y p : (P : A -> Type) -> (x : A) -> (y : A) -> x = y -> P x -> P y
-    Eq.rec A a (fun (z : A) => fun (q' : a = z) => z = a) refl b q : b = a
+    Eq.rec A a (fun (z : A) => fun (q' : a = z) => z = a) rfl b q : b = a
     |}]
 
 let%expect_test "constructor parameters may be omitted in checking position" =
@@ -479,9 +479,9 @@ let%expect_test "Nat: computation by recursion, and induction" =
          so 0 + n = n holds by computation but n + 0 = n needs induction *)
       "def cong (A B : Type) (f : A → B) (x y : A) (p : Eq A x y)"
       ^ " : Eq B (f x) (f y) :="
-      ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl y p"
+      ^ " Eq.rec A x (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) rfl y p"
     ; "theorem add_zero (n : Nat) : Eq Nat (add n 0) n :="
-      ^ " Nat.rec (λ m : Nat ⇒ Eq Nat (add m 0) m) refl"
+      ^ " Nat.rec (λ m : Nat ⇒ Eq Nat (add m 0) m) rfl"
       ^ " (λ k : Nat ⇒ λ ih : Eq Nat (add k 0) k ⇒"
       ^ " cong Nat Nat (λ m : Nat ⇒ Nat.succ m) (add k 0) k ih) n"
     ; "#check add_zero"

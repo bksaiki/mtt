@@ -199,8 +199,8 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         Error.type_error
           [ Error.txt "Σ/× requires the sigma notation to be registered" ]
   in
-  (* the inductive registered for the [eq] role, that [x = y] / [refl] desugar
-     to (its former and the [refl] constructor; the recursor [Eq.rec] is an
+  (* the inductive registered for the [eq] role, that [x = y] / [rfl] desugar to
+     (its former and the [Eq.refl] constructor; the recursor [Eq.rec] is an
      ordinary qualified name, used directly) *)
   let eq_spec () =
     match notation.Notation.eq with
@@ -212,7 +212,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
               [ Error.txt "the eq notation names an unknown inductive" ])
     | None ->
         Error.type_error
-          [ Error.txt "= and refl require the eq notation to be registered" ]
+          [ Error.txt "= and rfl require the eq notation to be registered" ]
   in
   let rec go (ctx : Check.ctx) mode (s : Ast.t) : Type.t =
     match s.desc with
@@ -281,9 +281,9 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           (fun f a -> Type.App (f, a))
           (Type.Ind spec.Inductive.name)
           [ Value.quote ctx.Check.lvl tx; x'; go ctx (Check tx) y ]
-    (* [refl] is the equality's nullary constructor with its parameters [(A, x)]
-       recovered from the expected equality type; the kernel re-check enforces
-       that the equation's two endpoints actually coincide *)
+    (* [rfl] is the equality's nullary constructor (Eq.refl) with its parameters
+       [(A, x)] recovered from the expected equality type; the kernel re-check
+       enforces that the equation's two endpoints actually coincide *)
     | Ast.Refl -> (
         let spec = eq_spec () in
         match mode with
@@ -297,11 +297,11 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                   [ Value.quote ctx.Check.lvl p0; Value.quote ctx.Check.lvl p1 ]
             | _ ->
                 Error.type_error
-                  [ Error.txt "refl: an equality type was expected here" ])
+                  [ Error.txt "rfl: an equality type was expected here" ])
         | Infer ->
             Error.type_error
               [ Error.txt
-                  "cannot infer the type of refl; ascribe it (e.g. (refl : x = \
+                  "cannot infer the type of rfl; ascribe it (e.g. (rfl : x = \
                    x))"
               ])
     (* a hole becomes a fresh metavariable; in checking position its type is the
@@ -383,15 +383,15 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         Type.App
           ( Type.App (Type.Ind (sigma_form ()), a')
           , Type.Lam (Type.Explicit, "", a', body) )
-    (* the remaining leaf forms ([()], numerals, refl) carry no elaborable
-       subterm, so the type-free {!Ast.to_term} (with its notation) suffices *)
+    (* the remaining leaf forms ([()], numerals) carry no elaborable subterm, so
+       the type-free {!Ast.to_term} (with its notation) suffices *)
     | _ -> Ast.to_term sg ~notation ctx.Check.names s
   (* an application spine [head arg…] *)
   and elab_app ctx mode s : Type.t =
     let head, args = peel s in
     match classify_head sg head with
     (* a recursor application. The minors and major are elaborated in *checking*
-       position (against their derived types), so check-only forms — a [refl]
+       position (against their derived types), so check-only forms — a [rfl]
        base case, a constructor major — work; a hole motive on a non-indexed
        recursor is inferred by abstracting the major out of the goal. *)
     | Rec rh ->
@@ -552,7 +552,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
               let a' = go ctx (Check dom) a in
               (* only when the domain still has an unsolved metavariable is
                  there anything to solve; otherwise skip — inferring [a']'s type
-                 could fail on a check-only form like [refl], and is needless
+                 could fail on a check-only form like [rfl], and is needless
                  work *)
               if Type.has_meta (Value.quote ctx.Check.lvl dom) then
                 ms := Meta.unify !ms ctx.Check.lvl dom (elab_infer ctx a');

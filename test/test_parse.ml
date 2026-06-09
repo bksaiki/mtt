@@ -171,32 +171,32 @@ let%expect_test "sums: + precedence; qualified injections and recursor" =
     (fun (y : Unit) => y) s
     |}]
 
-let%expect_test "equality: Eq, refl, Eq.rec" =
+let%expect_test "equality: Eq, rfl, Eq.rec" =
   roundtrip "Eq Unit () ()";
   [%expect {| () = () |}];
-  (* Eq is an ordinary inductive former; refl is its constructor (sugar) *)
-  roundtrip "(refl : Eq Unit () ())";
-  [%expect {| (fun (x : () = ()) => x) refl |}];
-  roundtrip {|λ A : Type ⇒ λ x : A ⇒ (refl : Eq A x x)|};
-  [%expect {| fun (A : Type) => fun (x : A) => (fun (x' : x = x) => x') refl |}];
+  (* Eq is an ordinary inductive former; rfl is its constructor (sugar) *)
+  roundtrip "(rfl : Eq Unit () ())";
+  [%expect {| (fun (x : () = ()) => x) rfl |}];
+  roundtrip {|λ A : Type ⇒ λ x : A ⇒ (rfl : Eq A x x)|};
+  [%expect {| fun (A : Type) => fun (x : A) => (fun (x' : x = x) => x') rfl |}];
   (* the eliminator is the plain recursor Eq.rec (there is no J keyword): based
      path induction, motive over the second endpoint *)
   roundtrip
-    {|λ A : Type ⇒ λ x : A ⇒ λ p : Eq A x x ⇒ Eq.rec A x (λ y : A ⇒ λ q : Eq A x y ⇒ Eq A x x) refl x p|};
+    {|λ A : Type ⇒ λ x : A ⇒ λ p : Eq A x x ⇒ Eq.rec A x (λ y : A ⇒ λ q : Eq A x y ⇒ Eq A x x) rfl x p|};
   [%expect
     {|
     fun (A : Type) =>
     fun (x : A) =>
     fun (p : x = x) =>
-    Eq.rec A x (fun (y : A) => fun (q : x = y) => x = x) refl x p
+    Eq.rec A x (fun (y : A) => fun (q : x = y) => x = x) rfl x p
     |}]
 
 (* the [=] infix sugars to the same [Eq] core as the prefix [Eq] keyword, with
    the type inferred from the left side; it is non-associative and sits between
    the arrow (looser) and +/× (tighter) *)
 let%expect_test "equality: the = infix and its precedence" =
-  roundtrip "(refl : () = ())";
-  [%expect {| (fun (x : () = ()) => x) refl |}];
+  roundtrip "(rfl : () = ())";
+  [%expect {| (fun (x : () = ()) => x) rfl |}];
   (* application binds tighter than = *)
   roundtrip "fun (f : Nat -> Nat) => fun (a : Nat) => f a = f a";
   [%expect {| fun (f : Nat -> Nat) => fun (a : Nat) => f a = f a |}];

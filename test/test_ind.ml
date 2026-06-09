@@ -1,10 +1,10 @@
 (* the inductive machinery lives in the kernel, so this suite uses the top-level
    kernel modules (Type, Value, Check, Inductive) directly *)
 
-(* Phase 1 exercises the kernel's *computation* for inductives (eval/quote and
-   the generic ι-rule) by building terms directly, before any surface syntax or
-   type checking exists. Two specs serve as fixtures: a parameterless Nat and a
-   parameterized List. *)
+(* These first tests exercise the kernel's *computation* for inductives
+   (eval/quote and the generic ι-rule) by building core terms directly, with no
+   surface syntax or type checking involved. Two specs serve as fixtures: a
+   parameterless Nat and a parameterized List. *)
 
 let norm t = print_endline (Type.to_string (Value.normalize t))
 
@@ -160,7 +160,7 @@ let%expect_test "parameterized recursor: length of a two-element list" =
   [%expect
     {| fun (A : Type) => fun (a : A) => fun (b : A) => Nat.succ (Nat.succ Nat.zero) |}]
 
-(* --- Phase 2: type checking --- *)
+(* --- type checking --- *)
 
 let sig_ctx = Check.add_ind list_spec (Check.add_ind nat_spec Check.empty)
 

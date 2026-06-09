@@ -1,27 +1,27 @@
 -- Building on the prelude's equality toolkit (symm/trans/cong/subst). This
--- file demonstrates what is special about the native Eq: refl reifies the
+-- file demonstrates what is special about the native Eq: rfl reifies the
 -- checker's own conversion, and UIP holds for free.
 
 axiom A : Type
 axiom a : A
 axiom b : A
 
--- refl reifies conversion: it proves x = y precisely when x ≡ y, so β/δ/η
+-- rfl reifies conversion: it proves x = y precisely when x ≡ y, so β/δ/η
 -- facts become first-class proofs
 def idA (x : A) : A := x
-theorem id_refl : Eq A (idA a) a := refl
-theorem beta_refl : Eq A ((λ x : A ⇒ x) a) a := refl
+theorem id_refl : Eq A (idA a) a := rfl
+theorem beta_refl : Eq A ((λ x : A ⇒ x) a) a := rfl
 
 -- the toolkit composes: symm (symm p) is p (both proofs of a = b — and equal
 -- anyway by UIP)
 axiom p : Eq A a b
 #check_equal (symm (symm p)) p
 
--- ι: transport along refl computes away. The endpoints are implicit, but a bare
--- refl pins neither, so it is ascribed to fix them (Eq A a a).
+-- ι: transport along rfl computes away. The endpoints are implicit, but a bare
+-- rfl pins neither, so it is ascribed to fix them (Eq A a a).
 axiom P : A → Type
 axiom h : P a
-#check_equal (subst P (refl : Eq A a a) h) h
+#check_equal (subst P (rfl : Eq A a a) h) h
 
 -- UIP for free: Eq lives in Prop, so proof irrelevance equates any two proofs
 -- of the same equation — no axiom needed

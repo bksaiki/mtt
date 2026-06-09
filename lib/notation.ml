@@ -3,7 +3,7 @@ type t =
   ; nat : (Type.ctor_head * Type.ctor_head) option
   ; sigma : Type.ctor_head option
   ; sum : string option
-  ; eq : string option (* the inductive registered for [x = y] / refl / J *)
+  ; eq : string option (* the inductive registered for [x = y] / [rfl] *)
   }
 
 let empty =
@@ -51,9 +51,9 @@ let sugar n ~recurse names term =
       | Type.Ind name, [ _A; x; y ] when n.eq = Some name ->
           Some
             (2, Printf.sprintf "%s = %s" (recurse 3 names x) (recurse 3 names y))
-      (* the equality's constructor [Eq.rfl A x] prints as the bare [refl],
+      (* the equality's constructor [Eq.refl A x] prints as the bare [rfl],
          dropping its recovered parameters *)
-      | Type.Ctor h, [ _A; _x ] when n.eq = Some h.Type.ind -> Some (11, "refl")
+      | Type.Ctor h, [ _A; _x ] when n.eq = Some h.Type.ind -> Some (11, "rfl")
       (* an applied [Sigma] former: dependent → [Σ (x : A) ⇒ B], else → [A ×
          B] *)
       | Type.Ind name, [ a; Type.Lam (_, x, _, b) ]

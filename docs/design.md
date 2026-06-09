@@ -4,9 +4,10 @@ A small dependent type theory in the Calculus of Constructions family: Π types
 and indexed inductive families — under an impredicative `Prop` and a predicative
 cumulative `Type` tower, checked bidirectionally with normalization by evaluation
 (NbE), type-directed conversion, and definitional proof irrelevance. The kernel
-has no built-in datatypes at all: `Unit`/`Empty`/`Nat`/`Σ`/`Sum`/`Eq` (with its
-recursor `J`) are ordinary inductive declarations in the prelude, leaving the
-trusted core just `Sort`/`Π`/`λ`/`App`/`Var` and the generic inductive machinery
+has no built-in datatypes at all: `Unit`/`Empty`/`Nat`/`Σ`/`Sum`/`Eq` (whose
+recursor `Eq.rec` is the equality eliminator J) are ordinary inductive
+declarations in the prelude, leaving the trusted core just
+`Sort`/`Π`/`λ`/`App`/`Var` and the generic inductive machinery
 (`Ind`/`Ctor`/`Rec`).
 
 This file records *settled* decisions; open questions live in
@@ -190,11 +191,11 @@ name, beside the de Bruijn context.
   `Sum.inr`/`Sum.rec` like any other inductive — the `inl`/`inr`/`case` keywords
   are gone — deleting the `Sum`/`Inl`/`Inr`/`Case` nodes, `vcase`, and their
   machinery), and — the last one — `Eq` (a prelude **indexed** inductive
-  `Eq (A : Type) (x : A) : A → Prop := | rfl : Eq A x x` with `@[notation eq]`;
-  `x = y` is the applied former with the type inferred, `refl` its constructor
-  with parameters recovered, and `J` its recursor `Eq.rec` — based path induction
-  — with the endpoints recovered from the proof and the motive inferred; deleting
-  the `Eq`/`Refl`/`J` nodes, `vj`, and their cases). `Σ`/`Sum`/`Eq` are **fixed
+  `Eq (A : Type) (x : A) : A → Prop := | refl : Eq A x x` with `@[notation eq]`;
+  `x = y` is the applied former with the type inferred, `rfl` its constructor
+  with parameters recovered, and the eliminator is the plain recursor `Eq.rec`
+  (based path induction — Lean's `Eq.rec`); deleting the `Eq`/`Refl`/`J` nodes,
+  `vj`, and their cases, and there is no `J` keyword). `Σ`/`Sum`/`Eq` are **fixed
   at `Type`**: a Σ/sum over the universe, a proof-irrelevant pair/disjunction of
   Props, or equality *of types* (`Unit = Unit`) no longer forms, pending universe
   polymorphism. With `Eq` gone the kernel has **no built-in datatypes** — only
@@ -261,12 +262,12 @@ type drives every inference the surface leaves implicit:
 - **Equality sugar.** `Eq` is a prelude inductive (see Inductive types), so its
   surface forms desugar to it: `x = y` is the applied former with `A` synthesized
   from the left side (a dedicated `eq_term` parser level, looser than `+`/`×` and
-  tighter than `→`; `:=` is the sole definition separator, freeing `=`); `refl`
-  is its constructor with the parameters recovered from the expected type. The
-  eliminator is the plain recursor `Eq.rec` — there is no `J` keyword.
+  tighter than `→`; `:=` is the sole definition separator, freeing `=`); `rfl`
+  is its constructor (`Eq.refl`) with the parameters recovered from the expected
+  type. The eliminator is the plain recursor `Eq.rec` — there is no `J` keyword.
 - **Recursors.** A recursor's minors and major are elaborated in *checking*
   position (against the derived minor-premise and `Ind`-applied types), so
-  check-only forms — a `refl` base case, a constructor major — work. Two
+  check-only forms — a `rfl` base case, a constructor major — work. Two
   conveniences fill in the rest:
   - *Motive inference.* A `_` motive on a **non-indexed** recursor, in checking
     mode, is synthesized by **occurrence abstraction** — generalize the expected
@@ -298,7 +299,8 @@ and the printer folds them back), `sigma` (a two-parameter record, so
 `Σ (x : A) ⇒ B` / `A × B` abbreviate the applied former and `(a, b)` its
 constructor), `sum` (a two-parameter inductive, so `A + B` abbreviates the
 applied former), and `eq` (a two-parameter, one-index inductive, so `x = y`
-abbreviates the applied former and `refl` its constructor; its recursor is `J`).
+abbreviates the applied former and `rfl` its constructor; its recursor is
+`Eq.rec`).
 Only *symbolic* sugar lives here: a constructor that wants a short name keeps its
 qualified spelling instead (`Sum.inl`, `Sum.rec`, like `Nat.succ`), so `sum`
 registers only the `+` former. Registration is **one-shot** and

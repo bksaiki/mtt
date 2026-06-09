@@ -29,12 +29,13 @@ wants ⊤ as a proposition.
 
 ## Singleton elimination, and Lean's `Eq` shape
 
-mtt's `Eq` is `inductive Eq (A : Type) (x : A) : A → Prop := | rfl : Eq A x x`
-— the **first endpoint is a parameter**, so `rfl` has no fields and the generic
-recursor is *based-path* induction (`P : (y : A) → Eq A x y → Sort`, `x` fixed),
-which is exactly Lean's `@Eq.rec`. Lean's *declaration* instead makes both
-endpoints indices, with the point carried by the constructor
-(`Eq : α → α → Prop`, `refl (a : α) : Eq a a`).
+mtt's `Eq` is `inductive Eq (A : Type) (x : A) : A → Prop := | refl : Eq A x x`
+— the **first endpoint is a parameter**, so the constructor `refl` has no fields
+and the generic recursor is *based-path* induction (`P : (y : A) → Eq A x y →
+Sort`, `x` fixed), which is exactly Lean's `@Eq.rec`. Lean's *declaration*
+instead makes both endpoints indices, with the point carried by the constructor
+(`Eq : α → α → Prop`, `refl (a : α) : Eq a a`). (The surface term that builds it
+is `rfl` either way.)
 
 Adopting Lean's declaration shape in mtt is a **net regression** as the kernel
 stands, for two reasons:
@@ -44,7 +45,7 @@ stands, for two reasons:
   "one constructor, all fields proofs." Lean-form `refl` carries a data field
   `a : A` (not a proof), so `Eq` flunks the test and `Eq.rec` into `Type` is
   rejected — killing `subst`/transport. (Verified.) mtt's current form has a
-  zero-field `rfl`, so it passes trivially.
+  zero-field constructor, so it passes trivially.
 - **Different recursor.** mtt's recursor rule abstracts *every* index, so Lean's
   two-index declaration yields the *general* J (motive over both endpoints), not
   Lean's based-path `Eq.rec` (Lean specializes; mtt doesn't). The general J makes
@@ -94,9 +95,10 @@ Cumulativity has absorbed most everyday universe pressure. Full
 polymorphism (levels as parameters, `imax` algebra on level expressions)
 is the deepest rabbit hole on the board.
 
-**Status**: open, deliberately deferred. The native `Eq` removed the old
-motivating example; `sym`/`trans`/`subst` now live once in the prelude
-(`std/prelude.mtt`). The remaining real test case: definitions meant to
+**Status**: open, deliberately deferred. Propositional equality (now a prelude
+inductive) removed the old motivating example; `symm`/`trans`/`subst` live once
+in the prelude (`std/prelude.mtt`). The remaining real test case: definitions
+meant to
 work at *every* level at once — e.g. the prelude's `subst` is fixed at
 `P : A → Type`, so a `Prop`-valued transport needs a separate copy.
 **Revisit**: when the prelude wants the same lemma at multiple sorts.

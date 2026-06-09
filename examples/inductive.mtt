@@ -45,17 +45,17 @@ def add (n m : Nat') : Nat' :=
 #eval double (Nat'.S (Nat'.S Nat'.O)) -- Nat'.S (Nat'.S (Nat'.S (Nat'.S Nat'.O)))
 #eval add (Nat'.S (Nat'.S Nat'.O)) (Nat'.S Nat'.O) -- Nat'.S (Nat'.S (Nat'.S Nat'.O))
 
--- the base case of `add` holds by computation, so refl proves it:
-theorem add_O (m : Nat') : Eq Nat' (add Nat'.O m) m := refl
+-- the base case of `add` holds by computation, so rfl proves it:
+theorem add_O (m : Nat') : Eq Nat' (add Nat'.O m) m := rfl
 
 -- `add n O = n` is not definitional — it needs induction. The dependent motive
--- is `fun n => Eq Nat' (add n O) n`; the base is refl (add O O ≡ O), and the
+-- is `fun n => Eq Nat' (add n O) n`; the base is rfl (add O O ≡ O), and the
 -- step turns the induction hypothesis `ih : Eq Nat' (add k O) k` into a proof
 -- for `S k` with the prelude's `cong`.
 theorem add_O_right (n : Nat') : Eq Nat' (add n Nat'.O) n :=
   Nat'.rec
     (fun (n : Nat') => Eq Nat' (add n Nat'.O) n)
-    refl
+    rfl
     (fun (k : Nat') (ih : Eq Nat' (add k Nat'.O) k) =>
       cong Nat'.S ih)
     n
