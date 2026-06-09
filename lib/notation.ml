@@ -44,7 +44,7 @@ let sugar n ~recurse names term =
       match peel term with
       (* an applied [Sigma] former: dependent → [Σ (x : A) ⇒ B], else → [A ×
          B] *)
-      | Type.Ind name, [ a; Type.Lam (x, _, b) ]
+      | Type.Ind name, [ a; Type.Lam (_, x, _, b) ]
         when match n.sigma with
              | Some mk -> String.equal name mk.Type.ind
              | None -> false ->

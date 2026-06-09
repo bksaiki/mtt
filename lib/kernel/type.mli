@@ -24,11 +24,20 @@ type rec_head =
   ; recs : bool list list
   }
 
+(** A binder's visibility. An [Explicit] [(x : A)] argument is supplied at every
+    application; an [Implicit] [{x : A}] one is inserted automatically by the
+    elaborator. The kernel carries this on {!Pi}/{!Lam} but ignores it in
+    conversion and typing (exactly as it ignores the binder-name hint) — it is
+    metadata consumed only by the frontend (argument insertion and printing). *)
+type icit =
+  | Explicit
+  | Implicit
+
 type t =
   | Var of int  (** de Bruijn index *)
   | Sort of int  (** the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
-  | Pi of string * t * t  (** Π (x : A). B, where B binds index 0 *)
-  | Lam of string * t * t  (** λ (x : A). b, where b binds index 0 *)
+  | Pi of icit * string * t * t  (** Π (x : A). B, where B binds index 0 *)
+  | Lam of icit * string * t * t  (** λ (x : A). b, where b binds index 0 *)
   | App of t * t
   | Proj of int * t
       (** [x.(i+1)]: the [i]-th (0-based) field projection of a record (a

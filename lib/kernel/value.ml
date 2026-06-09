@@ -1,7 +1,7 @@
 type t =
   | Sort of int
-  | Pi of string * t * closure
-  | Lam of string * t * closure
+  | Pi of Type.icit * string * t * closure
+  | Lam of Type.icit * string * t * closure
   | Eq of t * t * t
   | Refl
   (* an inductive type former applied to its parameters (a type once the
@@ -42,8 +42,8 @@ let rec eval env t =
      away, so a meta never reaches a final {!Check}. *)
   | Type.Meta i -> Neutral (Meta i)
   | Type.Sort i -> Sort i
-  | Type.Pi (x, a, b) -> Pi (x, eval env a, { env; body = b })
-  | Type.Lam (x, a, b) -> Lam (x, eval env a, { env; body = b })
+  | Type.Pi (i, x, a, b) -> Pi (i, x, eval env a, { env; body = b })
+  | Type.Lam (i, x, a, b) -> Lam (i, x, eval env a, { env; body = b })
   | Type.App (f, a) -> apply (eval env f) (eval env a)
   | Type.Proj (i, t) -> vproj i (eval env t)
   | Type.Eq (a, x, y) -> Eq (eval env a, eval env x, eval env y)
@@ -60,7 +60,7 @@ let rec eval env t =
    accumulate as neutral spines instead. *)
 and apply f a =
   match f with
-  | Lam (_, _, c) -> apply_closure c a
+  | Lam (_, _, _, c) -> apply_closure c a
   | Neutral n -> Neutral (App (n, a))
   (* inductive heads accumulate arguments; a saturated recursor fires ι *)
   | VInd (name, args) -> VInd (name, args @ [ a ])
@@ -147,8 +147,8 @@ let rec quote l v =
   | Sort i -> Type.Sort i
   | Eq (a, x, y) -> Type.Eq (quote l a, quote l x, quote l y)
   | Refl -> Type.Refl
-  | Pi (x, a, c) -> Type.Pi (x, quote l a, quote_closure l c)
-  | Lam (x, a, c) -> Type.Lam (x, quote l a, quote_closure l c)
+  | Pi (i, x, a, c) -> Type.Pi (i, x, quote l a, quote_closure l c)
+  | Lam (i, x, a, c) -> Type.Lam (i, x, quote l a, quote_closure l c)
   | VInd (name, args) -> quote_spine l (Type.Ind name) args
   | VCtor (h, args) -> quote_spine l (Type.Ctor h) args
   | VRec (h, args) -> quote_spine l (Type.Rec h) args

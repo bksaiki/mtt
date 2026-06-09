@@ -6,8 +6,8 @@
 
 type t =
   | Sort of int
-  | Pi of string * t * closure
-  | Lam of string * t * closure
+  | Pi of Type.icit * string * t * closure
+  | Lam of Type.icit * string * t * closure
   | Eq of t * t * t
   | Refl
   | VInd of string * t list

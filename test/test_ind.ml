@@ -76,9 +76,13 @@ let%expect_test "constructors are canonical and print by name" =
 
 let%expect_test "recursor reduces on a constructor (double via Nat.rec)" =
   (* double n = natrec (fun _ => Nat) zero (fun k ih => succ (succ ih)) n *)
-  let motive = Type.Lam ("_", nat, nat) in
+  let motive = Type.Lam (Type.Explicit, "_", nat, nat) in
   let step =
-    Type.Lam ("k", nat, Type.Lam ("ih", nat, succ (succ (Type.Var 0))))
+    Type.Lam
+      ( Type.Explicit
+      , "k"
+      , nat
+      , Type.Lam (Type.Explicit, "ih", nat, succ (succ (Type.Var 0))) )
   in
   let double n =
     Type.App (Type.App (Type.App (Type.App (nat_rec, motive), zero), step), n)
@@ -90,13 +94,16 @@ let%expect_test "recursor reduces on a constructor (double via Nat.rec)" =
 
 let%expect_test "a recursor on a stuck variable stays neutral" =
   (* fun (x : Nat) => natrec (fun _ => Nat) zero (fun k ih => ih) x *)
-  let motive = Type.Lam ("_", nat, nat) in
-  let step = Type.Lam ("k", nat, Type.Lam ("ih", nat, Type.Var 0)) in
+  let motive = Type.Lam (Type.Explicit, "_", nat, nat) in
+  let step =
+    Type.Lam
+      (Type.Explicit, "k", nat, Type.Lam (Type.Explicit, "ih", nat, Type.Var 0))
+  in
   let body =
     Type.App
       (Type.App (Type.App (Type.App (nat_rec, motive), zero), step), Type.Var 0)
   in
-  norm (Type.Lam ("x", nat, body));
+  norm (Type.Lam (Type.Explicit, "x", nat, body));
   [%expect
     {|
     fun (x : Nat) =>
@@ -107,16 +114,20 @@ let%expect_test "a recursor on a stuck variable stays neutral" =
 let%expect_test "parameterized recursor: length of a two-element list" =
   (* length A xs = List.rec A (fun _ => Nat) zero (fun h t ih => succ ih) xs,
      with the parameter A and elements stripped/recursed correctly *)
-  let motive = Type.Lam ("_", Type.App (Type.Ind "List", Type.Var 0), nat) in
+  let motive =
+    Type.Lam (Type.Explicit, "_", Type.App (Type.Ind "List", Type.Var 0), nat)
+  in
   let step =
     (* fun (h : A) (t : List A) (ih : Nat) => succ ih *)
     Type.Lam
-      ( "h"
+      ( Type.Explicit
+      , "h"
       , Type.Var 0
       , Type.Lam
-          ( "t"
+          ( Type.Explicit
+          , "t"
           , Type.App (Type.Ind "List", Type.Var 1)
-          , Type.Lam ("ih", nat, succ (Type.Var 0)) ) )
+          , Type.Lam (Type.Explicit, "ih", nat, succ (Type.Var 0)) ) )
   in
   let length a xs =
     Type.App (Type.App (Type.App (Type.App (list_rec, a), motive), zero), step)
@@ -127,12 +138,16 @@ let%expect_test "parameterized recursor: length of a two-element list" =
   let two_elts = cons a x (cons a y (nil a)) in
   let term =
     Type.Lam
-      ( "A"
+      ( Type.Explicit
+      , "A"
       , Type.Sort 1
       , Type.Lam
-          ( "a"
+          ( Type.Explicit
+          , "a"
           , Type.Var 0
-          , Type.Lam ("b", Type.Var 1, length (Type.Var 2) two_elts) ) )
+          , Type.Lam
+              (Type.Explicit, "b", Type.Var 1, length (Type.Var 2) two_elts) )
+      )
   in
   norm term;
   [%expect
@@ -167,9 +182,13 @@ let%expect_test "well-formed declarations pass check_inductive" =
   [%expect {| ok |}]
 
 let%expect_test "a recursor application infers P major" =
-  let motive = Type.Lam ("_", nat, nat) in
+  let motive = Type.Lam (Type.Explicit, "_", nat, nat) in
   let step =
-    Type.Lam ("k", nat, Type.Lam ("ih", nat, succ (succ (Type.Var 0))))
+    Type.Lam
+      ( Type.Explicit
+      , "k"
+      , nat
+      , Type.Lam (Type.Explicit, "ih", nat, succ (succ (Type.Var 0))) )
   in
   let double n =
     Type.App (Type.App (Type.App (Type.App (nat_rec, motive), zero), step), n)
@@ -187,7 +206,8 @@ let%expect_test "strict positivity rejects a non-recursive occurrence" =
         [ { Inductive.cname = "mk"
           ; fields =
               [ { Inductive.aname = "f"
-                ; aty = Type.Pi ("_", Type.Ind "Bad", Type.Ind "Bad")
+                ; aty =
+                    Type.Pi (Type.Explicit, "_", Type.Ind "Bad", Type.Ind "Bad")
                 ; recursive = false
                 }
               ]
@@ -242,7 +262,9 @@ let%expect_test "Prop large-elimination restriction" =
     Type.App
       ( Type.App
           ( Type.App
-              (Type.App (pbool_rec, Type.Lam ("_", pbool, Type.Sort 1)), pt)
+              ( Type.App
+                  (pbool_rec, Type.Lam (Type.Explicit, "_", pbool, Type.Sort 1))
+              , pt )
           , pt )
       , pt )
   in
@@ -255,7 +277,9 @@ let%expect_test "Prop large-elimination restriction" =
   let big =
     Type.App
       ( Type.App
-          ( Type.App (punit_rec, Type.Lam ("_", Type.Ind "PUnit", Type.Sort 1))
+          ( Type.App
+              ( punit_rec
+              , Type.Lam (Type.Explicit, "_", Type.Ind "PUnit", Type.Sort 1) )
           , Type.Sort 0 )
       , pstar )
   in
@@ -283,7 +307,7 @@ let%expect_test "a stuck recursor on a Prop scrutinee ignores the proof" =
   let ctx = Check.bind "h2" (Value.VInd ("Bot", [])) ctx in
   let bot_rec = Type.Rec (Inductive.rec_head bot_spec) in
   (* motive (fun _ => A); A is Var 2, shifted to Var 3 under the binder *)
-  let motive = Type.Lam ("_", Type.Ind "Bot", Type.Var 3) in
+  let motive = Type.Lam (Type.Explicit, "_", Type.Ind "Bot", Type.Var 3) in
   let elim major = Type.App (Type.App (bot_rec, motive), major) in
   let v1 =
     Value.eval ctx.Check.env (elim (Type.Var 1))
@@ -303,8 +327,11 @@ let%expect_test "a stuck recursor on a non-Prop scrutinee compares it" =
   let ctx = Check.add_ind nat_spec Check.empty in
   let ctx = Check.bind "x" (Value.VInd ("Nat", [])) ctx in
   let ctx = Check.bind "y" (Value.VInd ("Nat", [])) ctx in
-  let motive = Type.Lam ("_", nat, nat) in
-  let step = Type.Lam ("k", nat, Type.Lam ("ih", nat, Type.Var 0)) in
+  let motive = Type.Lam (Type.Explicit, "_", nat, nat) in
+  let step =
+    Type.Lam
+      (Type.Explicit, "k", nat, Type.Lam (Type.Explicit, "ih", nat, Type.Var 0))
+  in
   let elim major =
     Type.App
       (Type.App (Type.App (Type.App (nat_rec, motive), zero), step), major)
@@ -328,7 +355,9 @@ let%expect_test "a stuck recursor on a non-Prop scrutinee compares it" =
 let dpair_spec =
   { Inductive.name = "DPair"
   ; params =
-      [ ("A", Type.Sort 1); ("B", Type.Pi ("_", Type.Var 0, Type.Sort 1)) ]
+      [ ("A", Type.Sort 1)
+      ; ("B", Type.Pi (Type.Explicit, "_", Type.Var 0, Type.Sort 1))
+      ]
   ; sort = 1
   ; ctors =
       [ { Inductive.cname = "mk"
@@ -351,7 +380,7 @@ let dmk = Type.Ctor (Inductive.ctor_head dpair_spec 0)
 (* the components are types: fun _ : Type => Type, with Prop and Type as two
    distinct elements (an arbitrary type-with-elements; the builtin Nat once
    played this role) *)
-let ty_fam = Type.Lam ("_", Type.Sort 1, Type.Sort 1)
+let ty_fam = Type.Lam (Type.Explicit, "_", Type.Sort 1, Type.Sort 1)
 
 (* mk Type (fun _ => Type) a b : DPair Type (fun _ => Type) *)
 let dmk_ty a b =

@@ -7,9 +7,9 @@ and desc =
   | Var of string
   | Field of t * string (* a named projection, e.g. [Nat.rec] *)
   | Sort of int
-  | Pi of string * t * t (* (x : A) -> B *)
+  | Pi of Type.icit * string * t * t (* (x : A) -> B / {x : A} -> B *)
   | Arrow of t * t (* A -> B *)
-  | Lam of string * t * t (* fun (x : A) => b *)
+  | Lam of Type.icit * string * t * t (* fun (x : A) => b / fun {x : A} => b *)
   | App of t * t
   | Ascribe of t * t (* (t : A) *)
   | MkUnit (* (), sugar for the prelude's Unit.unit *)
@@ -27,20 +27,22 @@ and desc =
 
 let mk loc desc = { loc; desc }
 
-(* telescopes: a binder group [(x y : A)] is a name list and an annotation;
-   [telescope] folds groups into nested binders built by [node], stamping each
-   synthetic node with the span of the whole construct *)
+(* telescopes: a binder group [(x y : A)] (or implicit [{x y : A}]) is a
+   visibility, a name list, and an annotation; [telescope] folds groups into
+   nested binders built by [node], stamping each synthetic node with the span of
+   the whole construct *)
 let telescope node loc groups body =
   List.fold_right
-    (fun (xs, a) acc ->
-      List.fold_right (fun x acc -> mk loc (node x a acc)) xs acc)
+    (fun (i, xs, a) acc ->
+      List.fold_right (fun x acc -> mk loc (node i x a acc)) xs acc)
     groups body
 
-let lams = telescope (fun x a b -> Lam (x, a, b))
+let lams = telescope (fun i x a b -> Lam (i, x, a, b))
 
-let pis = telescope (fun x a b -> Pi (x, a, b))
+let pis = telescope (fun i x a b -> Pi (i, x, a, b))
 
-let sigmas = telescope (fun x a b -> Sigma (x, a, b))
+(* Σ binders carry no visibility (the parser only forms explicit ones) *)
+let sigmas = telescope (fun _ x a b -> Sigma (x, a, b))
 
 let var_spine t =
   let rec go acc t =
@@ -100,11 +102,11 @@ let to_term sg ?(notation = Notation.empty) names s =
               | None -> raise (Unbound_variable (s.loc, tname ^ "." ^ field))))
     | Field (_, f) -> raise (Unbound_variable (s.loc, "_." ^ f))
     | Sort i -> Type.Sort i
-    | Pi (x, a, b) -> Type.Pi (x, go env a, go (x :: env) b)
+    | Pi (i, x, a, b) -> Type.Pi (i, x, go env a, go (x :: env) b)
     (* non-dependent: extend the env with a dummy no identifier can equal, so
        indices in [b] still shift across the binder *)
-    | Arrow (a, b) -> Type.Pi ("", go env a, go ("" :: env) b)
-    | Lam (x, a, b) -> Type.Lam (x, go env a, go (x :: env) b)
+    | Arrow (a, b) -> Type.Pi (Type.Explicit, "", go env a, go ("" :: env) b)
+    | Lam (i, x, a, b) -> Type.Lam (i, x, go env a, go (x :: env) b)
     | App (f, a) -> Type.App (go env f, go env a)
     (* () is sugar for whichever constructor is registered for the [unit]
        notation (the prelude's [Unit.unit]); the unit type itself is an ordinary
@@ -120,10 +122,10 @@ let to_term sg ?(notation = Notation.empty) names s =
        kernel needs no Σ of its own *)
     | Sigma (x, a, b) ->
         let a' = go env a in
-        sigma_app s.loc a' (Type.Lam (x, a', go (x :: env) b))
+        sigma_app s.loc a' (Type.Lam (Type.Explicit, x, a', go (x :: env) b))
     | Prod (a, b) ->
         let a' = go env a in
-        sigma_app s.loc a' (Type.Lam ("", a', go ("" :: env) b))
+        sigma_app s.loc a' (Type.Lam (Type.Explicit, "", a', go ("" :: env) b))
     (* projections are the generic record projections *)
     | Fst t -> Type.Proj (0, go env t)
     | Snd t -> Type.Proj (1, go env t)
@@ -156,7 +158,8 @@ let to_term sg ?(notation = Notation.empty) names s =
     (* ascription is the typed identity: applying (fun (x : A) => x) to [t]
        forces the checking judgment t ⇐ A, and the redex evaporates under
        evaluation. No core constructor needed. *)
-    | Ascribe (t, a) -> Type.App (Type.Lam ("x", go env a, Type.Var 0), go env t)
+    | Ascribe (t, a) ->
+        Type.App (Type.Lam (Type.Explicit, "x", go env a, Type.Var 0), go env t)
     (* a hole needs a type to become a metavariable, so it is the elaborator's
        job ({!Elab}); this type-free pass cannot produce one *)
     | Hole ->

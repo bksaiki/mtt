@@ -86,8 +86,8 @@ let scope_ok ms blvl m entry rhs =
     | Value.Refl ->
         true
     | Value.Eq (a, x, y) -> ok lvl a && ok lvl x && ok lvl y
-    | Value.Pi (_, a, c)
-    | Value.Lam (_, a, c) ->
+    | Value.Pi (_, _, a, c)
+    | Value.Lam (_, _, a, c) ->
         ok lvl a
         && ok (lvl + 1) (Value.apply_closure c (Value.Neutral (Var lvl)))
     | Value.VInd (_, args)
@@ -127,8 +127,8 @@ let rec unify ms lvl (v1 : Value.t) (v2 : Value.t) : t =
 
 and unify_rigid ms lvl v1 v2 =
   match (v1, v2) with
-  | Value.Pi (_, a1, c1), Value.Pi (_, a2, c2)
-  | Value.Lam (_, a1, c1), Value.Lam (_, a2, c2) ->
+  | Value.Pi (_, _, a1, c1), Value.Pi (_, _, a2, c2)
+  | Value.Lam (_, _, a1, c1), Value.Lam (_, _, a2, c2) ->
       let ms = unify ms lvl a1 a2 in
       let v = Value.Neutral (Value.Var lvl) in
       unify ms (lvl + 1) (Value.apply_closure c1 v) (Value.apply_closure c2 v)
@@ -183,8 +183,8 @@ let rec zonk ms lvl (t : Type.t) : Type.t =
   | Type.Rec _ ->
       t
   | Type.Proj (i, a) -> Type.Proj (i, zonk ms lvl a)
-  | Type.Pi (x, a, b) -> Type.Pi (x, zonk ms lvl a, zonk ms (lvl + 1) b)
-  | Type.Lam (x, a, b) -> Type.Lam (x, zonk ms lvl a, zonk ms (lvl + 1) b)
+  | Type.Pi (i, x, a, b) -> Type.Pi (i, x, zonk ms lvl a, zonk ms (lvl + 1) b)
+  | Type.Lam (i, x, a, b) -> Type.Lam (i, x, zonk ms lvl a, zonk ms (lvl + 1) b)
   | Type.App (f, a) -> Type.App (zonk ms lvl f, zonk ms lvl a)
   | Type.Eq (a, x, y) -> Type.Eq (zonk ms lvl a, zonk ms lvl x, zonk ms lvl y)
   | Type.J (p, d, pr) -> Type.J (zonk ms lvl p, zonk ms lvl d, zonk ms lvl pr)

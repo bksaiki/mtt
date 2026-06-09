@@ -61,18 +61,22 @@ def not (A : Type) := A → Empty
 
 -- === Equality === (each lemma is one J at a chosen motive)
 
--- congruence: equal arguments give equal images
-def cong (A B : Type) (f : A → B) (x y : A) (p : Eq A x y) : Eq B (f x) (f y) :=
+-- congruence: equal arguments give equal images. The types and endpoints are
+-- implicit ({…}) — the elaborator recovers them from the equality proof — so a
+-- call is just `cong f p`.
+def cong {A B : Type} (f : A → B) {x y : A} (p : Eq A x y) : Eq B (f x) (f y) :=
   J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq B (f x) (f z)) refl p
 
-def sym (A : Type) (x y : A) (p : Eq A x y) : Eq A y x :=
+def sym {A : Type} {x y : A} (p : Eq A x y) : Eq A y x :=
   J (λ z : A ⇒ λ q : Eq A x z ⇒ Eq A z x) refl p
 
-def trans (A : Type) (x y z : A) (p : Eq A x y) (q : Eq A y z) : Eq A x z :=
+def trans {A : Type} {x y z : A} (p : Eq A x y) (q : Eq A y z) : Eq A x z :=
   J (λ w : A ⇒ λ r : Eq A y w ⇒ Eq A x w) p q
 
--- transport along an equality (large elimination: the motive lands in Type)
-def subst (A : Type) (P : A → Type) (x y : A) (p : Eq A x y) (h : P x) : P y :=
+-- transport along an equality (large elimination: the motive lands in Type).
+-- The motive P stays explicit (it is not determined by the proof); the type and
+-- endpoints are implicit.
+def subst {A : Type} (P : A → Type) {x y : A} (p : Eq A x y) (h : P x) : P y :=
   J (λ z : A ⇒ λ q : Eq A x z ⇒ P z) h p
 
 -- === Naturals === (arithmetic by recursion on the first argument)
@@ -103,22 +107,19 @@ theorem add_zero (n : Nat) : Eq Nat (add n 0) n :=
   Nat.rec (λ m : Nat ⇒ Eq Nat (add m 0) m)
     refl
     (λ k : Nat ⇒ λ ih : Eq Nat (add k 0) k ⇒
-      cong Nat Nat (λ m : Nat ⇒ Nat.succ m) (add k 0) k ih)
+      cong (λ m : Nat ⇒ Nat.succ m) ih)
     n
 
 theorem add_succ (n m : Nat) : Eq Nat (add n (Nat.succ m)) (Nat.succ (add n m)) :=
   Nat.rec (λ x : Nat ⇒ Eq Nat (add x (Nat.succ m)) (Nat.succ (add x m)))
     refl
     (λ k : Nat ⇒ λ ih : Eq Nat (add k (Nat.succ m)) (Nat.succ (add k m)) ⇒
-      cong Nat Nat (λ z : Nat ⇒ Nat.succ z) (add k (Nat.succ m))
-        (Nat.succ (add k m)) ih)
+      cong (λ z : Nat ⇒ Nat.succ z) ih)
     n
 
 theorem add_comm (m n : Nat) : Eq Nat (add m n) (add n m) :=
   Nat.rec (λ x : Nat ⇒ Eq Nat (add x n) (add n x))
-    (sym Nat (add n 0) n (add_zero n))
+    (sym (add_zero n))
     (λ k : Nat ⇒ λ ih : Eq Nat (add k n) (add n k) ⇒
-      trans Nat (add (Nat.succ k) n) (Nat.succ (add n k)) (add n (Nat.succ k))
-        (cong Nat Nat (λ z : Nat ⇒ Nat.succ z) (add k n) (add n k) ih)
-        (sym Nat (add n (Nat.succ k)) (Nat.succ (add n k)) (add_succ n k)))
+      trans (cong (λ z : Nat ⇒ Nat.succ z) ih) (sym (add_succ n k)))
     m

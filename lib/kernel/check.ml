@@ -68,7 +68,11 @@ let motive_at p y pr = Value.apply (Value.apply p y) pr
 let pi_val ctx name aval k =
   let ctx' = bind name aval ctx in
   let bval = k ctx' (fresh ctx) in
-  Value.Pi (name, aval, { env = ctx.env; body = Value.quote ctx'.lvl bval })
+  Value.Pi
+    ( Type.Explicit
+    , name
+    , aval
+    , { env = ctx.env; body = Value.quote ctx'.lvl bval } )
 
 (* The minor-premise type for the [i]-th constructor of [spec], given the
    recursor's parameter values [pvals] and motive value [pmot]:
@@ -129,7 +133,7 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
   | Value.Meta _ -> assert false
   | Value.App (m, a) -> (
       match infer_neutral ctx m with
-      | Value.Pi (_, _, c) -> Value.apply_closure c a
+      | Value.Pi (_, _, _, c) -> Value.apply_closure c a
       | _ -> assert false (* values are well-typed by invariant *))
   | Value.Proj (i, n) -> (
       match infer_neutral ctx n with
@@ -151,7 +155,7 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
 let rec sort_of ctx (ty : Value.t) : int =
   match ty with
   | Value.Sort i -> i + 1
-  | Value.Pi (x, a, c) ->
+  | Value.Pi (_, x, a, c) ->
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
       imax (sort_of ctx a) j
   | Value.Eq _ -> 0 (* Eq : Prop *)
@@ -178,7 +182,7 @@ let rec conv ctx ty v1 v2 =
   ||
   match ty with
   (* η *)
-  | Value.Pi (x, a, c) ->
+  | Value.Pi (_, x, a, c) ->
       let v = fresh ctx in
       conv (bind x a ctx) (Value.apply_closure c v) (Value.apply v1 v)
         (Value.apply v2 v)
@@ -224,8 +228,9 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
         i <= j
       else
         i = j
-  (* pi: domains are invariant, codomains covariant *)
-  | Value.Pi (x, a1, c1), Value.Pi (_, a2, c2) ->
+  (* pi: domains are invariant, codomains covariant; the binder's visibility
+     ([icit]) is metadata the kernel ignores, so it is not compared *)
+  | Value.Pi (_, x, a1, c1), Value.Pi (_, _, a2, c2) ->
       conv_ty ~cumul:false ctx a1 a2
       &&
       let v = fresh ctx in
@@ -261,7 +266,7 @@ and conv_spine ctx ty args1 args2 =
   | [], [] -> true
   | a1 :: r1, a2 :: r2 -> (
       match ty with
-      | Value.Pi (_, dom, c) ->
+      | Value.Pi (_, _, dom, c) ->
           conv ctx dom a1 a2 && conv_spine ctx (Value.apply_closure c a1) r1 r2
       | _ -> false)
   | _ -> false
@@ -277,7 +282,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
         None
   | Value.App (m1, a1), Value.App (m2, a2) -> (
       match conv_neutral ctx m1 m2 with
-      | Some (Value.Pi (_, dom, c)) ->
+      | Some (Value.Pi (_, _, dom, c)) ->
           if conv ctx dom a1 a2 then
             Some (Value.apply_closure c a1)
           else
@@ -399,19 +404,20 @@ let rec infer ctx t =
       Error.type_error
         [ Error.txt "internal error: a metavariable reached the kernel" ]
   | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
-  (* (Pi) *)
-  | Type.Pi (x, a, b) ->
+  (* (Pi) — visibility does not affect the formed sort *)
+  | Type.Pi (_, x, a, b) ->
       let i = infer_univ ctx a in
       let j = infer_univ (bind x (Value.eval ctx.env a) ctx) b in
       Value.Sort (imax i j)
-  (* (Lam) *)
-  | Type.Lam (x, a, b) ->
+  (* (Lam) — the inferred Π keeps the lambda's visibility *)
+  | Type.Lam (vis, x, a, b) ->
       let _ = infer_univ ctx a in
       let va = Value.eval ctx.env a in
       let vb = infer (bind x va ctx) b in
       (* [vb] is a value one binder deep; quote it back to syntax to form the
          codomain closure *)
-      Value.Pi (x, va, { env = ctx.env; body = Value.quote (ctx.lvl + 1) vb })
+      Value.Pi
+        (vis, x, va, { env = ctx.env; body = Value.quote (ctx.lvl + 1) vb })
   (* (App) — but a recursor is motive-polymorphic, so it has no type as a
      constant: a fully-applied recursor spine gets a bespoke rule (like NatRec),
      detected by peeling the application head *)
@@ -420,7 +426,7 @@ let rec infer ctx t =
       | Type.Rec rh, args -> infer_rec ctx rh args
       | _ -> (
           match infer ctx f with
-          | Value.Pi (_, dom, c) ->
+          | Value.Pi (_, _, dom, c) ->
               check ctx a dom;
               Value.apply_closure c (Value.eval ctx.env a)
           | ty ->
@@ -473,7 +479,7 @@ let rec infer ctx t =
       | Value.Eq (va, vx, vy) ->
           (* validate the motive P : Π (y : A) ⇒ Eq A x y → Sort *)
           (match infer ctx p with
-          | Value.Pi (_, dom1, c1) -> (
+          | Value.Pi (_, _, dom1, c1) -> (
               if not (conv_ty ~cumul:false ctx dom1 va) then
                 Error.type_error
                   [ Error.txt "the motive should take an endpoint of type "
@@ -484,7 +490,7 @@ let rec infer ctx t =
               let yv = fresh ctx in
               let ctx1 = bind "y" va ctx in
               match Value.apply_closure c1 yv with
-              | Value.Pi (_, dom2, c2) -> (
+              | Value.Pi (_, _, dom2, c2) -> (
                   let expected = Value.Eq (va, vx, yv) in
                   if not (conv_ty ~cumul:false ctx1 dom2 expected) then
                     Error.type_error
@@ -596,7 +602,7 @@ and infer_rec ctx rh args =
   let pmot = Value.eval ctx.env motive_tm in
   let j =
     match infer ctx motive_tm with
-    | Value.Pi (_, dom, c) -> (
+    | Value.Pi (_, _, dom, c) -> (
         if not (conv_ty ~cumul:false ctx dom ind_ty) then
           Error.type_error
             [ Error.txt "the motive's domain "
@@ -639,8 +645,9 @@ and infer_rec ctx rh args =
 and check ctx t expected =
   match (t, expected) with
   (* a lambda against a Pi: the annotation must match the domain, then the body
-     is checked against the codomain at a fresh variable *)
-  | Type.Lam (x, a, b), Value.Pi (_, dom, c) ->
+     is checked against the codomain at a fresh variable. Visibility is the
+     kernel-ignored [icit] metadata, so a lambda matches a Π of either kind. *)
+  | Type.Lam (_, x, a, b), Value.Pi (_, _, dom, c) ->
       let _ = infer_univ ctx a in
       let va = Value.eval ctx.env a in
       if not (conv_ty ~cumul:false ctx va dom) then

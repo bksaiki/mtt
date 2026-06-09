@@ -99,19 +99,20 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                    (List.nth args (List.length args - 1)))
           | _ -> (
               match Meta.force !ms (elab_infer ctx f) with
-              | Value.Pi (_, _, c) ->
+              | Value.Pi (_, _, _, c) ->
                   Value.apply_closure c (Value.eval ctx.Check.env a)
               | _ -> assert false))
-      | Type.Lam (x, a, b) ->
+      | Type.Lam (vis, x, a, b) ->
           let va = Value.eval ctx.Check.env a in
           let vb = elab_infer (Check.bind x va ctx) b in
           Value.Pi
-            ( x
+            ( vis
+            , x
             , va
             , { Value.env = ctx.Check.env
               ; body = Value.quote (ctx.Check.lvl + 1) vb
               } )
-      | Type.Pi (x, a, b) ->
+      | Type.Pi (_, x, a, b) ->
           let i = sort_of_ty ctx a in
           let j =
             sort_of_ty (Check.bind x (Value.eval ctx.Check.env a) ctx) b
@@ -167,15 +168,15 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                   raise (Ast.Unbound_variable (s.loc, tname ^ "." ^ field))))
     | Ast.Field (_, f) -> raise (Ast.Unbound_variable (s.loc, "_." ^ f))
     | Ast.Sort i -> Type.Sort i
-    | Ast.Pi (x, a, b) ->
+    | Ast.Pi (i, x, a, b) ->
         let a' = go ctx Infer a in
         let b' = go (Check.bind x (Value.eval ctx.Check.env a') ctx) Infer b in
-        Type.Pi (x, a', b')
+        Type.Pi (i, x, a', b')
     | Ast.Arrow (a, b) ->
         let a' = go ctx Infer a in
         let b' = go (Check.bind "" (Value.eval ctx.Check.env a') ctx) Infer b in
-        Type.Pi ("", a', b')
-    | Ast.Lam (x, a, b) ->
+        Type.Pi (Type.Explicit, "", a', b')
+    | Ast.Lam (i, x, a, b) ->
         let a' = go ctx Infer a in
         let va = Value.eval ctx.Check.env a' in
         (* in checking position, the expected codomain flows into the body so a
@@ -184,11 +185,12 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           match mode with
           | Check e -> (
               match Meta.force !ms e with
-              | Value.Pi (_, _, c) -> Check (Value.apply_closure c (fresh ctx))
+              | Value.Pi (_, _, _, c) ->
+                  Check (Value.apply_closure c (fresh ctx))
               | _ -> Infer)
           | Infer -> Infer
         in
-        Type.Lam (x, a', go (Check.bind x va ctx) body_mode b)
+        Type.Lam (i, x, a', go (Check.bind x va ctx) body_mode b)
     | Ast.App _ -> elab_app ctx mode s
     (* the generic record projections; handled here (not delegated) so a literal
        pair underneath — [(a, b).1] — still reaches the elaborator *)
@@ -212,7 +214,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         let a' = go ctx Infer a in
         let va = Value.eval ctx.Check.env a' in
         let t' = go ctx (Check va) t in
-        Type.App (Type.Lam ("x", a', Type.Var 0), t')
+        Type.App (Type.Lam (Type.Explicit, "x", a', Type.Var 0), t')
     (* a pair is sugar for the dependent-pair record's constructor [mk]: checked
        against the Σ it recovers the parameters (Phase-1 omission); inferred it
        defaults to the constant family, as the old (Pair-infer) rule did *)
@@ -240,7 +242,8 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                 let ta = elab_infer ctx a' and tb = elab_infer ctx b' in
                 let bfun =
                   Type.Lam
-                    ( ""
+                    ( Type.Explicit
+                    , ""
                     , Value.quote ctx.Check.lvl ta
                     , Value.quote (ctx.Check.lvl + 1) tb )
                 in
@@ -297,7 +300,19 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
       | [] -> core
       | a :: rest -> (
           match Meta.force !ms ty with
-          | Value.Pi (_, dom, c) ->
+          (* an implicit binder while an explicit argument is still to come:
+             insert a fresh metavariable for it (solved by unification when the
+             explicit argument lands below) and retry against the next binder.
+             Insertion is gated on a remaining argument, so a partially-applied
+             head keeps its trailing implicit binders rather than spawning
+             unsolvable metas. *)
+          | Value.Pi (Type.Implicit, _, dom, c) ->
+              let m = fresh_meta_core ctx dom in
+              walk
+                (Type.App (core, m))
+                (Value.apply_closure c (Value.eval ctx.Check.env m))
+                (a :: rest)
+          | Value.Pi (_, _, dom, c) ->
               let a' = go ctx (Check dom) a in
               (* only when the domain still has an unsolved metavariable is
                  there anything to solve; otherwise skip — inferring [a']'s type
@@ -335,7 +350,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
       | [] -> ty
       | p :: rest -> (
           match ty with
-          | Value.Pi (_, _, c) -> instantiate (Value.apply_closure c p) rest
+          | Value.Pi (_, _, _, c) -> instantiate (Value.apply_closure c p) rest
           | _ -> ty)
     in
     elab_spine ctx head_core (instantiate cty pvals) args

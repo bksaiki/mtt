@@ -67,6 +67,8 @@ rule token = parse
   | "." (ident as f) { DOTID f }
   | "(" { LPAREN }
   | ")" { RPAREN }
+  | "{" { LBRACE }
+  | "}" { RBRACE }
   | ":" { COLON }
   | digits as n { INT (int_of_string n) }
   | ident as x { ID x }

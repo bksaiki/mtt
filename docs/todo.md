@@ -82,10 +82,15 @@ The phased build-out (each phase ≈ a PR) is planned in `elaborator-plan.md`.
       the metacontext, `unify`, and `zonk` live in a functional `lib/meta.ml`
       threaded by `Elab` (which does its own meta-aware type synthesis).
       Non-contextual + scope-checked; only unapplied metas solved so far
-- [ ] Implicit arguments: infer the type arguments the kernel demands
-      explicitly — gives `x = y` infix over `Eq A x y`, motive inference for
-      `J`/`T.rec`, and lets `refl` / inference-position intros omit their
-      type/endpoint arguments (the remaining half, building on holes above)
+- [x] Implicit arguments (Phase 4): `{x : A}` binders, with visibility a
+      kernel-inert `icit` flag on `Pi`/`Lam` (carried but ignored by conv/infer,
+      like the binder name — the Lean design). The elaborator inserts a fresh
+      metavariable for each leading implicit binder when an explicit argument
+      follows, solving it by unification; the prelude's `cong`/`sym`/`trans`/
+      `subst` now take their type/endpoint arguments implicitly. No `@f` escape
+      or trailing/expected-type-driven insertion yet (a bare `refl` whose
+      endpoints only implicits would fix must be ascribed). Still wanted on top:
+      `x = y` infix over `Eq`, motive inference for `J`/`T.rec`
 - [ ] `match` expressions — pure surface sugar that compiles to recursor
       (`T.rec`) applications; the kernel never sees it. Needs an equation
       compiler (nested/multiple/overlapping patterns → nested single-level

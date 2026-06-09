@@ -78,7 +78,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
             ];
         let rec decompose j ty =
           match (ty : Type.t) with
-          | Pi (x, a, b) ->
+          | Pi (_, x, a, b) ->
               let fields, result = decompose (j + 1) b in
               ( { Inductive.aname = x; aty = a; recursive = is_self (m + j) a }
                 :: fields

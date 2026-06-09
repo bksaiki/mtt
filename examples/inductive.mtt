@@ -57,5 +57,5 @@ theorem add_O_right (n : Nat') : Eq Nat' (add n Nat'.O) n :=
     (fun (n : Nat') => Eq Nat' (add n Nat'.O) n)
     refl
     (fun (k : Nat') (ih : Eq Nat' (add k Nat'.O) k) =>
-      cong Nat' Nat' Nat'.S (add k Nat'.O) k ih)
+      cong Nat'.S ih)
     n

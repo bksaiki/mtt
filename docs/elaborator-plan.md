@@ -106,12 +106,31 @@ solved, and only with a solution in scope at the meta's birth — enough for hol
 pinned by a sibling argument or a local variable; higher-order / late-bound
 cases are left unsolved (and reported).
 
-### Phase 4 — Implicit arguments
+### Phase 4 — Implicit arguments — **done**
 
-- `{x : A}` binder syntax; the elaborator inserts a fresh meta at each use site
-  and solves it by unification.
-- Lets the prelude's `cong`/`sym`/`trans`/`subst` (and user code) take their
-  type/endpoint arguments implicitly — the big ergonomic win.
+Following Lean: visibility lives on the binder, inert in the type theory.
+
+- `Type.t`/`Value.t` gain an `icit` (`Explicit | Implicit`) field on `Pi`/`Lam`.
+  The kernel **carries but ignores** it — `conv`/`conv_ty`/`infer` pattern it as
+  `_`, exactly as they ignore the binder-name hint — so `{A} -> B` checks
+  identically to `(A) -> B`. It is metadata read only by the frontend.
+- Surface: `{x y : A}` binder groups (in `def`/`axiom`/`theorem` telescopes,
+  `fun`/`Π`, and a standalone `{x : A} -> B` arrow), lexed as new `{`/`}` tokens.
+  The printer renders implicit `Pi`/`Lam` with braces.
+- Insertion (the elaborator's job): `elab_spine` walks the head's type and, while
+  the next binder is implicit *and an explicit argument still follows*, inserts a
+  fresh metavariable (solved by the Phase-3 unifier when the explicit argument
+  lands). Gating on a remaining explicit argument means a partially-applied head
+  keeps its trailing implicit binders rather than spawning unsolvable metas.
+- The prelude's `cong`/`sym`/`trans`/`subst` now take their type/endpoint
+  arguments implicitly: `cong f p`, `sym p`, `trans p q` — the ergonomic win.
+
+**Limitations (acceptable for now):** no `@f` to make implicits explicit, and no
+trailing-implicit / expected-type-driven insertion — so a fully-implicit
+function used as a bare value against a concrete type, or a `refl` whose
+endpoints only implicits would fix, must be ascribed (e.g. `subst P (refl : Eq A
+a a) h`). Strict-implicit (`⦃⦄`) and instance (`[ ]`, needs typeclasses) are not
+modelled.
 
 ### Phase 5 — Remaining inference, and `Eq`
 
@@ -130,8 +149,11 @@ Several smaller PRs, built on Phases 3–4.
   Phase 3). This keeps the TCB pristine and reuses the kernel's reduction engine,
   at the cost of `Elab` doing its own meta-aware type synthesis — untrusted code,
   the right place for it.
-- **Implicit-argument surface.** `{x : A}` binders (Agda/Lean-ish) is the
-  expected choice; confirm at Phase 4.
+- **Implicit-argument surface (Phase 4).** *Settled:* `{x : A}` binders, with
+  visibility as a kernel-inert `icit` flag on `Pi`/`Lam` (the Lean design — see
+  Phase 4). Chosen over a frontend-only `name → implicitness` table because
+  general implicits (on any function, lambda, or first-class `{A} -> B` type)
+  need visibility *in the type*, which only the kernel's `Pi` can carry.
 - **`to_term`'s fate.** `Parse.term_of_string*` already routes through `Elab`;
   `to_term` survives only as `Elab`'s catch-all (for forms not yet special-cased)
   and the inductive-declaration scope-check. It can be retired once `Eq` is gone

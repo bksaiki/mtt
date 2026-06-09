@@ -237,6 +237,35 @@ let%expect_test "holes: solved by unification, rejected when unsolvable" =
     type error: could not infer a hole (_); add a type annotation
     |}]
 
+(* implicit arguments ([{x : A}]): the elaborator inserts a fresh metavariable
+   for each leading implicit binder when an explicit argument follows, and
+   solves it by unifying that argument's type. The prelude's equality lemmas
+   ([cong]/[sym]/[trans]) take their type and endpoint arguments implicitly. *)
+let%expect_test "implicit arguments: insertion and inference" =
+  session
+    [ (* an implicit type argument, inferred from the value argument *)
+      "def myid {A : Type} (x : A) : A := x"
+    ; "#check myid 0"
+    ; (* a bare implicit-arg function is not applied, so nothing is inserted:
+         its full implicit type prints with braces *)
+      "#check myid"
+    ; (* the prelude's lemmas now take type/endpoints implicitly *)
+      "theorem e : Eq Nat 1 1 := refl"
+    ; "#check sym e"
+    ; "#check cong (fun n : Nat => Nat.succ n) e"
+    ; (* a standalone implicit function type round-trips through the printer *)
+      "axiom dup : {A : Type} -> A -> A"
+    ; "#check dup"
+    ];
+  [%expect
+    {|
+    0 : Nat
+    fun {A : Type} => fun (x : A) => x : {A : Type} -> A -> A
+    J (fun (z : Nat) => fun (q : Eq Nat 1 z) => Eq Nat z 1) refl e : Eq Nat 1 1
+    J (fun (z : Nat) => fun (q : Eq Nat 1 z) => Eq Nat 2 (Nat.succ z)) refl e : Eq Nat 2 2
+    dup : {A : Type} -> A -> A
+    |}]
+
 (* Σ is the prelude record [Sigma]: pairs check against it (recovering the
    parameters), projections are the generic record projections, and η comes from
    the record rule. Fixed at Type, so the old "a pair of props is an irrelevant

@@ -19,11 +19,20 @@ type rec_head =
   ; recs : bool list list
   }
 
+(* a binder's visibility: an explicit [(x : A)] argument is written at every
+   application; an implicit [{x : A}] one is inserted by the elaborator. The
+   kernel carries this on Π/λ but ignores it entirely in conversion and typing
+   (like the binder-name hint) — it is metadata read only by the frontend
+   (elaboration's argument insertion and the printer). *)
+type icit =
+  | Explicit
+  | Implicit
+
 type t =
   | Var of int (* de Bruijn index *)
   | Sort of int (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
-  | Pi of string * t * t (* Π (x : A). B, B binds index 0 *)
-  | Lam of string * t * t (* λ (x : A). b *)
+  | Pi of icit * string * t * t (* Π (x : A). B, B binds index 0 *)
+  | Lam of icit * string * t * t (* λ (x : A). b *)
   | App of t * t
   | Proj of int * t (* x.(i+1): the i-th field projection of a record *)
   | Meta of
@@ -38,8 +47,8 @@ type t =
 let rec occurs k = function
   | Var i -> i = k
   | Sort _ -> false
-  | Pi (_, a, b)
-  | Lam (_, a, b) ->
+  | Pi (_, _, a, b)
+  | Lam (_, _, a, b) ->
       occurs k a || occurs (k + 1) b
   | App (f, a) -> occurs k f || occurs k a
   | Proj (_, t) -> occurs k t
@@ -68,10 +77,10 @@ let rec has_meta = function
   | Rec _ ->
       false
   | Proj (_, a) -> has_meta a
-  | Pi (_, a, b)
-  | Lam (_, a, b)
-  | App (a, b) ->
+  | Pi (_, _, a, b)
+  | Lam (_, _, a, b) ->
       has_meta a || has_meta b
+  | App (a, b) -> has_meta a || has_meta b
   | Eq (a, b, c)
   | J (a, b, c) ->
       has_meta a || has_meta b || has_meta c
@@ -133,7 +142,15 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
     | Sort u ->
         paren_if fmt (prec > 10) (fun fmt ->
             Format.fprintf fmt "Type %d" (u - 1))
-    | Pi (x, a, b) ->
+    | Pi (Implicit, x, a, b) ->
+        (* an implicit binder always shows its braces and name (dropping the
+           name would lose the marker), even when unused *)
+        let x = freshen names x in
+        paren_if fmt (prec > 1) (fun fmt ->
+            Format.fprintf fmt "@[{%s : %a} ->@ %a@]" x (go 0 names) a
+              (go 1 (x :: names))
+              b)
+    | Pi (Explicit, x, a, b) ->
         paren_if fmt (prec > 1) (fun fmt ->
             if occurs 0 b then
               let x = freshen names x in
@@ -146,10 +163,15 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
               Format.fprintf fmt "@[%a ->@ %a@]" (go 2 names) a
                 (go 1 ("" :: names))
                 b)
-    | Lam (x, a, b) ->
+    | Lam (i, x, a, b) ->
         let x = freshen names x in
+        let l, r =
+          match i with
+          | Implicit -> ("{", "}")
+          | Explicit -> ("(", ")")
+        in
         paren_if fmt (prec > 0) (fun fmt ->
-            Format.fprintf fmt "@[fun (%s : %a) =>@ %a@]" x (go 0 names) a
+            Format.fprintf fmt "@[fun %s%s : %a%s =>@ %a@]" l x (go 0 names) a r
               (go 0 (x :: names))
               b)
     | App (f, a) ->
