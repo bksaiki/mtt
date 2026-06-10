@@ -13,22 +13,17 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 - [x] Universe polymorphism + drop cumulativity (Lean's model — full account in
       `design.md` "Universes", rationale in `questions.md`). Levels are
       `Level.t` (`level.ml`); cumulativity is gone (`conv` by `Level.equal`).
-      Inductives and defs take auto-bound level parameters; uses infer their
-      level arguments — inductives by direct matching (`Elab.match_lvl`), defs by
-      level metavariables (`Level.LMeta`). The prelude's `Sigma`/`Sum`/`Eq`, the
-      equality toolkit (`rfl`/`symm`/`trans`/`subst`/`cong`), and `absurd` are
-      polymorphic. Follow-ups:
-      - [ ] a bare `#check cong f p` (inference position) can't infer the
-            codomain universe — `{B : Sort v}` is fixed only through `f`, and
-            solving the term meta `?B` does not propagate to `?v`. The fix is
-            meta-assignment type unification (on `?m := t`, also unify
-            `typeof(?m)` with `typeof(t)`), which wants the unifier to carry a
-            typing context. In checking position the goal pins the level, which
-            is how `cong` is actually used.
-      - [ ] unify the two level-inference paths: formers/constructors use
-            `match_lvl`/`elab_poly_app`, defs use level metavariables. The
-            meta-based path is the more general one and could subsume both,
-            retiring `match_lvl`.
+      Inductives and defs take auto-bound level parameters; every polymorphic
+      use (former, constructor, recursor, def) infers its level arguments by one
+      mechanism — fresh level metavariables (`Level.LMeta`) on the instantiated
+      head type, solved by the value unifier (`Elab.elab_poly_head`), with
+      **meta-assignment type unification** (`Meta.propagate_meta_type`: on
+      solving `?m := t`, also unify `typeof(?m)` with `typeof(t)`, so a level
+      meta in `?m`'s sort is pinned) so a def's implicit type parameter fixes its
+      universe from the argument that determines it — even in inference position
+      (`cong f p`). The prelude's `Sigma`/`Sum`/`Eq`, the equality toolkit
+      (`rfl`/`symm`/`trans`/`subst`/`cong`), and `absurd` are polymorphic.
+      Follow-up:
       - [ ] optional: a real glued `Const`/def table (pairs with the "glued
             evaluation" engineering item) — defs are eager δ today.
 - [ ] Align `absurd` with Lean. Ours is ex falso —

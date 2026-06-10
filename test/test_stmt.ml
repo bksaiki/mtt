@@ -252,10 +252,10 @@ let%expect_test "implicit arguments: insertion and inference" =
     ; (* the prelude's lemmas now take type/endpoints implicitly *)
       "theorem e : Eq Nat 1 1 := rfl"
     ; "#check symm e"
-    ; (* [cong] is universe-polymorphic; its codomain universe is fixed by the
-         expected type (here an ascription), as in any real use against a goal —
-         a bare [#check cong f e] cannot infer it *)
-      "#check (cong (fun n : Nat => Nat.succ n) e : Nat.succ 1 = Nat.succ 1)"
+    ; (* [cong] is universe-polymorphic; even in inference position its codomain
+         universe is inferred from [f] (meta-assignment type unification solves
+         the level meta from the solved type argument) *)
+      "#check cong (fun n : Nat => Nat.succ n) e"
     ; (* a standalone implicit function type round-trips through the printer *)
       "axiom dup : {A : Type} -> A -> A"
     ; "#check dup"
@@ -753,10 +753,20 @@ let%expect_test "polymorphic equality toolkit: levels inferred, incl. at Prop" =
     ; (* transport a proof across a Prop equality: the motive lands in Prop, and
          subst's {A : Sort u}/(P : A -> Sort v) levels are both inferred *)
       "#check subst (fun z : Prop => z) hpq hp"
+    ; (* cong in *inference* position with a non-default codomain universe: its
+         {B : Sort v} is implicit and fixed only through [g]'s codomain (Prop),
+         so v is pinned by meta-assignment type unification, not a goal *)
+      "axiom N : Type"
+    ; "axiom a : N"
+    ; "axiom b : N"
+    ; "axiom pab : a = b"
+    ; "axiom g : N -> Prop"
+    ; "#check cong g pab"
     ];
   [%expect
     {|
     Eq.rec Prop P (fun (z : Prop) => fun (q : P = z) => z = P) rfl Q hpq : Q = P
     Eq.rec Prop Q (fun (w : Prop) => fun (r : Q = w) => P = w) hpq P hqp : P = P
     Eq.rec Prop P (fun (z : Prop) => fun (q : P = z) => z) hp Q hpq : Q
+    Eq.rec N a (fun (z : N) => fun (q : a = z) => g a = g z) rfl b pab : g a = g b
     |}]

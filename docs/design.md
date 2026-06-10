@@ -121,18 +121,20 @@ matter the domain — and `max i j` otherwise. The whole difference between
 irrelevance in `conv`. Levels are `Level.t` (`Zero`/`Succ`/`Max`/`IMax`/`Var`, plus an
 elaboration-only `LMeta`; `level.ml`), so sorts can take **level parameters** — a declaration just writes
 `Sort u` and its free level variables are auto-bound as parameters (Lean-style;
-no `.{u v}` binder syntax), and a polymorphic inductive's use-site level
-arguments are inferred from its arguments' sorts (`Sigma`/`Sum`/`Eq` are all
-polymorphic — a recursor's level arguments come from the major's type, or from
-its explicit parameters). *Definitions* can be polymorphic too: a `def`'s free
-`Sort u` is auto-bound and the def is stored level-abstracted (`Value.VPoly`),
-referenced by `Type.Def (i, levels)` with use-site level arguments inferred by
-**level metavariables** (`Level.LMeta`, solved by the same unifier as term metas
-— extended to `Sort`/`VInd` level arguments — and zonked away). So the whole
-prelude equality toolkit (`rfl`/`symm`/`trans`/`subst`/`cong`) and `absurd` are
-universe-polymorphic: they work on `Prop` equalities and eliminate into any
-sort, the levels solved per use even when fixed only through an implicit
-argument. There is **no cumulativity** (Lean's model, not Rocq's): `conv`
+no `.{u v}` binder syntax). Both inductives and *definitions* can be polymorphic
+(a def is stored level-abstracted as a `Value.VPoly` and referenced by
+`Type.Def (i, levels)`), and every polymorphic use — an inductive former, a
+constructor, a recursor, or a def — infers its level arguments by one mechanism
+(`Elab.elab_poly_head`): the head's type is instantiated at fresh **level
+metavariables** (`Level.LMeta`), which the value unifier solves (extended to
+compare `Sort`/`VInd` level arguments) and `zonk` resolves away. A solved
+metavariable's type is reconciled with its solution's, so a level meta in an
+implicit type parameter's sort is pinned from the argument that determines it.
+So `Sigma`/`Sum`/`Eq`, the whole equality toolkit
+(`rfl`/`symm`/`trans`/`subst`/`cong`), and `absurd` are universe-polymorphic:
+they work on `Prop` equalities and eliminate into any sort, the levels solved per
+use even when fixed only through an implicit argument (`cong f p`). There is
+**no cumulativity** (Lean's model, not Rocq's): `conv`
 compares sorts by `Level.equal`, and code spans universes by polymorphism, not
 subtyping. `Empty` (now a prelude inductive with no constructors,
 not a kernel primitive — see Inductive types) eliminates into any sort via its
