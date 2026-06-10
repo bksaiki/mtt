@@ -12,6 +12,11 @@ type t =
   | Max of t * t
   | IMax of t * t
   | Var of int  (** a level parameter, by de Bruijn index *)
+  | LMeta of int
+      (** a level metavariable, by id: an elaboration-only placeholder for an
+          as-yet-unknown level argument, solved by unification and zonked away
+          (the {!Meta} analogue of {!Type.Meta}). Treated as an opaque atom by
+          the algebra here; it never reaches a checked term. *)
 
 let zero = Zero
 
@@ -42,7 +47,9 @@ let rec to_int = function
           match (to_int a, to_int b) with
           | Some x, Some y -> Some (Stdlib.max x y)
           | _ -> None))
-  | Var _ -> None
+  | Var _
+  | LMeta _ ->
+      None
 
 (* smart constructors: fully evaluate the closed case, apply the defining
    identities otherwise *)
@@ -97,7 +104,7 @@ and summands l =
     | Zero -> (Stdlib.max (fst acc) off, snd acc)
     | Succ a -> go acc (off + 1) a
     | Max (a, b) -> go (go acc off a) off b
-    | Var _ as a -> add acc a off
+    | (Var _ | LMeta _) as a -> add acc a off
     | IMax (x, y) as a -> (
         match reduce_imax a with
         | Some a' -> go acc off a'
@@ -138,7 +145,9 @@ and min_value = function
         0
       else
         Stdlib.max (min_value a) mb
-  | Var _ -> 0
+  | Var _
+  | LMeta _ ->
+      0
 
 and succ_n n l =
   if n <= 0 then
@@ -161,6 +170,20 @@ let rec subst args = function
       match List.nth_opt args i with
       | Some l -> l
       | None -> Var i)
+  (* a level meta is solved separately (by the elaborator), not by level-param
+     instantiation *)
+  | LMeta _ as l -> l
+
+(* whether [l] mentions any level metavariable (used to keep an unsolved one out
+   of a checked term) *)
+let rec has_meta = function
+  | Zero -> false
+  | Succ a -> has_meta a
+  | Max (a, b)
+  | IMax (a, b) ->
+      has_meta a || has_meta b
+  | Var _ -> false
+  | LMeta _ -> true
 
 let rec to_string = function
   | Zero -> "0"
@@ -171,3 +194,4 @@ let rec to_string = function
   | Max (a, b) -> Printf.sprintf "max %s %s" (to_string a) (to_string b)
   | IMax (a, b) -> Printf.sprintf "imax %s %s" (to_string a) (to_string b)
   | Var i -> "u" ^ string_of_int i
+  | LMeta i -> "?u" ^ string_of_int i

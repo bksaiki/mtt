@@ -126,11 +126,13 @@ arguments are inferred from its arguments' sorts (`Sigma`/`Sum`/`Eq` are all
 polymorphic — a recursor's level arguments come from the major's type, or from
 its explicit parameters). *Definitions* can be polymorphic too: a `def`'s free
 `Sort u` is auto-bound and the def is stored level-abstracted (`Value.VPoly`),
-referenced by `Type.Def (i, levels)` with use-site level arguments inferred from
-its explicit arguments (so the prelude's `absurd (A : Sort u) (h : Empty) : A`
-eliminates into any sort; a def with *implicit* level-bearing params, like a
-fully-polymorphic `subst`/`cong`, awaits level metavariables). There is **no
-cumulativity** (Lean's model, not Rocq's): `conv`
+referenced by `Type.Def (i, levels)` with use-site level arguments inferred by
+**level metavariables** (`Level.LMeta`, solved by the same unifier as term metas
+— extended to `Sort`/`VInd` level arguments — and zonked away). So the whole
+prelude equality toolkit (`rfl`/`symm`/`trans`/`subst`/`cong`) and `absurd` are
+universe-polymorphic: they work on `Prop` equalities and eliminate into any
+sort, the levels solved per use even when fixed only through an implicit
+argument. There is **no cumulativity** (Lean's model, not Rocq's): `conv`
 compares sorts by `Level.equal`, and code spans universes by polymorphism, not
 subtyping. `Empty` (now a prelude inductive with no constructors,
 not a kernel primitive — see Inductive types) eliminates into any sort via its

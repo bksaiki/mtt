@@ -56,23 +56,30 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
             from the operand sorts. `Sum (A : Sort u) (B : Sort v) : Sort
             (max u v)` and `Eq (A : Sort u) …` in the prelude; a `Prop`-level
             `Or`/`And` is now expressible (`examples/sum.mtt`, `test_stmt`).
-      - [~] **Stage 2 — polymorphic definitions.** A `def`'s free `Sort u` level
+      - [x] **Stage 2 — polymorphic definitions.** A `def`'s free `Sort u` level
             variables are auto-bound as level parameters (like an inductive's),
             stored level-abstracted (`Value.VPoly` at the context slot,
             `Check.extend_poly`) and referenced by a new core node
             `Type.Def (i, levels)` whose `eval`/`infer` instantiate the
             abstraction at the use site (kept in the de Bruijn context — no
             global `Const` table, so monomorphic defs and locals are untouched
-            `Var`s). Done: defs whose level args are fixed by **explicit**
-            arguments, via the former machinery (`elab_poly_app` with a `Def`
-            head); `absurd (A : Sort u) (h : Empty) : A` is now polymorphic and
-            eliminates into any sort (`examples/empty.mtt`, `test_stmt`).
-            Remaining:
-            - [ ] **level metavariables** so a def with *implicit* level-bearing
-                  params infers them: make `subst`/`cong` fully polymorphic
-                  (their `{A : Sort u}` is solved as a term meta, and `u` must be
-                  solved alongside — needs a level-meta flavor in `meta.ml` and
-                  sort unification). Until then they stay `Type`-only.
+            `Var`s). Use-site levels are inferred by **level metavariables**
+            (`Level.LMeta`, a `meta.ml` level-meta store + `unify_level`, hooked
+            into the value unifier at `Sort`/`VInd` and zonked away; tracked out
+            of checked terms by `Type.has_level_meta`): a polymorphic def applied
+            to arguments mints a fresh level meta per parameter and runs ordinary
+            spine elaboration, so its levels are solved whether they are fixed by
+            explicit arguments or only through implicit ones. The whole prelude
+            equality toolkit (`rfl`/`symm`/`trans`/`subst`/`cong`) and `absurd`
+            are now universe-polymorphic — they work on `Prop` equalities and
+            eliminate into any sort, no cumulativity (`examples/eq.mtt`,
+            `examples/empty.mtt`, `test_stmt`).
+            - [ ] minor: a bare `#check cong f p` in inference position can't
+                  infer the codomain universe (`{B : Sort v}` is determined only
+                  through `f`, and solving the term meta `?B` does not propagate
+                  to `?v` — that needs meta-assignment type unification). In
+                  checking position (a goal/ascription) the level is fixed, which
+                  is how `cong` is actually used.
             - [ ] optional: a real glued `Const`/def table (pairs with the
                   "glued evaluation" engineering item) if unfolded δ output or
                   per-use re-eval ever matters.

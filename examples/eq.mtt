@@ -27,3 +27,19 @@ axiom h : P a
 -- of the same equation — no axiom needed
 axiom p2 : Eq A a b
 #check_equal p p2
+
+-- The toolkit is universe-polymorphic, so it works on equalities of
+-- propositions too (A : Prop, level inferred as 0), not just data. There is no
+-- cumulativity: the implicit {A : Sort u} in symm/subst is solved per use.
+axiom R : Prop
+axiom S : Prop
+axiom rs : R = S
+axiom r : R
+-- symm on a Prop equality
+#check symm rs
+-- transport a proof across a Prop equality (the motive lands in Prop)
+#check subst (λ z : Prop ⇒ z) rs r
+-- and a Type-valued motive over a Prop point still transports
+axiom T : Prop → Type
+axiom t : T R
+#check_equal (subst T rs t) (subst T rs t)

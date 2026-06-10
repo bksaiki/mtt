@@ -91,10 +91,19 @@ val subst_levels : Level.t list -> t -> t
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool
 
-(** [has_meta t] is true if any metavariable ({!Meta}) occurs in [t]; the
-    frontend uses it (on a quoted value, where solved metas are already
-    unfolded) to detect an unsolved hole before the trusted check. *)
+(** [has_meta t] is true if any {e term} metavariable ({!Meta}) occurs in [t];
+    the frontend uses it (on a quoted value, where solved metas are already
+    unfolded) to detect an unsolved hole before the trusted check, and to gate
+    its meta-aware type synthesis. Level metavariables are tracked separately by
+    {!has_level_meta}. *)
 val has_meta : t -> bool
+
+(** [has_level_meta t] is true if any {e level} metavariable ({!Level.LMeta})
+    occurs in a [Sort] or a head's level arguments. A level meta is tolerated by
+    the kernel as an opaque atom (so it does not force meta-aware synthesis like
+    {!has_meta}), but an unsolved one is still a hole the elaborator rejects
+    before re-checking. *)
+val has_level_meta : t -> bool
 
 (** [freshen names x] is [x] primed with enough trailing ['] to make it distinct
     from every name in [names] (and [x]); ["" ] becomes ["x"] first. The printer

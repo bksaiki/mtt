@@ -117,6 +117,27 @@ let rec has_meta = function
       has_meta a || has_meta b
   | App (a, b) -> has_meta a || has_meta b
 
+(* whether any {e level} metavariable occurs in [t] — in a [Sort] or in a head's
+   level arguments. Kept separate from {!has_meta} (which tracks term metas, and
+   drives the meta-aware type synthesis): a level meta is kernel-tolerable as an
+   opaque atom, so it need not force that slow path, but an {e unsolved} one is
+   still a hole the elaborator must reject before the kernel re-check. *)
+let rec has_level_meta = function
+  | Sort l -> Level.has_meta l
+  | Def (_, ls)
+  | Ind (_, ls) ->
+      List.exists Level.has_meta ls
+  | Ctor h -> List.exists Level.has_meta h.clevels
+  | Rec h -> List.exists Level.has_meta h.rlevels
+  | Var _
+  | Meta _ ->
+      false
+  | Proj (_, a) -> has_level_meta a
+  | Pi (_, _, a, b)
+  | Lam (_, _, a, b) ->
+      has_level_meta a || has_level_meta b
+  | App (a, b) -> has_level_meta a || has_level_meta b
+
 (* makes the hint [x] distinct from every name in scope *)
 let freshen names x =
   let rec prime x =

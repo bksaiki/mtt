@@ -10,6 +10,11 @@ type t =
   | Max of t * t
   | IMax of t * t
   | Var of int  (** a level parameter, by de Bruijn index *)
+  | LMeta of int
+      (** a level metavariable, by id: an elaboration-only placeholder for an
+          unknown level argument, solved by unification and zonked away (the
+          {!Type.Meta} analogue for levels). An opaque atom to the algebra here;
+          it never appears in a checked term. *)
 
 val zero : t
 
@@ -34,6 +39,10 @@ val normalize : t -> t
 
 (** definitional equality of levels (exact on closed levels) *)
 val equal : t -> t -> bool
+
+(** whether the level mentions any level metavariable ({!LMeta}); the elaborator
+    uses it to keep an unsolved one out of a checked term *)
+val has_meta : t -> bool
 
 (** [leq a b] decides [a ≤ b]; used by predicativity *)
 val leq : t -> t -> bool

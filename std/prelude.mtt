@@ -77,26 +77,26 @@ inductive Eq (A : Sort u) (x : A) : A -> Prop :=
 -- reflexivity: the equality's constructor with both endpoints the same, type and
 -- point implicit. `rfl` is an ordinary def (not a keyword) — checking it against
 -- a goal `a = a` inserts the implicits and recovers `Eq.refl`'s parameters.
-def rfl {A : Type} {x : A} : x = x := Eq.refl A x
+def rfl {A : Sort u} {x : A} : x = x := Eq.refl A x
 
 -- equality is symmetric: if `a = b` then `b = a`.
-def symm {A : Type} {x y : A} (p : x = y) : y = x :=
+def symm {A : Sort u} {x y : A} (p : x = y) : y = x :=
   Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ z = x) rfl _ p
 
 -- equality is transitive: if `a = b` and `b = c` then `a = c`.
-def trans {A : Type} {x y z : A} (p : x = y) (q : y = z) : x = z :=
+def trans {A : Sort u} {x y z : A} (p : x = y) (q : y = z) : x = z :=
   Eq.rec _ _ (λ w : A ⇒ λ r : y = w ⇒ x = w) p _ q
 
 -- transport along an equality (large elimination: the motive lands in Type).
 -- Transparent (a `def`) so transport along `rfl` computes away (ι). The types
 -- and endpoints are implicit.
-def subst {A : Type} (P : A → Type) {x y : A} (p : x = y) (h : P x) : P y :=
+def subst {A : Sort u} (P : A → Sort v) {x y : A} (p : x = y) (h : P x) : P y :=
   Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ P z) h _ p
 
 -- congruence: equal arguments give equal images. The types and endpoints are
 -- implicit ({…}) — recovered from the equality proof — so a call is just
 -- `cong f p`.
-def cong {A B : Type} (f : A → B) {x y : A} (p : x = y) : f x = f y :=
+def cong {A : Sort u} {B : Sort v} (f : A → B) {x y : A} (p : x = y) : f x = f y :=
   Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ f x = f z) rfl _ p
 
 -- === Naturals === (arithmetic by recursion on the first argument)

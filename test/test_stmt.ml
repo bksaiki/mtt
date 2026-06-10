@@ -252,7 +252,10 @@ let%expect_test "implicit arguments: insertion and inference" =
     ; (* the prelude's lemmas now take type/endpoints implicitly *)
       "theorem e : Eq Nat 1 1 := rfl"
     ; "#check symm e"
-    ; "#check cong (fun n : Nat => Nat.succ n) e"
+    ; (* [cong] is universe-polymorphic; its codomain universe is fixed by the
+         expected type (here an ascription), as in any real use against a goal —
+         a bare [#check cong f e] cannot infer it *)
+      "#check (cong (fun n : Nat => Nat.succ n) e : Nat.succ 1 = Nat.succ 1)"
     ; (* a standalone implicit function type round-trips through the printer *)
       "axiom dup : {A : Type} -> A -> A"
     ; "#check dup"
@@ -730,4 +733,30 @@ let%expect_test "polymorphic def: level parameter inferred per use" =
     Void.rec (fun (x : Void) => N) v : N
     Void.rec (fun (x : Void) => p) v : p
     Void.rec (fun (x : Void) => p) v : p
+    |}]
+
+(* the payoff of level metavariables: a polymorphic def with an *implicit*
+   level-bearing parameter ([{A : Sort u}]) infers its level at a use, where it
+   is determined only through the implicit argument. The prelude's equality
+   toolkit is the case in point — [symm]/[subst] work on Prop equalities (the
+   level is solved to 0, no cumulativity needed), not just Type. *)
+let%expect_test "polymorphic equality toolkit: levels inferred, incl. at Prop" =
+  session
+    [ "axiom P : Prop"
+    ; "axiom Q : Prop"
+    ; "axiom hpq : P = Q"
+    ; "axiom hqp : Q = P"
+    ; "axiom hp : P"
+    ; (* symm/trans on Prop equalities: {A : Sort u} implicit, u = 0 inferred *)
+      "#check symm hpq"
+    ; "#check trans hpq hqp"
+    ; (* transport a proof across a Prop equality: the motive lands in Prop, and
+         subst's {A : Sort u}/(P : A -> Sort v) levels are both inferred *)
+      "#check subst (fun z : Prop => z) hpq hp"
+    ];
+  [%expect
+    {|
+    Eq.rec Prop P (fun (z : Prop) => fun (q : P = z) => z = P) rfl Q hpq : Q = P
+    Eq.rec Prop Q (fun (w : Prop) => fun (r : Q = w) => P = w) hpq P hqp : P = P
+    Eq.rec Prop P (fun (z : Prop) => fun (q : P = z) => z) hp Q hpq : Q
     |}]

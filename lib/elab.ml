@@ -62,12 +62,12 @@ let classify_head sg (s : Ast.t) =
 let imax = Level.imax
 
 (* if context slot [i] holds a universe-polymorphic def, its level-parameter
-   count and its type at the identity instantiation (level params left as
-   [Level.Var j], the form [match_lvl] solves against) — else [None] *)
+   count together with the pieces ([denv], type-[body] core) needed to build its
+   type at any level instantiation [ls] (as [eval denv (subst_levels ls body)])
+   — else [None] *)
 let poly_def_info (ctx : Check.ctx) i =
   match List.nth_opt ctx.Check.types i with
-  | Some (Value.VPoly { nlevels; denv; body }) ->
-      Some (nlevels, Value.eval denv body)
+  | Some (Value.VPoly { nlevels; denv; body }) -> Some (nlevels, denv, body)
   | _ -> None
 
 (* peel a core application into its head and argument list (outermost first) *)
@@ -279,7 +279,19 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
                   (Value.apply_closure c (Value.eval ctx.Check.env m))
                   true
             | _ ->
-                if inserted then ms := Meta.unify !ms ctx.Check.lvl ty g;
+                (* unify the result type against the goal when we inserted an
+                   implicit (to solve it), or when either side still carries an
+                   unsolved level metavariable — solving it from the goal (an
+                   explicit argument of a polymorphic def checked against a
+                   [Sort ?u] domain, or a saturated head like [cong f p] whose
+                   codomain universe is fixed only by the goal's level).
+                   Otherwise leave conversion to the kernel. *)
+                let has_lmeta v =
+                  Type.has_level_meta
+                    (Value.quote ctx.Check.lvl (Meta.force !ms v))
+                in
+                if inserted || has_lmeta ty || has_lmeta g then
+                  ms := Meta.unify !ms ctx.Check.lvl ty g;
                 core
           in
           walk core ty false
@@ -325,12 +337,26 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
           match List.find_index (String.equal x) ctx.Check.names with
           | Some i -> (
               match poly_def_info ctx i with
-              (* a polymorphic def used bare: instantiate at the identity levels
-                 ([Var 0 … Var (k-1)]), so its type prints with its universe
-                 parameters (like a polymorphic former). In application position
-                 the [Other] branch below re-solves the real levels. *)
-              | Some (nlevels, _) ->
-                  Type.Def (i, List.init nlevels (fun j -> Level.Var j))
+              (* a polymorphic def used bare. In checking position its level
+                 arguments are metavariables, solved by coercing its type
+                 against the goal ([rfl] checked against [a = a]); this is also
+                 what keeps a bare poly def inside another poly def's body from
+                 capturing the enclosing level parameters. In inference position
+                 there is no goal, so fall back to the identity levels ([Var 0 …
+                 Var (k-1)]) — its type then prints with its universe parameters
+                 (as a polymorphic former does). An application re-solves the
+                 levels in the [Other] branch regardless. *)
+              | Some (nlevels, _, _) ->
+                  let ls =
+                    match mode with
+                    | Check _ ->
+                        List.init nlevels (fun _ ->
+                            let ms', id = Meta.fresh_level !ms in
+                            ms := ms';
+                            Level.LMeta id)
+                    | Infer -> List.init nlevels (fun j -> Level.Var j)
+                  in
+                  Type.Def (i, ls)
               | None -> Type.Var i)
           | None -> (
               match Signature.find sg x with
@@ -791,20 +817,27 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
         | Type.Ind (name, _)
           when (Check.lookup_ind ctx name).Inductive.nlevels > 0 ->
             elab_poly_former ctx name args
-        (* a polymorphic def applied to arguments: infer its level arguments
-           from the argument types (the same machinery as a former), then build
-           the [Def] reference at the solved levels *)
+        (* a polymorphic def applied to arguments: mint a fresh level meta per
+           level parameter and instantiate the def's type at them, then run the
+           ordinary spine elaboration. Implicit insertion and unification solve
+           the level metas through the head type's sorts and inductive level
+           arguments — so a def with implicit level-bearing parameters (e.g.
+           [subst]/[cong]'s [{A : Sort u}]) infers its levels, not just one
+           whose levels are fixed by explicit arguments. *)
         | Type.Def (i, _) -> (
             match poly_def_info ctx i with
-            | Some (nlv, hty) ->
-                let name =
-                  match head.Ast.desc with
-                  | Ast.Var x -> x
-                  | _ -> "definition"
+            | Some (nlevels, denv, tybody) ->
+                let metas =
+                  List.init nlevels (fun _ ->
+                      let ms', id = Meta.fresh_level !ms in
+                      ms := ms';
+                      Level.LMeta id)
                 in
-                elab_poly_app ctx ~name ~nlv ~hty
-                  ~mk_head:(fun levels -> Type.Def (i, levels))
-                  args
+                let head_core = Type.Def (i, metas) in
+                let head_ty =
+                  Value.eval denv (Type.subst_levels metas tybody)
+                in
+                elab_spine ~explicit ~mode ctx head_core head_ty args
             | None ->
                 elab_spine ~explicit ~mode ctx head_core
                   (elab_infer ctx head_core) args)
@@ -1119,6 +1152,10 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
   if Type.has_meta core then
     Error.type_error
       [ Error.txt "could not infer a hole (_); add a type annotation" ];
+  if Type.has_level_meta core then
+    Error.type_error
+      [ Error.txt "could not infer a universe level; annotate it (e.g. Sort u)"
+      ];
   core
 
 let infer ?(levels = []) notation ctx s = elaborate ~levels notation ctx Infer s
