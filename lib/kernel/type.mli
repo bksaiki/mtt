@@ -76,6 +76,11 @@ and field_rec =
   | Nonrec
   | Recursive of t list
 
+(** [subst_levels args t] instantiates a level-polymorphic term by replacing the
+    level variables in every [Sort] and inductive-head level list of [t] with
+    the level arguments [args]; identity on a monomorphic term *)
+val subst_levels : Level.t list -> t -> t
+
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool
 

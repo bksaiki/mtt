@@ -57,6 +57,23 @@ and field_rec =
   | Nonrec
   | Recursive of t list
 
+(* substitute the level arguments [args] for the level variables in every [Sort]
+   and inductive-head level list of [t] (instantiating a level-polymorphic term
+   at a use site); identity on a monomorphic term *)
+let rec subst_levels args t =
+  match t with
+  | Sort l -> Sort (Level.subst args l)
+  | Var _
+  | Meta _ ->
+      t
+  | Pi (i, x, a, b) -> Pi (i, x, subst_levels args a, subst_levels args b)
+  | Lam (i, x, a, b) -> Lam (i, x, subst_levels args a, subst_levels args b)
+  | App (f, a) -> App (subst_levels args f, subst_levels args a)
+  | Proj (i, e) -> Proj (i, subst_levels args e)
+  | Ind (n, ls) -> Ind (n, List.map (Level.subst args) ls)
+  | Ctor h -> Ctor { h with clevels = List.map (Level.subst args) h.clevels }
+  | Rec h -> Rec { h with rlevels = List.map (Level.subst args) h.rlevels }
+
 let rec occurs k = function
   | Var i -> i = k
   | Sort _ -> false

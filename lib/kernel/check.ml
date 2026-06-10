@@ -467,10 +467,13 @@ let rec infer ctx t =
             ])
   (* an inductive type former and its constructors have fixed (non-polymorphic)
      types derived from the declaration; they ride the normal (App) machinery *)
-  | Type.Ind (name, _) ->
-      Value.eval [] (Inductive.former_type (lookup_ind ctx name))
+  | Type.Ind (name, ls) ->
+      Value.eval []
+        (Type.subst_levels ls (Inductive.former_type (lookup_ind ctx name)))
   | Type.Ctor h ->
-      Value.eval [] (Inductive.ctor_type (lookup_ind ctx h.ind) h.cindex)
+      Value.eval []
+        (Type.subst_levels h.clevels
+           (Inductive.ctor_type (lookup_ind ctx h.ind) h.cindex))
   (* a bare recursor is motive-polymorphic; only a saturated application (caught
      in (App)) can be typed *)
   | Type.Rec _ ->
