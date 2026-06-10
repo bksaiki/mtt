@@ -59,11 +59,7 @@ let classify_head sg (s : Ast.t) =
             | None -> Other))
   | _ -> Other
 
-let imax i j =
-  if j = 0 then
-    0
-  else
-    max i j
+let imax = Level.imax
 
 (* peel a core application into its head and argument list (outermost first) *)
 let core_spine t =
@@ -193,7 +189,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
   and sort_of_ty ctx a =
     match Meta.force !ms (elab_infer ctx a) with
     | Value.Sort i -> i
-    | _ -> 0
+    | _ -> Level.zero
   in
   (* the inductive registered for the [sigma] role, that [Σ]/[×] desugar to *)
   let sigma_form () =
@@ -330,7 +326,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                 Error.type_error
                   [ Error.txtf "the projection .%s expects a record value" field
                   ]))
-    | Ast.Sort i -> Type.Sort i
+    | Ast.Sort i -> Type.Sort (Level.of_int i)
     | Ast.Pi (i, x, a, b) ->
         let a' = go ctx Infer a in
         let b' = go (Check.bind x (Value.eval ctx.Check.env a') ctx) Infer b in

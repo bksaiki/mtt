@@ -48,11 +48,7 @@ let tm ctx (t : Type.t) = Error.Term (ctx.names, t)
 let vl ctx (v : Value.t) = Error.Term (ctx.names, Value.quote ctx.lvl v)
 
 (* imax i 0 = 0: a product into a proposition is a proposition *)
-let imax i j =
-  if j = 0 then
-    0
-  else
-    max i j
+let imax = Level.imax
 
 (* the fresh variable for going under a binder *)
 let fresh ctx = Value.Neutral (Value.Var ctx.lvl)
@@ -153,10 +149,10 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       let motive = List.nth pre h.Type.nparams in
       Value.apply motive (Value.Neutral n)
 
-(* [sort_of ctx ty] is the i such that [ty : Sort i] *)
-let rec sort_of ctx (ty : Value.t) : int =
+(* [sort_of ctx ty] is the level [i] such that [ty : Sort i] *)
+let rec sort_of ctx (ty : Value.t) : Level.t =
   match ty with
-  | Value.Sort i -> i + 1
+  | Value.Sort i -> Level.succ i
   | Value.Pi (_, x, a, c) ->
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
       imax (sort_of ctx a) j
@@ -177,8 +173,8 @@ let rec sort_of ctx (ty : Value.t) : int =
    during evaluation, so this is structural comparison of weak-head forms, going
    under binders with fresh variables. *)
 let rec conv ctx ty v1 v2 =
-  (* proof irrelevance *)
-  sort_of ctx ty = 0
+  (* proof irrelevance: the type is a proposition (Sort 0) *)
+  Level.equal (sort_of ctx ty) Level.zero
   ||
   match ty with
   (* η *)
@@ -225,9 +221,9 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
   (* sorts: equal, or upward-included under cumulativity *)
   | Value.Sort i, Value.Sort j ->
       if cumul then
-        i <= j
+        Level.leq i j
       else
-        i = j
+        Level.equal i j
   (* pi: domains are invariant, codomains covariant; the binder's visibility
      ([icit]) is metadata the kernel ignores, so it is not compared *)
   | Value.Pi (_, x, a1, c1), Value.Pi (_, _, a2, c2) ->
@@ -392,7 +388,7 @@ let subsingleton ctx spec =
       let rec fields_are_proofs ctx env = function
         | [] -> true
         | (a : Inductive.arg) :: rest ->
-            sort_of ctx (Value.eval env a.aty) = 0
+            Level.equal (sort_of ctx (Value.eval env a.aty)) Level.zero
             && fields_are_proofs
                  (bind a.aname (Value.eval env a.aty) ctx)
                  (fresh ctx :: env) rest
@@ -409,7 +405,7 @@ let rec infer ctx t =
   | Type.Meta _ ->
       Error.type_error
         [ Error.txt "internal error: a metavariable reached the kernel" ]
-  | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
+  | Type.Sort i -> Value.Sort (Level.succ i) (* (Sort) *)
   (* (Pi) — visibility does not affect the formed sort *)
   | Type.Pi (_, x, a, b) ->
       let i = infer_univ ctx a in
@@ -586,7 +582,11 @@ and infer_rec ctx rh args =
   (* the motive P : (indices) -> Ind params indices -> Sort j *)
   let pmot = Value.eval ctx.env motive_tm in
   let j = check_motive ctx spec pvals (infer ctx motive_tm) in
-  if spec.Inductive.sort = 0 && j <> 0 && not (subsingleton ctx spec) then
+  if
+    Level.equal spec.Inductive.sort Level.zero
+    && (not (Level.equal j Level.zero))
+    && not (subsingleton ctx spec)
+  then
     Error.type_error
       [ Error.txtf "cannot eliminate the proposition %s into " rh.Type.rind
       ; tm ctx (Type.Sort j)
@@ -718,7 +718,10 @@ let check_inductive ctx spec =
                     ; tm ctx_cur a.aty
                     ; Error.txt " (strict positivity)"
                     ]);
-            if spec.Inductive.sort <> 0 && s > spec.Inductive.sort then
+            if
+              (not (Level.equal spec.Inductive.sort Level.zero))
+              && not (Level.leq s spec.Inductive.sort)
+            then
               Error.type_error
                 [ Error.txtf "constructor %s: a field of sort " c.cname
                 ; tm ctx_cur (Type.Sort s)

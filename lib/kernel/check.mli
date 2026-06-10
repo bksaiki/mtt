@@ -116,9 +116,9 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
     the module header. *)
 val infer : ctx -> Type.t -> Value.t
 
-(** [infer_univ ctx t] infers and requires a sort, returning its index: used
+(** [infer_univ ctx t] infers and requires a sort, returning its level: used
     where the rules demand "a type" *)
-val infer_univ : ctx -> Type.t -> int
+val infer_univ : ctx -> Type.t -> Level.t
 
 (** [check ctx t expected] verifies that [t] has type [expected]: a lambda
     against a Pi checks the annotation and descends into the body; anything else

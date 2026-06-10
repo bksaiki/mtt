@@ -29,7 +29,7 @@ type spec =
   ; indices : (string * Type.t) list
         (* the index telescope (i1:I1)...(ik:Ik), in the context [params]; empty
            for a non-indexed type *)
-  ; sort : int (* the result sort: [T params indices : Sort sort] *)
+  ; sort : Level.t (* the result sort: [T params indices : Sort sort] *)
   ; ctors : ctor list
   }
 

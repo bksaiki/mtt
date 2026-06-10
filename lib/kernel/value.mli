@@ -5,7 +5,7 @@
     application. *)
 
 type t =
-  | Sort of int
+  | Sort of Level.t
   | Pi of Type.icit * string * t * closure
   | Lam of Type.icit * string * t * closure
   | VInd of string * t list

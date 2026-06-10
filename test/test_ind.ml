@@ -13,7 +13,7 @@ let nat_spec =
   { Inductive.name = "Nat"
   ; params = []
   ; indices = []
-  ; sort = 1
+  ; sort = Level.of_int 1
   ; ctors =
       [ { Inductive.cname = "zero"; fields = []; result_indices = [] }
       ; { Inductive.cname = "succ"
@@ -46,9 +46,9 @@ let rec numeral k =
 (* inductive List (A : Type) := nil | cons (head : A) (tail : List A) *)
 let list_spec =
   { Inductive.name = "List"
-  ; params = [ ("A", Type.Sort 1) ]
+  ; params = [ ("A", Type.Sort (Level.of_int 1)) ]
   ; indices = []
-  ; sort = 1
+  ; sort = Level.of_int 1
   ; ctors =
       [ { Inductive.cname = "nil"; fields = []; result_indices = [] }
       ; { Inductive.cname = "cons"
@@ -147,7 +147,7 @@ let%expect_test "parameterized recursor: length of a two-element list" =
     Type.Lam
       ( Type.Explicit
       , "A"
-      , Type.Sort 1
+      , Type.Sort (Level.of_int 1)
       , Type.Lam
           ( Type.Explicit
           , "a"
@@ -209,7 +209,7 @@ let%expect_test "strict positivity rejects a non-recursive occurrence" =
     { Inductive.name = "Bad"
     ; params = []
     ; indices = []
-    ; sort = 1
+    ; sort = Level.of_int 1
     ; ctors =
         [ { Inductive.cname = "mk"
           ; fields =
@@ -236,7 +236,7 @@ let pbool_spec =
   { Inductive.name = "PBool"
   ; params = []
   ; indices = []
-  ; sort = 0
+  ; sort = Level.of_int 0
   ; ctors =
       [ { Inductive.cname = "pt"; fields = []; result_indices = [] }
       ; { Inductive.cname = "pf"; fields = []; result_indices = [] }
@@ -257,7 +257,7 @@ let punit_spec =
   { Inductive.name = "PUnit"
   ; params = []
   ; indices = []
-  ; sort = 0
+  ; sort = Level.of_int 0
   ; ctors = [ { Inductive.cname = "pstar"; fields = []; result_indices = [] } ]
   }
 
@@ -274,7 +274,9 @@ let%expect_test "Prop large-elimination restriction" =
       ( Type.App
           ( Type.App
               ( Type.App
-                  (pbool_rec, Type.Lam (Type.Explicit, "_", pbool, Type.Sort 1))
+                  ( pbool_rec
+                  , Type.Lam
+                      (Type.Explicit, "_", pbool, Type.Sort (Level.of_int 1)) )
               , pt )
           , pt )
       , pt )
@@ -290,8 +292,12 @@ let%expect_test "Prop large-elimination restriction" =
       ( Type.App
           ( Type.App
               ( punit_rec
-              , Type.Lam (Type.Explicit, "_", Type.Ind "PUnit", Type.Sort 1) )
-          , Type.Sort 0 )
+              , Type.Lam
+                  ( Type.Explicit
+                  , "_"
+                  , Type.Ind "PUnit"
+                  , Type.Sort (Level.of_int 1) ) )
+          , Type.Sort (Level.of_int 0) )
       , pstar )
   in
   infers punit_ctx big;
@@ -310,10 +316,15 @@ let%expect_test "a stuck recursor on a Prop scrutinee ignores the proof" =
      Prop so result-level irrelevance does not apply. This is what subsumes the
      hardcoded `absurd`. *)
   let bot_spec =
-    { Inductive.name = "Bot"; params = []; indices = []; sort = 0; ctors = [] }
+    { Inductive.name = "Bot"
+    ; params = []
+    ; indices = []
+    ; sort = Level.of_int 0
+    ; ctors = []
+    }
   in
   let ctx = Check.add_ind bot_spec Check.empty in
-  let ctx = Check.bind "A" (Value.Sort 1) ctx in
+  let ctx = Check.bind "A" (Value.Sort (Level.of_int 1)) ctx in
   let ctx = Check.bind "h1" (Value.VInd ("Bot", [])) ctx in
   let ctx = Check.bind "h2" (Value.VInd ("Bot", [])) ctx in
   let bot_rec = Type.Rec (Inductive.rec_head bot_spec) in
@@ -366,11 +377,13 @@ let%expect_test "a stuck recursor on a non-Prop scrutinee compares it" =
 let dpair_spec =
   { Inductive.name = "DPair"
   ; params =
-      [ ("A", Type.Sort 1)
-      ; ("B", Type.Pi (Type.Explicit, "_", Type.Var 0, Type.Sort 1))
+      [ ("A", Type.Sort (Level.of_int 1))
+      ; ( "B"
+        , Type.Pi (Type.Explicit, "_", Type.Var 0, Type.Sort (Level.of_int 1))
+        )
       ]
   ; indices = []
-  ; sort = 1
+  ; sort = Level.of_int 1
   ; ctors =
       [ { Inductive.cname = "mk"
         ; fields =
@@ -393,22 +406,31 @@ let dmk = Type.Ctor (Inductive.ctor_head dpair_spec 0)
 (* the components are types: fun _ : Type => Type, with Prop and Type as two
    distinct elements (an arbitrary type-with-elements; the builtin Nat once
    played this role) *)
-let ty_fam = Type.Lam (Type.Explicit, "_", Type.Sort 1, Type.Sort 1)
+let ty_fam =
+  Type.Lam
+    (Type.Explicit, "_", Type.Sort (Level.of_int 1), Type.Sort (Level.of_int 1))
 
 (* mk Type (fun _ => Type) a b : DPair Type (fun _ => Type) *)
 let dmk_ty a b =
-  Type.App (Type.App (Type.App (Type.App (dmk, Type.Sort 1), ty_fam), a), b)
+  Type.App
+    ( Type.App (Type.App (Type.App (dmk, Type.Sort (Level.of_int 1)), ty_fam), a)
+    , b )
 
 let%expect_test "record projection computes (ι)" =
-  norm (Type.Proj (0, dmk_ty (Type.Sort 0) (Type.Sort 1)));
+  norm
+    (Type.Proj
+       (0, dmk_ty (Type.Sort (Level.of_int 0)) (Type.Sort (Level.of_int 1))));
   [%expect {| Prop |}];
-  norm (Type.Proj (1, dmk_ty (Type.Sort 0) (Type.Sort 1)));
+  norm
+    (Type.Proj
+       (1, dmk_ty (Type.Sort (Level.of_int 0)) (Type.Sort (Level.of_int 1))));
   [%expect {| Type |}]
 
 let%expect_test "record η: a value equals the tuple of its projections" =
   let ctx = Check.add_ind dpair_spec Check.empty in
   let dty =
-    Value.eval [] (Type.App (Type.App (Type.Ind "DPair", Type.Sort 1), ty_fam))
+    Value.eval []
+      (Type.App (Type.App (Type.Ind "DPair", Type.Sort (Level.of_int 1)), ty_fam))
   in
   let ctx = Check.bind "x" dty ctx in
   let xv = Value.eval ctx.Check.env (Type.Var 0) in
@@ -417,14 +439,17 @@ let%expect_test "record η: a value equals the tuple of its projections" =
     Value.eval ctx.Check.env
       (Type.App
          ( Type.App
-             ( Type.App (Type.App (dmk, Type.Sort 1), ty_fam)
+             ( Type.App (Type.App (dmk, Type.Sort (Level.of_int 1)), ty_fam)
              , Type.Proj (0, Type.Var 0) )
          , Type.Proj (1, Type.Var 0) ))
   in
   print_endline (conv_str ctx dty xv expanded);
   [%expect {| equal |}];
   (* but a neutral is not equal to an arbitrary pair *)
-  let other = Value.eval ctx.Check.env (dmk_ty (Type.Sort 0) (Type.Sort 0)) in
+  let other =
+    Value.eval ctx.Check.env
+      (dmk_ty (Type.Sort (Level.of_int 0)) (Type.Sort (Level.of_int 0)))
+  in
   print_endline (conv_str ctx dty xv other);
   [%expect {| not equal |}]
 
@@ -433,7 +458,7 @@ let urec_spec =
   { Inductive.name = "URec"
   ; params = []
   ; indices = []
-  ; sort = 1
+  ; sort = Level.of_int 1
   ; ctors = [ { Inductive.cname = "u"; fields = []; result_indices = [] } ]
   }
 
@@ -458,9 +483,9 @@ let%expect_test "0-field record: any two values are equal (Unit-η)" =
    Nat) -> A -> Vec A k -> Vec A (succ k) *)
 let vec_spec =
   { Inductive.name = "Vec"
-  ; params = [ ("A", Type.Sort 1) ]
+  ; params = [ ("A", Type.Sort (Level.of_int 1)) ]
   ; indices = [ ("n", nat) ]
-  ; sort = 1
+  ; sort = Level.of_int 1
   ; ctors =
       [ { Inductive.cname = "vnil"; fields = []; result_indices = [ zero ] }
       ; { Inductive.cname = "vcons"

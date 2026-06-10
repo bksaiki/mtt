@@ -25,7 +25,8 @@ type icit =
 
 type t =
   | Var of int  (** de Bruijn index *)
-  | Sort of int  (** the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
+  | Sort of Level.t
+      (** the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of icit * string * t * t  (** Π (x : A). B, where B binds index 0 *)
   | Lam of icit * string * t * t  (** λ (x : A). b, where b binds index 0 *)
   | App of t * t

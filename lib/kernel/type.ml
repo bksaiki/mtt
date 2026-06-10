@@ -20,7 +20,7 @@ type icit =
 
 type t =
   | Var of int (* de Bruijn index *)
-  | Sort of int (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
+  | Sort of Level.t (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of icit * string * t * t (* Π (x : A). B, B binds index 0 *)
   | Lam of icit * string * t * t (* λ (x : A). b *)
   | App of t * t
@@ -141,11 +141,17 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
         | Some x -> Format.pp_print_string fmt x
         | None -> Format.fprintf fmt "!%d" i)
     (* surface names for sorts: Sort 0 is Prop, Sort (i+1) is Type i *)
-    | Sort 0 -> Format.pp_print_string fmt "Prop"
-    | Sort 1 -> Format.pp_print_string fmt "Type"
-    | Sort u ->
-        paren_if fmt (prec > 10) (fun fmt ->
-            Format.fprintf fmt "Type %d" (u - 1))
+    | Sort l -> (
+        match Level.to_int l with
+        | Some 0 -> Format.pp_print_string fmt "Prop"
+        | Some 1 -> Format.pp_print_string fmt "Type"
+        | Some u ->
+            paren_if fmt (prec > 10) (fun fmt ->
+                Format.fprintf fmt "Type %d" (u - 1))
+        | None ->
+            (* a level variable (universe polymorphism); no surface form yet *)
+            paren_if fmt (prec > 10) (fun fmt ->
+                Format.fprintf fmt "Sort %s" (Level.to_string l)))
     | Pi (Implicit, x, a, b) ->
         (* an implicit binder always shows its braces and name (dropping the
            name would lose the marker), even when unused *)
