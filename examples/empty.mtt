@@ -11,7 +11,9 @@ def neg_data_is_prop : Prop := Type → Empty
 axiom p : Prop
 axiom q : Prop
 
--- ex falso quodlibet: not p => (p => q)
+-- ex falso quodlibet: not p => (p => q). The prelude's `absurd` is universe-
+-- polymorphic, so it eliminates into the Prop goal `q` directly (its level is
+-- inferred from the explicit `q`) — no cumulativity needed.
 theorem exfalso (np : negate p) (x : p) : q := absurd q (np x)
 
 -- double negation introduction

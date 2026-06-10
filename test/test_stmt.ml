@@ -252,7 +252,10 @@ let%expect_test "implicit arguments: insertion and inference" =
     ; (* the prelude's lemmas now take type/endpoints implicitly *)
       "theorem e : Eq Nat 1 1 := rfl"
     ; "#check symm e"
-    ; "#check cong (fun n : Nat => Nat.succ n) e"
+    ; (* [cong] is universe-polymorphic; its codomain universe is fixed by the
+         expected type (here an ascription), as in any real use against a goal —
+         a bare [#check cong f e] cannot infer it *)
+      "#check (cong (fun n : Nat => Nat.succ n) e : Nat.succ 1 = Nat.succ 1)"
     ; (* a standalone implicit function type round-trips through the printer *)
       "axiom dup : {A : Type} -> A -> A"
     ; "#check dup"
@@ -634,4 +637,126 @@ let%expect_test "indexed families: Vec, its recursor, and index enforcement" =
     Vec.cons Nat 1 7 (Vec.cons Nat 0 5 (Vec.nil Nat)) : Vec Nat 2
     2
     type error: this term has type Vec Nat 2 but Vec Nat 3 was expected
+    |}]
+
+(* universe-polymorphic inductives can be *declared* with auto-bound universe
+   parameters (free [Sort u] variables) and [Sort u]/[Sort (max u v)]; the
+   kernel validates the polymorphic declaration. (Using them at inferred levels
+   lands with use-site level inference.) *)
+let%expect_test "polymorphic inductive declarations are accepted" =
+  session
+    [ "inductive Box (A : Sort u) : Sort u := | wrap : A -> Box A"
+    ; "inductive Pair (A : Sort u) (B : Sort v) : Sort (max u v) := | mk : A \
+       -> B -> Pair A B"
+    ];
+  [%expect {| |}]
+
+(* a polymorphic former applied to arguments infers its level arguments from the
+   argument sorts — so the same inductive forms at Type and at Prop (no
+   cumulativity needed). *)
+let%expect_test "polymorphic former: level arguments inferred per use" =
+  session
+    [ "inductive Box (A : Sort u) : Sort u := | wrap : A -> Box A"
+    ; "axiom N : Type"
+    ; "axiom p : Prop"
+    ; "#check Box N"
+    ; "#check Box p"
+    ; "inductive Pair (A : Sort u) (B : Sort v) : Sort (max u v) := | mk : A \
+       -> B -> Pair A B"
+    ; "#check Pair N p"
+    ];
+  [%expect {|
+    Box N : Type
+    Box p : Prop
+    Pair N p : Type
+    |}]
+
+(* the prelude's Sum and Eq are universe-polymorphic; a *use* infers the level
+   arguments. The recursor reads them off its explicit parameters (or the
+   major's type when they are holes), and the [+]/[=] sugar from the operand
+   sorts — so the same eliminator serves a sum of data and a disjunction of
+   propositions, with no cumulativity. *)
+let%expect_test "polymorphic Sum/Eq: recursor and sugar infer levels per use" =
+  session
+    [ "axiom A : Type"
+    ; "axiom B : Type"
+    ; (* Sum at Type: the recursor's explicit parameters [A B] determine its
+         level arguments *)
+      "def elim (s : A + B) : B + A :="
+      ^ " Sum.rec A B (λ _ : A + B ⇒ B + A) (λ x : A ⇒ Sum.inr B A x)"
+      ^ " (λ y : B ⇒ Sum.inl B A y) s"
+    ; "#check elim"
+    ; (* Sum at Prop: the very same machinery forms a proof-irrelevant
+         disjunction (max 0 0 = 0, so [P + Q : Prop]) *)
+      "axiom P : Prop"
+    ; "axiom Q : Prop"
+    ; "#check P + Q"
+    ; (* Eq is polymorphic too: its former/recursor instantiate at the operand
+         sort, here Prop *)
+      "axiom h : P"
+    ; "#check h = h"
+    ];
+  [%expect
+    {|
+    fun (s : A + B) =>
+    Sum.rec A B (fun (_ : A + B) => B + A) (fun (x : A) => Sum.inr B A x)
+    (fun (y : B) => Sum.inl B A y) s : A + B -> B + A
+    P + Q : Prop
+    h = h : Prop
+    |}]
+
+(* a universe-polymorphic *definition*: its free [Sort u] level variable is
+   auto-bound as a level parameter (stored level-abstracted), and each use
+   instantiates it — here from the explicit argument's sort. So one [absurd]
+   eliminates into a type and into a proposition, with no cumulativity (which is
+   exactly what the [Type]-only monomorphic version could not do). *)
+let%expect_test "polymorphic def: level parameter inferred per use" =
+  session
+    [ "inductive Void : Prop"
+    ; "def exfalso (A : Sort u) (h : Void) : A := Void.rec _ h"
+    ; (* the level parameter shows in the polymorphic type *)
+      "#check exfalso"
+    ; "axiom N : Type"
+    ; "axiom p : Prop"
+    ; "axiom v : Void"
+    ; (* instantiated at Type and at Prop from the explicit [A] *)
+      "#check exfalso N v"
+    ; "#check exfalso p v"
+    ; (* a polymorphic def calling another, threading its own level parameter *)
+      "def exfalso2 (B : Sort w) (h : Void) : B := exfalso B h"
+    ; "#check exfalso2 p v"
+    ; "#check_equal (exfalso2 N v) (exfalso N v)"
+    ];
+  [%expect
+    {|
+    fun (A : Sort u0) => fun (h : Void) => Void.rec (fun (x : Void) => A) h : (A : Sort u0) -> Void -> A
+    Void.rec (fun (x : Void) => N) v : N
+    Void.rec (fun (x : Void) => p) v : p
+    Void.rec (fun (x : Void) => p) v : p
+    |}]
+
+(* the payoff of level metavariables: a polymorphic def with an *implicit*
+   level-bearing parameter ([{A : Sort u}]) infers its level at a use, where it
+   is determined only through the implicit argument. The prelude's equality
+   toolkit is the case in point — [symm]/[subst] work on Prop equalities (the
+   level is solved to 0, no cumulativity needed), not just Type. *)
+let%expect_test "polymorphic equality toolkit: levels inferred, incl. at Prop" =
+  session
+    [ "axiom P : Prop"
+    ; "axiom Q : Prop"
+    ; "axiom hpq : P = Q"
+    ; "axiom hqp : Q = P"
+    ; "axiom hp : P"
+    ; (* symm/trans on Prop equalities: {A : Sort u} implicit, u = 0 inferred *)
+      "#check symm hpq"
+    ; "#check trans hpq hqp"
+    ; (* transport a proof across a Prop equality: the motive lands in Prop, and
+         subst's {A : Sort u}/(P : A -> Sort v) levels are both inferred *)
+      "#check subst (fun z : Prop => z) hpq hp"
+    ];
+  [%expect
+    {|
+    Eq.rec Prop P (fun (z : Prop) => fun (q : P = z) => z = P) rfl Q hpq : Q = P
+    Eq.rec Prop Q (fun (w : Prop) => fun (r : Q = w) => P = w) hpq P hqp : P = P
+    Eq.rec Prop P (fun (z : Prop) => fun (q : P = z) => z) hp Q hpq : Q
     |}]

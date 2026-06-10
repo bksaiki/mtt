@@ -21,8 +21,13 @@ theorem mul_zero (n : Nat) : Eq Nat (mul n 0) 0 :=
 -- that is Unit at 0 and Empty at succ — large elimination, Nat.rec into Type —
 -- lets us transport () : code 0 along a bogus 0 = succ n into code (succ n) ≡
 -- Empty. Uses the prelude's subst.
+-- a Type-level empty: the prelude's `Empty` is a `Prop`, and without
+-- cumulativity a `Prop` no longer inhabits `Type`, so the Type-valued `code`
+-- needs its own empty type. `Void.rec` still eliminates into any sort.
+inductive Void : Type :=
+
 def code (n : Nat) : Type :=
-  Nat.rec (λ x : Nat ⇒ Type) Unit (λ k : Nat ⇒ λ ih : Type ⇒ Empty) n
+  Nat.rec (λ x : Nat ⇒ Type) Unit (λ k : Nat ⇒ λ ih : Type ⇒ Void) n
 
 theorem zero_neq_succ (n : Nat) (p : Eq Nat 0 (Nat.succ n)) : Empty :=
-  subst code p ()
+  Void.rec _ (subst code p ())

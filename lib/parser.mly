@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP TIMES PLUS EQOP COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE AT MATCH WITH END EOF
+%token FUN PI SIGMA TYPE PROP SORT MAX IMAX TIMES PLUS EQOP COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE AT MATCH WITH END EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -76,6 +76,19 @@ ctors_opt:
 (* one constructor of an inductive: [| name : type] *)
 ctor:
   | BAR; c = ID; COLON; t = term { (c, t) }
+
+(* a universe level expression: a variable, a literal, [max]/[imax] of two
+   atoms, or a parenthesized level. Free level variables in a declaration's
+   types are auto-bound as its universe parameters — no binder syntax needed. *)
+level_atom:
+  | x = ID { Ast.LVar x }
+  | n = INT { Ast.LNat n }
+  | LPAREN; l = level; RPAREN { l }
+
+level:
+  | MAX; a = level_atom; b = level_atom { Ast.LMax (a, b) }
+  | IMAX; a = level_atom; b = level_atom { Ast.LIMax (a, b) }
+  | a = level_atom { a }
 
 (* a binder group: one annotation shared by one or more names, explicit
    [(x y : A)] or implicit [{x y : A}] *)
@@ -175,9 +188,11 @@ base_atom:
   | x = ID
     { Ast.mk $loc (if String.equal x "_" then Ast.Hole else Ast.Var x) }
   (* surface universes name sorts: Prop = Sort 0, Type i = Sort (i+1) *)
-  | i = TYPELEVEL { Ast.mk $loc (Ast.Sort (i + 1)) }
-  | TYPE { Ast.mk $loc (Ast.Sort 1) }
-  | PROP { Ast.mk $loc (Ast.Sort 0) }
+  | i = TYPELEVEL { Ast.mk $loc (Ast.Sort (Ast.LNat (i + 1))) }
+  | TYPE { Ast.mk $loc (Ast.Sort (Ast.LNat 1)) }
+  | PROP { Ast.mk $loc (Ast.Sort (Ast.LNat 0)) }
+  (* an explicit sort at a level expression: [Sort u], [Sort (max u v)] *)
+  | SORT; l = level_atom { Ast.mk $loc (Ast.Sort l) }
   (* a decimal literal; the elaborator expands it to the registered nat's
      succ/zero chain *)
   | n = INT { Ast.mk $loc (Ast.Numeral n) }

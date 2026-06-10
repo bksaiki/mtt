@@ -29,6 +29,10 @@ rule token = parse
   | "Type" [' ' '\t']+ (digits as n) { TYPELEVEL (int_of_string n) }
   | "Type" { TYPE }
   | "Prop" { PROP }
+  (* explicit universe levels: [Sort u], with [max]/[imax] on level expressions *)
+  | "Sort" { SORT }
+  | "max" { MAX }
+  | "imax" { IMAX }
   | "prelude" { PRELUDE }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }

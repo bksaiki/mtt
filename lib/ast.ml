@@ -1,3 +1,11 @@
+(* a surface universe level: a concrete level [n], a level variable [u]
+   (resolved against the level parameters in scope), or [max]/[imax] of two *)
+type lvl =
+  | LNat of int
+  | LVar of string
+  | LMax of lvl * lvl
+  | LIMax of lvl * lvl
+
 type t =
   { loc : Loc.t
   ; desc : desc
@@ -6,7 +14,7 @@ type t =
 and desc =
   | Var of string
   | Field of t * string (* a named projection, e.g. [Nat.rec] *)
-  | Sort of int
+  | Sort of lvl (* a sort at a (possibly variable) level: Prop=Sort 0, … *)
   | Pi of Type.icit * string * t * t (* (x : A) -> B / {x : A} -> B *)
   | Arrow of t * t (* A -> B *)
   | Lam of Type.icit * string * t * t (* fun (x : A) => b / fun {x : A} => b *)
@@ -28,6 +36,53 @@ and desc =
   | Hole (* _, an elaboration hole (a fresh metavariable) *)
 
 let mk loc desc = { loc; desc }
+
+(* the free universe-level variables occurring in [t]'s [Sort u] annotations, in
+   order of first appearance (deduped). A declaration's level parameters are
+   auto-bound from these — Lean-style — so no explicit binder syntax is
+   needed. *)
+let level_vars t =
+  let seen = ref [] in
+  let add x = if not (List.mem x !seen) then seen := !seen @ [ x ] in
+  let rec lv = function
+    | LNat _ -> ()
+    | LVar x -> add x
+    | LMax (a, b)
+    | LIMax (a, b) ->
+        lv a;
+        lv b
+  in
+  let rec go t =
+    match t.desc with
+    | Sort l -> lv l
+    | Var _
+    | MkUnit
+    | Numeral _
+    | Hole ->
+        ()
+    | Field (e, _)
+    | Fst e
+    | Snd e
+    | At e ->
+        go e
+    | Pi (_, _, a, b)
+    | Lam (_, _, a, b)
+    | Arrow (a, b)
+    | App (a, b)
+    | Ascribe (a, b)
+    | Sigma (_, a, b)
+    | Prod (a, b)
+    | Pair (a, b)
+    | Sum (a, b)
+    | EqInfix (a, b) ->
+        go a;
+        go b
+    | Match (e, arms) ->
+        go e;
+        List.iter (fun (_, _, b) -> go b) arms
+  in
+  go t;
+  !seen
 
 (* telescopes: a binder group [(x y : A)] (or implicit [{x y : A}]) is a
    visibility, a name list, and an annotation; [telescope] folds groups into

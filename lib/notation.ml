@@ -17,13 +17,19 @@ let empty =
    parenthesize (atoms use precedence 11); [recurse] renders a subterm at a
    given precedence for the infix forms. *)
 let sugar n ~recurse names term =
+  (* a constructor matches a registered one by name (ignoring use-site level
+     arguments, which a polymorphic constructor carries in its head) *)
+  let same_ctor (h1 : Type.ctor_head) (h2 : Type.ctor_head) =
+    String.equal h1.Type.ind h2.Type.ind
+    && String.equal h1.Type.cname h2.Type.cname
+  in
   let nat_lit term =
     match n.nat with
     | None -> None
     | Some (zero, succ) ->
         let rec count acc = function
-          | Type.Ctor h when h = zero -> Some acc
-          | Type.App (Type.Ctor h, m) when h = succ -> count (acc + 1) m
+          | Type.Ctor h when same_ctor h zero -> Some acc
+          | Type.App (Type.Ctor h, m) when same_ctor h succ -> count (acc + 1) m
           | _ -> None
         in
         count 0 term
@@ -38,17 +44,21 @@ let sugar n ~recurse names term =
   (* a saturated [Sigma.mk A B a b] peeled into its two components [(a, b)] *)
   let pair_components term =
     match (n.sigma, peel term) with
-    | Some mk, (Type.Ctor h, [ _A; _B; a; b ]) when h = mk -> Some (a, b)
+    | Some mk, (Type.Ctor h, [ _A; _B; a; b ]) when same_ctor h mk -> Some (a, b)
     | _ -> None
   in
   match term with
-  | Type.Ctor h when n.unit_ctor = Some h -> Some (11, "()")
+  | Type.Ctor h
+    when match n.unit_ctor with
+         | Some u -> same_ctor h u
+         | None -> false ->
+      Some (11, "()")
   | _ -> (
       match peel term with
       (* the registered equality former [Eq A x y] prints infix, dropping its
          type argument: [x = y] (non-associative, looser than + and ×, tighter
          than ->) *)
-      | Type.Ind name, [ _A; x; y ] when n.eq = Some name ->
+      | Type.Ind (name, _), [ _A; x; y ] when n.eq = Some name ->
           Some
             (2, Printf.sprintf "%s = %s" (recurse 3 names x) (recurse 3 names y))
       (* the equality's constructor [Eq.refl A x] prints as the bare [rfl],
@@ -56,7 +66,7 @@ let sugar n ~recurse names term =
       | Type.Ctor h, [ _A; _x ] when n.eq = Some h.Type.ind -> Some (11, "rfl")
       (* an applied [Sigma] former: dependent → [Σ (x : A) ⇒ B], else → [A ×
          B] *)
-      | Type.Ind name, [ a; Type.Lam (_, x, _, b) ]
+      | Type.Ind (name, _), [ a; Type.Lam (_, x, _, b) ]
         when match n.sigma with
              | Some mk -> String.equal name mk.Type.ind
              | None -> false ->
@@ -72,7 +82,7 @@ let sugar n ~recurse names term =
               , Printf.sprintf "%s × %s" (recurse 5 names a)
                   (recurse 4 ("" :: names) b) )
       (* an applied [Sum] former → [A + B] (right-associative) *)
-      | Type.Ind name, [ a; b ] when n.sum = Some name ->
+      | Type.Ind (name, _), [ a; b ] when n.sum = Some name ->
           Some
             (3, Printf.sprintf "%s + %s" (recurse 4 names a) (recurse 3 names b))
       | _ -> (

@@ -24,12 +24,15 @@ type ctor =
 
 type spec =
   { name : string
+  ; nlevels : int
+        (* number of universe level parameters (0 if monomorphic); the spec's
+           types are over the level variables [Level.Var 0 … Var (nlevels-1)] *)
   ; params :
       (string * Type.t) list (* the parameter telescope (x1:P1)...(xm:Pm) *)
   ; indices : (string * Type.t) list
         (* the index telescope (i1:I1)...(ik:Ik), in the context [params]; empty
            for a non-indexed type *)
-  ; sort : int (* the result sort: [T params indices : Sort sort] *)
+  ; sort : Level.t (* the result sort: [T params indices : Sort sort] *)
   ; ctors : ctor list
   }
 
@@ -37,14 +40,16 @@ let nparams spec = List.length spec.params
 
 let nindices spec = List.length spec.indices
 
-(* the skeleton (see {!Type.ctor_head}) of the [i]-th constructor *)
-let ctor_head spec i =
+(* the skeleton (see {!Type.ctor_head}) of the [i]-th constructor; [levels] are
+   the use-site level arguments (empty for a monomorphic inductive) *)
+let ctor_head ?(levels = []) spec i =
   let c = List.nth spec.ctors i in
   { Type.ind = spec.name
   ; cname = c.cname
   ; cindex = i
   ; carity = nparams spec + List.length c.fields
   ; nparams = nparams spec
+  ; clevels = levels
   }
 
 (* a record is a single-constructor, non-recursive, *non-indexed* inductive; it
@@ -58,8 +63,9 @@ let is_record spec =
       && List.for_all (fun a -> Option.is_none a.recursive) c.fields
   | _ -> false
 
-(* the skeleton (see {!Type.rec_head}) of the recursor *)
-let rec_head spec =
+(* the skeleton (see {!Type.rec_head}) of the recursor; [levels] are the
+   use-site level arguments (empty for a monomorphic inductive) *)
+let rec_head ?(levels = []) spec =
   { Type.rind = spec.name
   ; nparams = nparams spec
   ; nindices = nindices spec
@@ -73,6 +79,7 @@ let rec_head spec =
               | Some idxs -> Type.Recursive idxs)
             c.fields)
         spec.ctors
+  ; rlevels = levels
   }
 
 (* [apply spec depth] is the inductive applied to its parameters as variables,
@@ -87,7 +94,10 @@ let apply spec depth =
     else
       go (Type.App (acc, Type.Var (depth - 1 - j))) (j + 1)
   in
-  go (Type.Ind spec.name) 0
+  (* the self-reference carries the inductive's own level variables, so a
+     use-site [subst_levels] instantiates them along with the rest *)
+  let self_levels = List.init spec.nlevels (fun i -> Level.Var i) in
+  go (Type.Ind (spec.name, self_levels)) 0
 
 (* wrap [body] in a telescope of explicit Π binders *)
 let pi_telescope tele body =
@@ -123,12 +133,15 @@ let ctor_type spec i =
    uses it to reject the inductive appearing in a non-recursive field *)
 let rec occurs name (t : Type.t) =
   match t with
-  | Ind n -> String.equal n name
+  | Ind (n, _) -> String.equal n name
   | Ctor h -> String.equal h.ind name
   | Rec h -> String.equal h.rind name
   | Var _
   | Sort _
-  | Meta _ ->
+  | Meta _
+  (* a def reference cannot mention this inductive: defs are elaborated before
+     the inductive they precede, so the not-yet-declared name cannot occur *)
+  | Def _ ->
       false
   | Proj (_, a) -> occurs name a
   | Pi (_, _, a, b)

@@ -92,17 +92,20 @@ for real, or alongside parse-error recovery work.
 
 ## Universe polymorphism
 
-Cumulativity has absorbed most everyday universe pressure. Full
-polymorphism (levels as parameters, `imax` algebra on level expressions)
-is the deepest rabbit hole on the board.
-
-**Status**: open, deliberately deferred. Propositional equality (now a prelude
-inductive) removed the old motivating example; `symm`/`trans`/`subst` live once
-in the prelude (`std/prelude.mtt`). The remaining real test case: definitions
-meant to
-work at *every* level at once — e.g. the prelude's `subst` is fixed at
-`P : A → Type`, so a `Prop`-valued transport needs a separate copy.
-**Revisit**: when the prelude wants the same lemma at multiple sorts.
+**Status**: resolved (Lean's model: polymorphism, no cumulativity). Levels are
+`Level.t` (`Zero`/`Succ`/`Max`/`IMax`/`Var`/`LMeta`) with the `imax` algebra;
+cumulativity is gone, so `conv` compares sorts by equality and code spans
+universes by polymorphism instead. Both inductives and definitions take
+auto-bound level parameters (free `Sort u` variables become parameters in
+first-appearance order); a use infers its level arguments — for inductives via
+direct matching (`Elab.match_lvl`), for defs via level metavariables
+(`Level.LMeta`, solved by the value unifier and zonked away). The prelude's
+`Sigma`/`Sum`/`Eq` and its whole equality toolkit (`rfl`/`symm`/`trans`/`subst`/
+`cong`) plus `absurd` are polymorphic, so a `Prop`-valued transport, a `Prop`
+disjunction, and `Unit = Unit` all work without copies. Remaining nits are minor
+(see `todo.md`): a bare `#check cong f p` can't infer the codomain universe
+without meta-assignment type unification, and there is no glued `Const` table
+(defs are eager δ).
 
 ## Display of unfolded definitions
 

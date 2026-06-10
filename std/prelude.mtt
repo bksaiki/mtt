@@ -27,19 +27,20 @@ def comp (A B C : Type) (g : B → C) (f : A → B) (x : A) : C := g (f x)
 -- fields), so it has definitional η and the positional projections .1/.2. The
 -- `@[notation sigma]` attribute registers it as the type the `Σ`/`×` formers
 -- and `(a, b)` tuples abbreviate; `B` is a family over `A`, and a non-dependent
--- `A × B` is `Sigma A (fun _ => B)`. Fixed at `Type` (a universe-polymorphic
--- Σ that lands at the max of its components awaits universe polymorphism).
+-- `A × B` is `Sigma A (fun _ => B)`. Universe-polymorphic: it lands at the max
+-- of its components' levels, so it also pairs a `Prop` second component (e.g.
+-- `Σ (n : Nat) ⇒ Eq Nat n n`) and ranges over the universe (`Σ (A : Type) ⇒ A`).
 @[notation sigma]
-inductive Sigma (A : Type) (B : A → Type) : Type :=
+inductive Sigma (A : Sort u) (B : A → Sort v) : Sort (max u v) :=
 | mk : (fst : A) → (snd : B fst) → Sigma A B
 
 -- the binary sum (coproduct). `@[notation sum]` registers it for the infix `+`
 -- former; its injections and eliminator are the ordinary qualified names
--- `Sum.inl`/`Sum.inr`/`Sum.rec` (like every other inductive). Like `Sigma`,
--- fixed at `Type`; a proof-irrelevant disjunction `Or : Prop` awaits universe
--- polymorphism.
+-- `Sum.inl`/`Sum.inr`/`Sum.rec` (like every other inductive). Universe-
+-- polymorphic like `Sigma`: it lands at the max of its summands' levels, so a
+-- proof-irrelevant disjunction (both summands in `Prop`) is `Sum`-expressible.
 @[notation sum]
-inductive Sum (A B : Type) : Type :=
+inductive Sum (A : Sort u) (B : Sort v) : Sort (max u v) :=
 | inl : A → Sum A B
 | inr : B → Sum A B
 
@@ -50,10 +51,10 @@ inductive Sum (A B : Type) : Type :=
 -- elimination, sound because there are no introduction forms)
 inductive Empty : Prop
 
--- ex falso quodlibet: from a proof of Empty, anything follows. Fixed at Type
--- (so it also covers Prop by cumulativity); a universe-polymorphic version
--- awaits universe polymorphism
-def absurd (A : Type) (h : Empty) : A := Empty.rec _ h
+-- ex falso quodlibet: from a proof of Empty, anything follows. Universe-
+-- polymorphic (`A : Sort u`), so it eliminates into any sort — a Prop, a type,
+-- or a higher universe — with the level inferred from the explicit `A`.
+def absurd (A : Sort u) (h : Empty) : A := Empty.rec _ h
 
 -- negation; by the imax rule A → Empty is a proposition for any A, so `not`
 -- applies to data as well as propositions
@@ -70,32 +71,32 @@ def not (A : Type) := A → Empty
 -- It is the last builtin retired into the prelude — the kernel now knows only
 -- Sort/Π/λ/App/Var and the generic inductive machinery.
 @[notation eq]
-inductive Eq (A : Type) (x : A) : A -> Prop :=
+inductive Eq (A : Sort u) (x : A) : A -> Prop :=
 | refl : Eq A x x
 
 -- reflexivity: the equality's constructor with both endpoints the same, type and
 -- point implicit. `rfl` is an ordinary def (not a keyword) — checking it against
 -- a goal `a = a` inserts the implicits and recovers `Eq.refl`'s parameters.
-def rfl {A : Type} {x : A} : x = x := Eq.refl A x
+def rfl {A : Sort u} {x : A} : x = x := Eq.refl A x
 
 -- equality is symmetric: if `a = b` then `b = a`.
-def symm {A : Type} {x y : A} (p : x = y) : y = x :=
+def symm {A : Sort u} {x y : A} (p : x = y) : y = x :=
   Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ z = x) rfl _ p
 
 -- equality is transitive: if `a = b` and `b = c` then `a = c`.
-def trans {A : Type} {x y z : A} (p : x = y) (q : y = z) : x = z :=
+def trans {A : Sort u} {x y z : A} (p : x = y) (q : y = z) : x = z :=
   Eq.rec _ _ (λ w : A ⇒ λ r : y = w ⇒ x = w) p _ q
 
 -- transport along an equality (large elimination: the motive lands in Type).
 -- Transparent (a `def`) so transport along `rfl` computes away (ι). The types
 -- and endpoints are implicit.
-def subst {A : Type} (P : A → Type) {x y : A} (p : x = y) (h : P x) : P y :=
+def subst {A : Sort u} (P : A → Sort v) {x y : A} (p : x = y) (h : P x) : P y :=
   Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ P z) h _ p
 
 -- congruence: equal arguments give equal images. The types and endpoints are
 -- implicit ({…}) — recovered from the equality proof — so a call is just
 -- `cong f p`.
-def cong {A B : Type} (f : A → B) {x y : A} (p : x = y) : f x = f y :=
+def cong {A : Sort u} {B : Sort v} (f : A → B) {x y : A} (p : x = y) : f x = f y :=
   Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ f x = f z) rfl _ p
 
 -- === Naturals === (arithmetic by recursion on the first argument)

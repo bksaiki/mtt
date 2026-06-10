@@ -12,6 +12,9 @@ type ctor_head =
   ; cindex : int  (** its position in the inductive's constructor list *)
   ; carity : int  (** total arguments: leading parameters + fields *)
   ; nparams : int  (** leading parameters, so a projection can skip them *)
+  ; clevels : Level.t list
+        (** use-site level arguments instantiating the inductive's level
+            parameters; empty when the inductive is monomorphic *)
   }
 
 (** A binder's visibility. An [Explicit] [(x : A)] argument is supplied at every
@@ -25,7 +28,13 @@ type icit =
 
 type t =
   | Var of int  (** de Bruijn index *)
-  | Sort of int  (** the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
+  | Def of int * Level.t list
+      (** a universe-polymorphic def reference: a de Bruijn index (like {!Var})
+          into the def's slot, which holds a level-abstracted [Value.VPoly] that
+          evaluation instantiates at the carried use-site levels. Only
+          [nlevels > 0] defs use it; monomorphic defs and locals stay {!Var}. *)
+  | Sort of Level.t
+      (** the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of icit * string * t * t  (** Π (x : A). B, where B binds index 0 *)
   | Lam of icit * string * t * t  (** λ (x : A). b, where b binds index 0 *)
   | App of t * t
@@ -37,9 +46,9 @@ type t =
           resolved by unification, then zonked away — it never reaches the
           trusted check of final core. Its local dependencies ride the enclosing
           [App] spine ([?m a b] is [App (App (Meta m, a), b)]). *)
-  | Ind of string
-      (** an inductive type former, applied to its parameters then indices via
-          [App] *)
+  | Ind of string * Level.t list
+      (** an inductive type former (with use-site level arguments), applied to
+          its parameters then indices via [App] *)
   | Ctor of ctor_head
       (** an inductive constructor, applied to its arguments via [App] *)
   | Rec of rec_head
@@ -59,6 +68,9 @@ and rec_head =
   ; nparams : int  (** leading parameter arguments, shared and fixed *)
   ; nindices : int  (** index arguments, between the minors and the major *)
   ; recs : field_rec list list
+  ; rlevels : Level.t list
+        (** use-site level arguments instantiating the inductive's level
+            parameters; empty when the inductive is monomorphic *)
   }
 
 (** whether a constructor field is recursive, and if so the index instances of
@@ -69,13 +81,27 @@ and field_rec =
   | Nonrec
   | Recursive of t list
 
+(** [subst_levels args t] instantiates a level-polymorphic term by replacing the
+    level variables in every [Sort] and inductive-head level list of [t] with
+    the level arguments [args]; identity on a monomorphic term *)
+val subst_levels : Level.t list -> t -> t
+
 (** [occurs k t] is true if de Bruijn index [k] appears free in [t] *)
 val occurs : int -> t -> bool
 
-(** [has_meta t] is true if any metavariable ({!Meta}) occurs in [t]; the
-    frontend uses it (on a quoted value, where solved metas are already
-    unfolded) to detect an unsolved hole before the trusted check. *)
+(** [has_meta t] is true if any {e term} metavariable ({!Meta}) occurs in [t];
+    the frontend uses it (on a quoted value, where solved metas are already
+    unfolded) to detect an unsolved hole before the trusted check, and to gate
+    its meta-aware type synthesis. Level metavariables are tracked separately by
+    {!has_level_meta}. *)
 val has_meta : t -> bool
+
+(** [has_level_meta t] is true if any {e level} metavariable ({!Level.LMeta})
+    occurs in a [Sort] or a head's level arguments. A level meta is tolerated by
+    the kernel as an opaque atom (so it does not force meta-aware synthesis like
+    {!has_meta}), but an unsolved one is still a hole the elaborator rejects
+    before re-checking. *)
+val has_level_meta : t -> bool
 
 (** [freshen names x] is [x] primed with enough trailing ['] to make it distinct
     from every name in [names] (and [x]); ["" ] becomes ["x"] first. The printer

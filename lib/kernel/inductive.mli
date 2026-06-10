@@ -29,11 +29,15 @@ type ctor =
 
 type spec =
   { name : string
+  ; nlevels : int
+        (** number of universe level parameters (0 if monomorphic); the spec's
+            types range over the level variables [Level.Var 0 … Var (nlevels-1)]
+        *)
   ; params : (string * Type.t) list  (** the parameter telescope *)
   ; indices : (string * Type.t) list
         (** the index telescope, in the context [params]; empty if non-indexed
         *)
-  ; sort : int  (** the result sort: [T params indices : Sort sort] *)
+  ; sort : Level.t  (** the result sort: [T params indices : Sort sort] *)
   ; ctors : ctor list
   }
 
@@ -43,11 +47,14 @@ val nparams : spec -> int
 (** the number of indices *)
 val nindices : spec -> int
 
-(** [ctor_head spec i] is the skeleton of the [i]-th constructor *)
-val ctor_head : spec -> int -> Type.ctor_head
+(** [ctor_head ?levels spec i] is the skeleton of the [i]-th constructor;
+    [levels] are the use-site level arguments (default empty, for a monomorphic
+    inductive) *)
+val ctor_head : ?levels:Level.t list -> spec -> int -> Type.ctor_head
 
-(** [rec_head spec] is the skeleton of the recursor *)
-val rec_head : spec -> Type.rec_head
+(** [rec_head ?levels spec] is the skeleton of the recursor; [levels] are the
+    use-site level arguments (default empty) *)
+val rec_head : ?levels:Level.t list -> spec -> Type.rec_head
 
 (** whether [spec] is a {e record}: a single-constructor, non-recursive,
     non-indexed inductive, so it has field projections and definitional η *)

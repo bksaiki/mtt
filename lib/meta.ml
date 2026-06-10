@@ -28,13 +28,72 @@ type entry =
 type t =
   { next : int
   ; entries : entry IMap.t
+  ; lnext : int (* next level-metavariable id *)
+  ; lsolns : Level.t IMap.t (* solved level metavariables, by id *)
   }
 
-let empty = { next = 0; entries = IMap.empty }
+let empty = { next = 0; entries = IMap.empty; lnext = 0; lsolns = IMap.empty }
+
+(* allocate a fresh level metavariable (a placeholder level argument), returning
+   the extended context and its id. Level metas are simpler than term metas: a
+   level carries no binders, so there is no type, birth level, or scope check —
+   a meta solves directly to a {!Level.t}. *)
+let fresh_level ms =
+  let i = ms.lnext in
+  ({ ms with lnext = i + 1 }, i)
+
+let level_solution ms i = IMap.find_opt i ms.lsolns
+
+let solve_level ms i l = { ms with lsolns = IMap.add i l ms.lsolns }
+
+(* deeply resolve every solved level meta in [l] (smart constructors reduce the
+   exposed result) *)
+let rec force_level ms (l : Level.t) : Level.t =
+  match l with
+  | Level.LMeta i -> (
+      match level_solution ms i with
+      | Some s -> force_level ms s
+      | None -> l)
+  | Level.Succ a -> Level.succ (force_level ms a)
+  | Level.Max (a, b) -> Level.max (force_level ms a) (force_level ms b)
+  | Level.IMax (a, b) -> Level.imax (force_level ms a) (force_level ms b)
+  | Level.Zero
+  | Level.Var _ ->
+      l
+
+(* whether level meta [i] occurs in [l] (occurs check before solving it) *)
+let rec level_occurs i = function
+  | Level.LMeta j -> i = j
+  | Level.Succ a -> level_occurs i a
+  | Level.Max (a, b)
+  | Level.IMax (a, b) ->
+      level_occurs i a || level_occurs i b
+  | Level.Zero
+  | Level.Var _ ->
+      false
+
+(* unify two levels by solving a bare level meta on either side; rigid-rigid (or
+   an occurs failure) is left for the kernel's [Level.equal] on the zonked term
+   — lenient, exactly like the value unifier below *)
+let unify_level ms l1 l2 =
+  let l1 = force_level ms l1 and l2 = force_level ms l2 in
+  match (l1, l2) with
+  | Level.LMeta i, Level.LMeta j when i = j -> ms
+  | Level.LMeta i, _ when not (level_occurs i l2) -> solve_level ms i l2
+  | _, Level.LMeta j when not (level_occurs j l1) -> solve_level ms j l1
+  | _ -> ms
+
+let rec unify_levels ms ls1 ls2 =
+  match (ls1, ls2) with
+  | a :: r1, b :: r2 -> unify_levels (unify_level ms a b) r1 r2
+  | _ -> ms
 
 let fresh ms ~blvl ty =
   let i = ms.next in
-  ( { next = i + 1; entries = IMap.add i { ty; blvl; soln = None } ms.entries }
+  ( { ms with
+      next = i + 1
+    ; entries = IMap.add i { ty; blvl; soln = None } ms.entries
+    }
   , i )
 
 let typ ms i = (IMap.find i ms.entries).ty
@@ -87,10 +146,13 @@ let scope_ok ms blvl m entry rhs =
     | Value.Lam (_, _, a, c) ->
         ok lvl a
         && ok (lvl + 1) (Value.apply_closure c (Value.Neutral (Var lvl)))
-    | Value.VInd (_, args)
+    | Value.VInd (_, _, args) -> List.for_all (ok lvl) args
     | Value.VCtor (_, args)
     | Value.VRec (_, args) ->
         List.for_all (ok lvl) args
+    (* a [VPoly] is inert (it sits only at a def slot, consumed by [Def]); it
+       never appears as a meta solution candidate *)
+    | Value.VPoly _ -> false
     | Value.Neutral n -> okn lvl n
   and okn lvl n =
     match n with
@@ -128,17 +190,21 @@ and unify_rigid ms lvl v1 v2 =
       let ms = unify ms lvl a1 a2 in
       let v = Value.Neutral (Value.Var lvl) in
       unify ms (lvl + 1) (Value.apply_closure c1 v) (Value.apply_closure c2 v)
-  | Value.VInd (n1, as1), Value.VInd (n2, as2) when String.equal n1 n2 ->
-      unify_args ms lvl as1 as2
+  (* sorts: solve any level meta on either side (the rest defers to the
+     kernel) *)
+  | Value.Sort l1, Value.Sort l2 -> unify_level ms l1 l2
+  | Value.VInd (n1, ls1, as1), Value.VInd (n2, ls2, as2) when String.equal n1 n2
+    ->
+      unify_args (unify_levels ms ls1 ls2) lvl as1 as2
   | Value.VCtor (h1, as1), Value.VCtor (h2, as2)
     when String.equal h1.Type.cname h2.Type.cname ->
-      unify_args ms lvl as1 as2
+      unify_args (unify_levels ms h1.Type.clevels h2.Type.clevels) lvl as1 as2
   | Value.VRec (h1, as1), Value.VRec (h2, as2)
     when String.equal h1.Type.rind h2.Type.rind ->
-      unify_args ms lvl as1 as2
+      unify_args (unify_levels ms h1.Type.rlevels h2.Type.rlevels) lvl as1 as2
   | Value.Neutral n1, Value.Neutral n2 -> unify_neutral ms lvl n1 n2
-  (* sorts, refl, and any rigid-rigid mismatch: nothing to solve — defer to the
-     kernel's own conversion check on the zonked term *)
+  (* refl and any rigid-rigid mismatch: nothing to solve — defer to the kernel's
+     own conversion check on the zonked term *)
   | _ -> ms
 
 and unify_args ms lvl as1 as2 =
@@ -154,6 +220,7 @@ and unify_neutral ms lvl (n1 : Value.neutral) (n2 : Value.neutral) =
       unify_neutral ms lvl f1 f2
   | Value.Rec (h1, pre1, f1), Value.Rec (h2, pre2, f2)
     when String.equal h1.Type.rind h2.Type.rind ->
+      let ms = unify_levels ms h1.Type.rlevels h2.Type.rlevels in
       unify_neutral (unify_args ms lvl pre1 pre2) lvl f1 f2
   | _ -> ms
 
@@ -167,12 +234,15 @@ let rec zonk ms lvl (t : Type.t) : Type.t =
       match solution ms i with
       | Some v -> zonk ms lvl (Value.quote lvl v)
       | None -> t)
-  | Type.Var _
-  | Type.Sort _
-  | Type.Ind _
-  | Type.Ctor _
-  | Type.Rec _ ->
-      t
+  | Type.Var _ -> t
+  (* resolve solved level metas in sorts and head level arguments *)
+  | Type.Sort l -> Type.Sort (force_level ms l)
+  | Type.Def (i, ls) -> Type.Def (i, List.map (force_level ms) ls)
+  | Type.Ind (n, ls) -> Type.Ind (n, List.map (force_level ms) ls)
+  | Type.Ctor h ->
+      Type.Ctor { h with clevels = List.map (force_level ms) h.Type.clevels }
+  | Type.Rec h ->
+      Type.Rec { h with rlevels = List.map (force_level ms) h.Type.rlevels }
   | Type.Proj (i, a) -> Type.Proj (i, zonk ms lvl a)
   | Type.Pi (i, x, a, b) -> Type.Pi (i, x, zonk ms lvl a, zonk ms (lvl + 1) b)
   | Type.Lam (i, x, a, b) -> Type.Lam (i, x, zonk ms lvl a, zonk ms (lvl + 1) b)

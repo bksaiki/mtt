@@ -5,18 +5,29 @@
     application. *)
 
 type t =
-  | Sort of int
+  | Sort of Level.t
   | Pi of Type.icit * string * t * closure
   | Lam of Type.icit * string * t * closure
-  | VInd of string * t list
-      (** an inductive type former applied to its parameters: a type once
-          complete, a type-returning function while partial *)
+  | VInd of string * Level.t list * t list
+      (** an inductive type former (with its level arguments) applied to its
+          parameters: a type once complete, a type-returning function while
+          partial *)
   | VCtor of Type.ctor_head * t list
       (** a constructor applied to a spine: canonical data once saturated, a
           constructor function while partial *)
   | VRec of Type.rec_head * t list
       (** a recursor accumulating [params @ motive :: minors @ [major]] until
           saturated, when it fires ι *)
+  | VPoly of
+      { nlevels : int
+      ; denv : env
+      ; body : Type.t
+      }
+      (** a universe-polymorphic definition's stored value: its definition-time
+          environment and core body, abstracted over [nlevels] level parameters.
+          Inert — it sits only at a def's context slot and is consumed by
+          [eval]/{!Check.infer} of a {!Type.Def}, which instantiates it; it
+          never flows into {!apply}, {!quote}, or conversion. *)
   | Neutral of neutral
 
 (** a stuck term: a variable applied to a spine of eliminations *)

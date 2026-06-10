@@ -7,6 +7,7 @@ type ctor_head =
   ; cindex : int (* its position in the inductive's constructor list *)
   ; carity : int (* total arguments: leading parameters + fields *)
   ; nparams : int (* leading parameters, so a projection can skip them *)
+  ; clevels : Level.t list (* use-site level arguments (empty if monomorphic) *)
   }
 
 (* a binder's visibility: an explicit [(x : A)] argument is written at every
@@ -20,15 +21,21 @@ type icit =
 
 type t =
   | Var of int (* de Bruijn index *)
-  | Sort of int (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
+  | Def of int * Level.t list
+    (* a universe-polymorphic def reference: a de Bruijn index (like [Var]) into
+       the def's slot, which holds a level-abstracted [Value.VPoly] that [eval]
+       instantiates at the carried use-site levels. Only [nlevels > 0] defs use
+       it; monomorphic defs and locals stay [Var]. *)
+  | Sort of Level.t (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of icit * string * t * t (* Π (x : A). B, B binds index 0 *)
   | Lam of icit * string * t * t (* λ (x : A). b *)
   | App of t * t
   | Proj of int * t (* x.(i+1): the i-th field projection of a record *)
   | Meta of
       int (* a metavariable, by id; elaboration-only, never in final core *)
-  | Ind of
-      string (* an inductive type former, applied to params/indices via App *)
+  | Ind of string * Level.t list
+    (* an inductive type former (with use-site level arguments), applied to
+       params/indices via App *)
   | Ctor of ctor_head (* a constructor, applied to args via App *)
   | Rec of rec_head (* an inductive's recursor, applied to args via App *)
 
@@ -45,6 +52,7 @@ and rec_head =
   ; nparams : int (* leading parameter arguments, shared and fixed *)
   ; nindices : int (* index arguments, between the minors and the major *)
   ; recs : field_rec list list
+  ; rlevels : Level.t list (* use-site level arguments (empty if monomorphic) *)
   }
 
 (* whether a constructor field is recursive, and if so the index instances of
@@ -54,8 +62,27 @@ and field_rec =
   | Nonrec
   | Recursive of t list
 
+(* substitute the level arguments [args] for the level variables in every [Sort]
+   and inductive-head level list of [t] (instantiating a level-polymorphic term
+   at a use site); identity on a monomorphic term *)
+let rec subst_levels args t =
+  match t with
+  | Sort l -> Sort (Level.subst args l)
+  | Def (i, ls) -> Def (i, List.map (Level.subst args) ls)
+  | Var _
+  | Meta _ ->
+      t
+  | Pi (i, x, a, b) -> Pi (i, x, subst_levels args a, subst_levels args b)
+  | Lam (i, x, a, b) -> Lam (i, x, subst_levels args a, subst_levels args b)
+  | App (f, a) -> App (subst_levels args f, subst_levels args a)
+  | Proj (i, e) -> Proj (i, subst_levels args e)
+  | Ind (n, ls) -> Ind (n, List.map (Level.subst args) ls)
+  | Ctor h -> Ctor { h with clevels = List.map (Level.subst args) h.clevels }
+  | Rec h -> Rec { h with rlevels = List.map (Level.subst args) h.rlevels }
+
 let rec occurs k = function
   | Var i -> i = k
+  | Def (i, _) -> i = k
   | Sort _ -> false
   | Pi (_, _, a, b)
   | Lam (_, _, a, b) ->
@@ -76,6 +103,7 @@ let rec occurs k = function
    with an unsolved hole before the trusted check ever sees it *)
 let rec has_meta = function
   | Meta _ -> true
+  | Def _
   | Var _
   | Sort _
   | Ind _
@@ -87,6 +115,27 @@ let rec has_meta = function
   | Lam (_, _, a, b) ->
       has_meta a || has_meta b
   | App (a, b) -> has_meta a || has_meta b
+
+(* whether any level metavariable occurs in [t] (in a [Sort] or a head's level
+   arguments). Separate from {!has_meta} on term metas: a level meta is a
+   kernel-tolerable opaque atom, so it need not trigger meta-aware synthesis,
+   but an unsolved one is still a hole the elaborator rejects before
+   re-checking. *)
+let rec has_level_meta = function
+  | Sort l -> Level.has_meta l
+  | Def (_, ls)
+  | Ind (_, ls) ->
+      List.exists Level.has_meta ls
+  | Ctor h -> List.exists Level.has_meta h.clevels
+  | Rec h -> List.exists Level.has_meta h.rlevels
+  | Var _
+  | Meta _ ->
+      false
+  | Proj (_, a) -> has_level_meta a
+  | Pi (_, _, a, b)
+  | Lam (_, _, a, b) ->
+      has_level_meta a || has_level_meta b
+  | App (a, b) -> has_level_meta a || has_level_meta b
 
 (* makes the hint [x] distinct from every name in scope *)
 let freshen names x =
@@ -136,16 +185,23 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
     | None -> go_struct prec names fmt t
   and go_struct prec names fmt t =
     match t with
-    | Var i -> (
+    | Var i
+    | Def (i, _) -> (
         match List.nth_opt names i with
         | Some x -> Format.pp_print_string fmt x
         | None -> Format.fprintf fmt "!%d" i)
     (* surface names for sorts: Sort 0 is Prop, Sort (i+1) is Type i *)
-    | Sort 0 -> Format.pp_print_string fmt "Prop"
-    | Sort 1 -> Format.pp_print_string fmt "Type"
-    | Sort u ->
-        paren_if fmt (prec > 10) (fun fmt ->
-            Format.fprintf fmt "Type %d" (u - 1))
+    | Sort l -> (
+        match Level.to_int l with
+        | Some 0 -> Format.pp_print_string fmt "Prop"
+        | Some 1 -> Format.pp_print_string fmt "Type"
+        | Some u ->
+            paren_if fmt (prec > 10) (fun fmt ->
+                Format.fprintf fmt "Type %d" (u - 1))
+        | None ->
+            (* a level variable (universe polymorphism); no surface form yet *)
+            paren_if fmt (prec > 10) (fun fmt ->
+                Format.fprintf fmt "Sort %s" (Level.to_string l)))
     | Pi (Implicit, x, a, b) ->
         (* an implicit binder always shows its braces and name (dropping the
            name would lose the marker), even when unused *)
@@ -187,7 +243,7 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
        nodes (so [Nat.rec P z s n] renders through application). Constructors
        and the recursor print qualified by their type; surface sugar like [()]
        or decimals is applied by [sugar] above, not here. *)
-    | Ind name -> Format.pp_print_string fmt name
+    | Ind (name, _) -> Format.pp_print_string fmt name
     | Ctor h -> Format.fprintf fmt "%s.%s" h.ind h.cname
     | Rec h -> Format.fprintf fmt "%s.rec" h.rind
   in

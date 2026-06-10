@@ -1,16 +1,27 @@
 type t =
-  | Sort of int
+  | Sort of Level.t
   | Pi of Type.icit * string * t * closure
   | Lam of Type.icit * string * t * closure
   (* an inductive type former applied to its parameters (a type once the
      parameters are complete; a type-returning function while partial) *)
-  | VInd of string * t list
+  | VInd of string * Level.t list * t list
   (* a constructor applied to a spine of arguments (canonical data once
      saturated; a constructor function while partial) *)
   | VCtor of Type.ctor_head * t list
   (* a recursor accumulating its arguments [params @ motive :: minors @ [major]]
      until saturated, when it fires ι (see [vrec]) *)
   | VRec of Type.rec_head * t list
+  (* a universe-polymorphic def's stored value: its definition-time environment
+     [denv] and core [body], abstracted over [nlevels] level parameters (as
+     [Sort (Var j)] in [body]). Inert: it sits only at a def's context slot and
+     is consumed by [eval]/[infer] of a [Type.Def], which instantiates it by
+     re-evaluating [subst_levels ls body] in [denv] — it never reaches
+     [apply]/[quote]/conversion. *)
+  | VPoly of
+      { nlevels : int
+      ; denv : env
+      ; body : Type.t
+      }
   | Neutral of neutral
 
 and neutral =
@@ -34,6 +45,13 @@ exception Not_a_function
 let rec eval env t =
   match t with
   | Type.Var i -> List.nth env i
+  (* a polymorphic def: instantiate its level-abstracted body at the use-site
+     levels, then evaluate in its definition-time environment. (δ + level
+     instantiation in one step; the stored [VPoly] is never anything else.) *)
+  | Type.Def (i, ls) -> (
+      match List.nth env i with
+      | VPoly p -> eval p.denv (Type.subst_levels ls p.body)
+      | v -> v)
   (* a metavariable is inert in the kernel: it evaluates to a stuck head and is
      never solved here. The frontend ({!Meta}) owns solutions and zonks them
      away, so a meta never reaches a final {!Check}. *)
@@ -44,7 +62,7 @@ let rec eval env t =
   | Type.App (f, a) -> apply (eval env f) (eval env a)
   | Type.Proj (i, t) -> vproj i (eval env t)
   (* inductive heads start empty and accumulate their arguments via [apply] *)
-  | Type.Ind name -> VInd (name, [])
+  | Type.Ind (name, ls) -> VInd (name, ls, [])
   | Type.Ctor h -> VCtor (h, [])
   | Type.Rec h -> VRec (h, [])
 
@@ -57,7 +75,7 @@ and apply f a =
   | Lam (_, _, _, c) -> apply_closure c a
   | Neutral n -> Neutral (App (n, a))
   (* inductive heads accumulate arguments; a saturated recursor fires ι *)
-  | VInd (name, args) -> VInd (name, args @ [ a ])
+  | VInd (name, ls, args) -> VInd (name, ls, args @ [ a ])
   | VCtor (h, args) -> VCtor (h, args @ [ a ])
   | VRec (h, args) ->
       let args = args @ [ a ] in
@@ -143,9 +161,12 @@ let rec quote l v =
   | Sort i -> Type.Sort i
   | Pi (i, x, a, c) -> Type.Pi (i, x, quote l a, quote_closure l c)
   | Lam (i, x, a, c) -> Type.Lam (i, x, quote l a, quote_closure l c)
-  | VInd (name, args) -> quote_spine l (Type.Ind name) args
+  | VInd (name, ls, args) -> quote_spine l (Type.Ind (name, ls)) args
   | VCtor (h, args) -> quote_spine l (Type.Ctor h) args
   | VRec (h, args) -> quote_spine l (Type.Rec h) args
+  (* a [VPoly] is inert and consumed by [eval]/[infer] of a [Def]; it is never a
+     subterm of a real value, so it is never quoted *)
+  | VPoly _ -> invalid_arg "Value.quote: VPoly"
   | Neutral n -> quote_neutral l n
 
 (* to go under a binder, apply the closure to a fresh stuck variable *)

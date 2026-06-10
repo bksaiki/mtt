@@ -10,15 +10,32 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 - [ ] Full strict positivity: accept strictly-positive function-typed recursive
       arguments (`(Nat -> T) -> T`); currently only direct recursive fields
       `T params` are allowed
-- [ ] Universe polymorphism (level-polymorphic defs; see questions.md); also
-      needed for inductive `Sum`/`Σ`/`Eq` to form at the max of their
-      components' levels rather than one fixed level
+- [x] Universe polymorphism + drop cumulativity (Lean's model — full account in
+      `design.md` "Universes", rationale in `questions.md`). Levels are
+      `Level.t` (`level.ml`); cumulativity is gone (`conv` by `Level.equal`).
+      Inductives and defs take auto-bound level parameters; uses infer their
+      level arguments — inductives by direct matching (`Elab.match_lvl`), defs by
+      level metavariables (`Level.LMeta`). The prelude's `Sigma`/`Sum`/`Eq`, the
+      equality toolkit (`rfl`/`symm`/`trans`/`subst`/`cong`), and `absurd` are
+      polymorphic. Follow-ups:
+      - [ ] a bare `#check cong f p` (inference position) can't infer the
+            codomain universe — `{B : Sort v}` is fixed only through `f`, and
+            solving the term meta `?B` does not propagate to `?v`. The fix is
+            meta-assignment type unification (on `?m := t`, also unify
+            `typeof(?m)` with `typeof(t)`), which wants the unifier to carry a
+            typing context. In checking position the goal pins the level, which
+            is how `cong` is actually used.
+      - [ ] unify the two level-inference paths: formers/constructors use
+            `match_lvl`/`elab_poly_app`, defs use level metavariables. The
+            meta-based path is the more general one and could subsume both,
+            retiring `match_lvl`.
+      - [ ] optional: a real glued `Const`/def table (pairs with the "glued
+            evaluation" engineering item) — defs are eager δ today.
 - [ ] Align `absurd` with Lean. Ours is ex falso —
-      `absurd (A : Type) (h : Empty) : A`, i.e. Lean's `False.elim`. Lean's
-      `absurd : a → ¬a → b` instead takes `p` and `¬p` and forms the
-      contradiction itself; switching would leave raw ex falso as just
-      `Empty.rec`. Wants implicit args + universe polymorphism for full parity
-      (`b : Sort v`)
+      `absurd (A : Sort u) (h : Empty) : A`, i.e. Lean's `False.elim` (now
+      universe-polymorphic). Lean's `absurd : a → ¬a → b` instead takes `p` and
+      `¬p` and forms the contradiction itself; switching would leave raw ex falso
+      as just `Empty.rec`. Wants implicit args for full parity.
 
 ## Elaborator (type-directed surface → core)
 

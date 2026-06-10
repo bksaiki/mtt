@@ -44,6 +44,17 @@ let initial = { ctx = Check.empty; notation = Notation.empty }
 let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
   let sg = sess.ctx.Check.signature in
   let notation = sess.notation in
+  (* universe level parameters are auto-bound (Lean-style): the free level
+     variables occurring in [Sort u] across the declaration's types, in order of
+     first appearance, become its level parameters — in scope for every type *)
+  let levels =
+    let terms = List.map snd d.iparams @ (d.isort :: List.map snd d.ictors) in
+    List.fold_left
+      (fun acc t ->
+        acc @ List.filter (fun x -> not (List.mem x acc)) (Ast.level_vars t))
+      [] terms
+  in
+  let nlevels = List.length levels in
   (* the spec's parameter/index/field types use de Bruijn relative to the
      parameter telescope alone, with only the parameters and other inductives in
      scope (not the ambient definitions). They are therefore elaborated in a
@@ -55,7 +66,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
   let params, pctx =
     List.fold_left
       (fun (params, ctx) (x, aty) ->
-        let a = Elab.infer notation ctx aty in
+        let a = Elab.infer ~levels notation ctx aty in
         (params @ [ (x, a) ], Check.bind x (Value.eval ctx.Check.env a) ctx))
       ([], base sg)
       d.iparams
@@ -76,10 +87,10 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
                  optionally after an index telescope (e.g. Nat -> Type)"
             ]
     in
-    decompose (Elab.infer notation pctx d.isort)
+    decompose (Elab.infer ~levels notation pctx d.isort)
   in
   let provisional =
-    { Inductive.name = d.iname; params; indices; sort; ctors = [] }
+    { Inductive.name = d.iname; nlevels; params; indices; sort; ctors = [] }
   in
   let sg = Signature.add provisional sg in
   (* constructor types may mention the inductive being defined, so they see the
@@ -95,7 +106,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
   let as_self depth ty =
     let rec peel acc = function
       | Type.App (f, a) -> peel (a :: acc) f
-      | Type.Ind n when String.equal n d.iname -> Some acc
+      | Type.Ind (n, _) when String.equal n d.iname -> Some acc
       | _ -> None
     in
     match peel [] ty with
@@ -126,7 +137,9 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
               , result )
           | result -> ([], result)
         in
-        let fields, result = decompose 0 (Elab.infer notation cctx cty) in
+        let fields, result =
+          decompose 0 (Elab.infer ~levels notation cctx cty)
+        in
         match as_self (m + List.length fields) result with
         | Some result_indices -> { Inductive.cname; fields; result_indices }
         | None ->
@@ -138,7 +151,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
               ])
       d.ictors
   in
-  { Inductive.name = d.iname; params; indices; sort; ctors }
+  { Inductive.name = d.iname; nlevels; params; indices; sort; ctors }
 
 let run (sess : session) stmt =
   let ctx = sess.ctx in
@@ -180,17 +193,49 @@ let run (sess : session) stmt =
       let va = eval_ann sa in
       ({ sess with ctx = Check.bind x va ctx }, None)
   | Def (x, sa, st) ->
-      let t, va =
-        match sa with
-        | Some sa ->
-            let va = eval_ann sa in
-            (check_against st va, va)
-        | None ->
-            let t = infer st in
-            (t, Check.infer ctx t)
+      (* universe level parameters are auto-bound (as for inductives): the free
+         level variables in the def's annotation and body, in first-appearance
+         order, become its level parameters *)
+      let levels =
+        List.fold_left
+          (fun acc t ->
+            acc @ List.filter (fun y -> not (List.mem y acc)) (Ast.level_vars t))
+          []
+          (Option.to_list sa @ [ st ])
       in
-      let v = Value.eval ctx.env t in
-      ({ sess with ctx = Check.extend x v va ctx }, None)
+      let nlevels = List.length levels in
+      if nlevels = 0 then begin
+        let t, va =
+          match sa with
+          | Some sa ->
+              let va = eval_ann sa in
+              (check_against st va, va)
+          | None ->
+              let t = infer st in
+              (t, Check.infer ctx t)
+        in
+        let v = Value.eval ctx.env t in
+        ({ sess with ctx = Check.extend x v va ctx }, None)
+      end else begin
+        (* universe-polymorphic def: elaborate the type and body with the level
+           parameters in scope (so [Sort u] becomes [Sort (Var i)]) and store
+           them level-abstracted; each use instantiates them
+           ([Check.extend_poly] / the [Type.Def] reference) *)
+          let body, ty =
+            match sa with
+            | Some sa ->
+                let a = Elab.infer ~levels notation ctx sa in
+                let _ = Check.infer_univ ctx a in
+                let va = Value.eval ctx.env a in
+                let t = Elab.check ~levels notation ctx st va in
+                Check.check ctx t va;
+                (t, a)
+            | None ->
+                let t = Elab.infer ~levels notation ctx st in
+                (t, Value.quote ctx.lvl (Check.infer ctx t))
+          in
+          ({ sess with ctx = Check.extend_poly x ~nlevels ~body ~ty ctx }, None)
+      end
   | Theorem (x, sa, st) ->
       let va = eval_ann sa in
       let _ = check_against st va in

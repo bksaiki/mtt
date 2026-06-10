@@ -22,19 +22,18 @@
     Universes form a CoC-style Sort hierarchy: Prop = Sort 0 is impredicative,
     Type i = Sort (i+1) is the predicative tower above it. Pi formation lands in
     Sort (imax i j), where imax i 0 = 0: a product whose codomain is a
-    proposition is itself a proposition, no matter how large the domain. Sorts
-    are Russell-style and cumulative (Rocq-flavored, so Prop ≤ Type): in the
-    subsumption rule the inferred type is compared up to Sort i ≤ Sort j when i
-    ≤ j, with products invariant in their domains and covariant in their
-    codomains. {!infer} still returns principal types: Sort i : Sort (i+1)
-    exactly.
+    proposition is itself a proposition, no matter how large the domain. There
+    is {e no} cumulativity (Lean's model, not Rocq's): a smaller universe is not
+    a subtype of a larger one, and {!conv} compares sorts by level equality —
+    code that needs to span universes is universe-polymorphic instead (a
+    declaration may take level parameters; see {!Inductive.spec}'s [nlevels]).
 
-    The typing rules ({!infer} synthesizes; {!check} adds subsumption up to
-    cumulativity). Every datatype is now a prelude inductive — the dependent
-    pair (Σ/(a,b)/.1/.2), the binary sum, and propositional equality
-    (Eq/refl/Eq.rec) included — reached through the generic inductive rules
-    (former/constructor/ recursor) and, for records, the projection (Proj) shown
-    here:
+    The typing rules ({!infer} synthesizes; {!check} adds subsumption, which —
+    with no cumulativity — is just type conversion). Every datatype is a prelude
+    inductive — the dependent pair (Σ/(a,b)/.1/.2), the binary sum, and
+    propositional equality (Eq/refl/Eq.rec) included — reached through the
+    generic inductive rules (former/constructor/ recursor) and, for records, the
+    projection (Proj) shown here:
 
     {v
       (x : A) ∈ Γ
@@ -89,6 +88,15 @@ val bind : string -> Value.t -> ctx -> ctx
     fresh-neutral counterpart. *)
 val extend : string -> Value.t -> Value.t -> ctx -> ctx
 
+(** [extend_poly x ~nlevels ~body ~ty ctx] adds a {e universe-polymorphic} def
+    [x] abstracted over [nlevels] level parameters: its core [body] and [ty]
+    (mentioning those parameters as [Sort (Var j)]) are stored as level
+    abstractions ([Value.VPoly]). A use of [x] is a [Type.Def (i, ls)] that
+    instantiates them at the use-site levels [ls]. {!extend} is the monomorphic
+    counterpart (a plain value referenced by [Var]). *)
+val extend_poly :
+  string -> nlevels:int -> body:Type.t -> ty:Type.t -> ctx -> ctx
+
 (** [show ctx v] renders a value against the context's binder names, {e without}
     notation — the kernel's faithful/debug view. User-facing output and error
     messages are rendered by the frontend, which owns notation. *)
@@ -116,13 +124,14 @@ val conv : ctx -> Value.t -> Value.t -> Value.t -> bool
     the module header. *)
 val infer : ctx -> Type.t -> Value.t
 
-(** [infer_univ ctx t] infers and requires a sort, returning its index: used
+(** [infer_univ ctx t] infers and requires a sort, returning its level: used
     where the rules demand "a type" *)
-val infer_univ : ctx -> Type.t -> int
+val infer_univ : ctx -> Type.t -> Level.t
 
 (** [check ctx t expected] verifies that [t] has type [expected]: a lambda
     against a Pi checks the annotation and descends into the body; anything else
-    is inferred and compared up to cumulativity (subsumption) *)
+    is inferred and compared to [expected] by conversion (subsumption — no
+    cumulativity) *)
 val check : ctx -> Type.t -> Value.t -> unit
 
 (** [add_ind spec ctx] registers an inductive declaration in the context's
@@ -132,6 +141,11 @@ val add_ind : Inductive.spec -> ctx -> ctx
 (** [lookup_ind ctx name] is the inductive [name] declared in [ctx], or a type
     error if unknown. (Exposed for the elaborator's own type synthesis.) *)
 val lookup_ind : ctx -> string -> Inductive.spec
+
+(** [sort_of ctx ty] is the level [i] such that [ty : Sort i], for a [ty] known
+    to be a type. (Exposed so the elaborator can compute the level arguments of
+    a polymorphic inductive from its components' sorts.) *)
+val sort_of : ctx -> Value.t -> Level.t
 
 (** [field_type spec params v i] is the type of the [i]-th field of a record
     value [v : Ind params]: the field's declared type, instantiated by the
@@ -144,7 +158,13 @@ val field_type : Inductive.spec -> Value.t list -> Value.t -> int -> Value.t
     and motive value [pmot]. (Exposed so the elaborator can check a recursor's
     minor premises — e.g. a [refl] base case — in checking position.) *)
 val minor_type :
-  ctx -> Inductive.spec -> Value.t list -> Value.t -> int -> Value.t
+     ?levels:Level.t list
+  -> ctx
+  -> Inductive.spec
+  -> Value.t list
+  -> Value.t
+  -> int
+  -> Value.t
 
 (** [check_inductive ctx spec] validates an inductive declaration: kind-checks
     the parameter telescope and each constructor's field types, and enforces

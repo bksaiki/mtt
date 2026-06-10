@@ -23,6 +23,19 @@ let extend x v ty ctx =
    real value, so occurrences unfold (δ-reduction). *)
 let bind x ty ctx = extend x (Value.Neutral (Value.Var ctx.lvl)) ty ctx
 
+(* extends the context with a universe-polymorphic def [x]: its core [body] and
+   [ty] (mentioning the [nlevels] level parameters as [Sort (Var j)]) are stored
+   as [Value.VPoly] thunks over the current environment, which a [Type.Def] use
+   instantiates. The level-abstracted counterpart of {!extend}. *)
+let extend_poly x ~nlevels ~body ~ty ctx =
+  let thunk b = Value.VPoly { nlevels; denv = ctx.env; body = b } in
+  { ctx with
+    env = thunk body :: ctx.env
+  ; types = thunk ty :: ctx.types
+  ; names = x :: ctx.names
+  ; lvl = ctx.lvl + 1
+  }
+
 (* registers an inductive declaration in the context's signature *)
 let add_ind spec ctx = { ctx with signature = Signature.add spec ctx.signature }
 
@@ -48,11 +61,7 @@ let tm ctx (t : Type.t) = Error.Term (ctx.names, t)
 let vl ctx (v : Value.t) = Error.Term (ctx.names, Value.quote ctx.lvl v)
 
 (* imax i 0 = 0: a product into a proposition is a proposition *)
-let imax i j =
-  if j = 0 then
-    0
-  else
-    max i j
+let imax = Level.imax
 
 (* the fresh variable for going under a binder *)
 let fresh ctx = Value.Neutral (Value.Var ctx.lvl)
@@ -85,9 +94,12 @@ let pi_val ctx name aval k =
 let motive_app pmot idxs target =
   List.fold_left Value.apply pmot (idxs @ [ target ])
 
-let minor_type ctx spec pvals pmot i =
+let minor_type ?(levels = []) ctx spec pvals pmot i =
   let c = List.nth spec.Inductive.ctors i in
-  let chead = Inductive.ctor_head spec i in
+  let chead = Inductive.ctor_head ~levels spec i in
+  (* the spec's field and index types carry the inductive's level variables;
+     instantiate them with the recursor's level arguments before evaluating *)
+  let inst t = Type.subst_levels levels t in
   (* fieldvals is innermost-first; a spec term read in the context [params,
      earlier fields] is evaluated against [earlier fields (newest first)] ++
      [params (reverse)] *)
@@ -99,16 +111,20 @@ let minor_type ctx spec pvals pmot i =
             (Value.VCtor (chead, []))
             (pvals @ List.rev fieldvals)
         in
-        let idxs = List.map (Value.eval env) c.result_indices in
+        let idxs =
+          List.map (fun e -> Value.eval env (inst e)) c.result_indices
+        in
         motive_app pmot idxs ctor
     | (a : Inductive.arg) :: rest ->
         let env = fieldvals @ List.rev pvals in
-        let aval = Value.eval env a.aty in
+        let aval = Value.eval env (inst a.aty) in
         pi_val ctx a.aname aval (fun ctx' fv ->
             match a.recursive with
             | Some idx_exprs ->
                 (* the induction hypothesis [P field_indices field] *)
-                let idxs = List.map (Value.eval env) idx_exprs in
+                let idxs =
+                  List.map (fun e -> Value.eval env (inst e)) idx_exprs
+                in
                 pi_val ctx' "_ih" (motive_app pmot idxs fv) (fun ctx'' _ ->
                     go ctx'' (fv :: fieldvals) rest)
             | None -> go ctx' (fv :: fieldvals) rest)
@@ -144,7 +160,7 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       | _ -> assert false (* values are well-typed by invariant *))
   | Value.Proj (i, n) -> (
       match infer_neutral ctx n with
-      | Value.VInd (name, params) ->
+      | Value.VInd (name, _, params) ->
           field_type (lookup_ind ctx name) params (Value.Neutral n) i
       | _ -> assert false)
   (* T.rec params P minors major : P major; the motive sits after the params in
@@ -153,10 +169,10 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       let motive = List.nth pre h.Type.nparams in
       Value.apply motive (Value.Neutral n)
 
-(* [sort_of ctx ty] is the i such that [ty : Sort i] *)
-let rec sort_of ctx (ty : Value.t) : int =
+(* [sort_of ctx ty] is the level [i] such that [ty : Sort i] *)
+let rec sort_of ctx (ty : Value.t) : Level.t =
   match ty with
-  | Value.Sort i -> i + 1
+  | Value.Sort i -> Level.succ i
   | Value.Pi (_, x, a, c) ->
       let j = sort_of (bind x a ctx) (Value.apply_closure c (fresh ctx)) in
       imax (sort_of ctx a) j
@@ -164,21 +180,24 @@ let rec sort_of ctx (ty : Value.t) : int =
       match infer_neutral ctx n with
       | Value.Sort i -> i
       | _ -> assert false)
-  (* an inductive type lives at its declared sort *)
-  | Value.VInd (name, _) -> (lookup_ind ctx name).Inductive.sort
+  (* an inductive type lives at its declared sort, instantiated by its level
+     arguments (identity while monomorphic) *)
+  | Value.VInd (name, ls, _) ->
+      Level.subst ls (lookup_ind ctx name).Inductive.sort
   (* not types *)
   | Value.VCtor _
   | Value.VRec _
+  | Value.VPoly _
   | Value.Lam _ ->
       assert false
 
 (* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
-   types themselves (with optional cumulativity). β/δ have already happened
-   during evaluation, so this is structural comparison of weak-head forms, going
-   under binders with fresh variables. *)
+   types themselves (by equality — there is no cumulativity). β/δ have already
+   happened during evaluation, so this is structural comparison of weak-head
+   forms, going under binders with fresh variables. *)
 let rec conv ctx ty v1 v2 =
-  (* proof irrelevance *)
-  sort_of ctx ty = 0
+  (* proof irrelevance: the type is a proposition (Sort 0) *)
+  Level.equal (sort_of ctx ty) Level.zero
   ||
   match ty with
   (* η *)
@@ -187,8 +206,8 @@ let rec conv ctx ty v1 v2 =
       conv (bind x a ctx) (Value.apply_closure c v) (Value.apply v1 v)
         (Value.apply v2 v)
   (* at a sort, the values are types: compare strictly *)
-  | Value.Sort _ -> conv_ty ~cumul:false ctx v1 v2
-  | Value.VInd (name, params) -> (
+  | Value.Sort _ -> conv_ty ctx v1 v2
+  | Value.VInd (name, _, params) -> (
       let spec = lookup_ind ctx name in
       if Inductive.is_record spec then
         (* record η: equal iff every field projection is convertible (each at
@@ -220,29 +239,28 @@ let rec conv ctx ty v1 v2 =
           Option.is_some (conv_neutral ctx n1 n2)
       | _ -> false)
 
-and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
+and conv_ty ctx (t1 : Value.t) (t2 : Value.t) =
   match (t1, t2) with
-  (* sorts: equal, or upward-included under cumulativity *)
-  | Value.Sort i, Value.Sort j ->
-      if cumul then
-        i <= j
-      else
-        i = j
-  (* pi: domains are invariant, codomains covariant; the binder's visibility
-     ([icit]) is metadata the kernel ignores, so it is not compared *)
+  (* sorts are compared by level equality — there is no cumulativity (Lean's
+     model): a smaller universe is not a subtype of a larger one *)
+  | Value.Sort i, Value.Sort j -> Level.equal i j
+  (* pi: invariant in both domain and codomain; the binder's visibility ([icit])
+     is metadata the kernel ignores, so it is not compared *)
   | Value.Pi (_, x, a1, c1), Value.Pi (_, _, a2, c2) ->
-      conv_ty ~cumul:false ctx a1 a2
+      conv_ty ctx a1 a2
       &&
       let v = fresh ctx in
-      conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
+      conv_ty (bind x a1 ctx) (Value.apply_closure c1 v)
         (Value.apply_closure c2 v)
   (* an inductive type former is invariant in its parameters and indices: same
      name, and arguments convertible along the combined (instantiated) telescope
      (the index types may mention the parameters, which [conv_params]
      threads) *)
-  | Value.VInd (n1, ps1), Value.VInd (n2, ps2) ->
+  | Value.VInd (n1, ls1, ps1), Value.VInd (n2, ls2, ps2) ->
       let spec = lookup_ind ctx n1 in
       String.equal n1 n2
+      && List.length ls1 = List.length ls2
+      && List.for_all2 Level.equal ls1 ls2
       && conv_params ctx []
            (spec.Inductive.params @ spec.Inductive.indices)
            ps1 ps2
@@ -291,7 +309,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
       | _ -> None)
   | Value.Proj (i1, m1), Value.Proj (i2, m2) when i1 = i2 -> (
       match conv_neutral ctx m1 m2 with
-      | Some (Value.VInd (name, params)) ->
+      | Some (Value.VInd (name, _, params)) ->
           Some (field_type (lookup_ind ctx name) params (Value.Neutral m1) i1)
       | _ -> None)
   (* stuck inductive recursion: the recorded pre-major spine is [params @ motive
@@ -301,6 +319,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
     when String.equal h.Type.rind h2.Type.rind ->
       let spec = lookup_ind ctx h.Type.rind in
       let rind = h.Type.rind in
+      let levels = h.Type.rlevels in
       let m = h.Type.nparams and nmin = List.length h.Type.recs in
       let params1 = List.take m pre1 and params2 = List.take m pre2 in
       let motive1 = List.nth pre1 m and motive2 = List.nth pre2 m in
@@ -309,7 +328,9 @@ and conv_neutral ctx n1 n2 : Value.t option =
       let indices1 = List.drop (m + 1 + nmin) pre1
       and indices2 = List.drop (m + 1 + nmin) pre2 in
       let ind_ty =
-        List.fold_left Value.apply (Value.VInd (rind, [])) (params1 @ indices1)
+        List.fold_left Value.apply
+          (Value.VInd (rind, levels, []))
+          (params1 @ indices1)
       in
       (* the major is compared *at the inductive type*, not structurally: a Prop
          scrutinee is a proof, so by irrelevance two stuck recursions on
@@ -320,19 +341,19 @@ and conv_neutral ctx n1 n2 : Value.t option =
       let motives_ok =
         let rec go ctx env idxs_rev = function
           | (x, ity) :: rest ->
-              let dom = Value.eval env ity in
+              let dom = Value.eval env (Type.subst_levels levels ity) in
               let v = fresh ctx in
               go (bind x dom ctx) (v :: env) (v :: idxs_rev) rest
           | [] ->
               let idxs = List.rev idxs_rev in
               let ity =
                 List.fold_left Value.apply
-                  (Value.VInd (rind, []))
+                  (Value.VInd (rind, levels, []))
                   (params1 @ idxs)
               in
               let ctx' = bind "x" ity ctx in
               let tgt = fresh ctx in
-              conv_ty ~cumul:false ctx'
+              conv_ty ctx'
                 (List.fold_left Value.apply motive1 (idxs @ [ tgt ]))
                 (List.fold_left Value.apply motive2 (idxs @ [ tgt ]))
         in
@@ -341,7 +362,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
       let minors_ok =
         List.for_all2
           (fun (i, mn1) mn2 ->
-            conv ctx (minor_type ctx spec params1 motive1 i) mn1 mn2)
+            conv ctx (minor_type ~levels ctx spec params1 motive1 i) mn1 mn2)
           (List.mapi (fun i mn -> (i, mn)) minors1)
           minors2
       in
@@ -359,8 +380,8 @@ and conv_neutral ctx n1 n2 : Value.t option =
         None
   | _ -> None
 
-(* the cumulativity relation t1 ≤ t2 on types, used by subsumption *)
-let sub ctx t1 t2 = conv_ty ~cumul:true ctx t1 t2
+(* subsumption is now plain type conversion — no cumulativity *)
+let sub = conv_ty
 
 (* peel an application into its head and its argument list (left-to-right) *)
 let spine t =
@@ -392,7 +413,7 @@ let subsingleton ctx spec =
       let rec fields_are_proofs ctx env = function
         | [] -> true
         | (a : Inductive.arg) :: rest ->
-            sort_of ctx (Value.eval env a.aty) = 0
+            Level.equal (sort_of ctx (Value.eval env a.aty)) Level.zero
             && fields_are_proofs
                  (bind a.aname (Value.eval env a.aty) ctx)
                  (fresh ctx :: env) rest
@@ -404,12 +425,18 @@ let subsingleton ctx spec =
 let rec infer ctx t =
   match t with
   | Type.Var i -> List.nth ctx.types i (* (Var) *)
+  (* a polymorphic def reference: its type is stored level-abstracted at the
+     slot, so instantiate it at the use-site levels *)
+  | Type.Def (i, ls) -> (
+      match List.nth ctx.types i with
+      | Value.VPoly p -> Value.eval p.denv (Type.subst_levels ls p.body)
+      | v -> v)
   (* metavariables are an elaboration-only node; the elaborator zonks them away,
      so a meta reaching the kernel is a bug, not a typeable term *)
   | Type.Meta _ ->
       Error.type_error
         [ Error.txt "internal error: a metavariable reached the kernel" ]
-  | Type.Sort i -> Value.Sort (i + 1) (* (Sort) *)
+  | Type.Sort i -> Value.Sort (Level.succ i) (* (Sort) *)
   (* (Pi) — visibility does not affect the formed sort *)
   | Type.Pi (_, x, a, b) ->
       let i = infer_univ ctx a in
@@ -445,7 +472,7 @@ let rec infer ctx t =
   (* (Proj): the i-th field of a record, at its dependent field type *)
   | Type.Proj (i, e) -> (
       match infer ctx e with
-      | Value.VInd (name, params) ->
+      | Value.VInd (name, _, params) ->
           let spec = lookup_ind ctx name in
           if not (Inductive.is_record spec) then
             Error.type_error
@@ -465,9 +492,13 @@ let rec infer ctx t =
             ])
   (* an inductive type former and its constructors have fixed (non-polymorphic)
      types derived from the declaration; they ride the normal (App) machinery *)
-  | Type.Ind name -> Value.eval [] (Inductive.former_type (lookup_ind ctx name))
+  | Type.Ind (name, ls) ->
+      Value.eval []
+        (Type.subst_levels ls (Inductive.former_type (lookup_ind ctx name)))
   | Type.Ctor h ->
-      Value.eval [] (Inductive.ctor_type (lookup_ind ctx h.ind) h.cindex)
+      Value.eval []
+        (Type.subst_levels h.clevels
+           (Inductive.ctor_type (lookup_ind ctx h.ind) h.cindex))
   (* a bare recursor is motive-polymorphic; only a saturated application (caught
      in (App)) can be typed *)
   | Type.Rec _ ->
@@ -511,14 +542,14 @@ and check_telescope ctx env0 tele tms =
 (* validates a recursor motive [P : (indices) -> Ind params indices -> Sort j]
    against the inductive's index telescope (instantiated by [pvals]), returning
    [j]. Walks the index binders, then the target binder. *)
-and check_motive ctx spec pvals mty =
+and check_motive ?(levels = []) ctx spec pvals mty =
   let rind = spec.Inductive.name in
   let rec walk ctx mty env idxs_rev = function
     | (x, ity) :: rest -> (
         match mty with
         | Value.Pi (_, _, dom, c) ->
-            let expected = Value.eval env ity in
-            if not (conv_ty ~cumul:false ctx dom expected) then
+            let expected = Value.eval env (Type.subst_levels levels ity) in
+            if not (conv_ty ctx dom expected) then
               Error.type_error
                 [ Error.txt "the motive's index argument has type "
                 ; vl ctx dom
@@ -537,10 +568,10 @@ and check_motive ctx spec pvals mty =
         | Value.Pi (_, _, dom, c) -> (
             let expected =
               List.fold_left Value.apply
-                (Value.VInd (rind, []))
+                (Value.VInd (rind, levels, []))
                 (pvals @ List.rev idxs_rev)
             in
-            if not (conv_ty ~cumul:false ctx dom expected) then
+            if not (conv_ty ctx dom expected) then
               Error.type_error
                 [ Error.txt "the motive's target "
                 ; vl ctx dom
@@ -582,11 +613,22 @@ and infer_rec ctx rh args =
   let minor_tms = List.take nctors (List.drop (m + 1) args) in
   let index_tms = List.take nidx (List.drop (m + 1 + nctors) args) in
   let major_tm = List.nth args (m + 1 + nctors + nidx) in
-  let pvals = check_telescope ctx [] spec.Inductive.params param_tms in
+  (* the inductive's level arguments (empty if monomorphic); the spec's
+     parameter/index/field types carry its level variables, so instantiate
+     them *)
+  let levels = rh.Type.rlevels in
+  let inst_tele = List.map (fun (x, t) -> (x, Type.subst_levels levels t)) in
+  let pvals =
+    check_telescope ctx [] (inst_tele spec.Inductive.params) param_tms
+  in
   (* the motive P : (indices) -> Ind params indices -> Sort j *)
   let pmot = Value.eval ctx.env motive_tm in
-  let j = check_motive ctx spec pvals (infer ctx motive_tm) in
-  if spec.Inductive.sort = 0 && j <> 0 && not (subsingleton ctx spec) then
+  let j = check_motive ~levels ctx spec pvals (infer ctx motive_tm) in
+  if
+    Level.equal spec.Inductive.sort Level.zero
+    && (not (Level.equal j Level.zero))
+    && not (subsingleton ctx spec)
+  then
     Error.type_error
       [ Error.txtf "cannot eliminate the proposition %s into " rh.Type.rind
       ; tm ctx (Type.Sort j)
@@ -596,15 +638,19 @@ and infer_rec ctx rh args =
       ];
   (* each minor premise against its derived type *)
   List.iteri
-    (fun i mn -> check ctx mn (minor_type ctx spec pvals pmot i))
+    (fun i mn -> check ctx mn (minor_type ~levels ctx spec pvals pmot i))
     minor_tms;
   (* the index arguments (against the index telescope, instantiated by the
      parameters), then the major at [Ind params indices] *)
   let ivals =
-    check_telescope ctx (List.rev pvals) spec.Inductive.indices index_tms
+    check_telescope ctx (List.rev pvals)
+      (inst_tele spec.Inductive.indices)
+      index_tms
   in
   let ind_ty =
-    List.fold_left Value.apply (Value.VInd (rh.Type.rind, [])) (pvals @ ivals)
+    List.fold_left Value.apply
+      (Value.VInd (rh.Type.rind, levels, []))
+      (pvals @ ivals)
   in
   check ctx major_tm ind_ty;
   (* result: P indices major *)
@@ -618,7 +664,7 @@ and check ctx t expected =
   | Type.Lam (_, x, a, b), Value.Pi (_, _, dom, c) ->
       let _ = infer_univ ctx a in
       let va = Value.eval ctx.env a in
-      if not (conv_ty ~cumul:false ctx va dom) then
+      if not (conv_ty ctx va dom) then
         Error.type_error
           [ Error.txt "the annotation "
           ; vl ctx va
@@ -628,7 +674,7 @@ and check ctx t expected =
       check (bind x va ctx) b
         (Value.apply_closure c (Value.Neutral (Value.Var ctx.lvl)))
   (* subsumption: infer and compare up to definitional equality (βδη plus proof
-     irrelevance) and cumulativity *)
+     irrelevance); no cumulativity, so this is plain type conversion *)
   | _ ->
       let ty = infer ctx t in
       if not (sub ctx ty expected) then
@@ -718,7 +764,10 @@ let check_inductive ctx spec =
                     ; tm ctx_cur a.aty
                     ; Error.txt " (strict positivity)"
                     ]);
-            if spec.Inductive.sort <> 0 && s > spec.Inductive.sort then
+            if
+              (not (Level.equal spec.Inductive.sort Level.zero))
+              && not (Level.leq s spec.Inductive.sort)
+            then
               Error.type_error
                 [ Error.txtf "constructor %s: a field of sort " c.cname
                 ; tm ctx_cur (Type.Sort s)

@@ -2,7 +2,8 @@
 
 A small dependent type theory in the Calculus of Constructions family: Π types
 and indexed inductive families — under an impredicative `Prop` and a predicative
-cumulative `Type` tower, checked bidirectionally with normalization by evaluation
+`Type` tower (universe-polymorphic, not cumulative — Lean's model), checked
+bidirectionally with normalization by evaluation
 (NbE), type-directed conversion, and definitional proof irrelevance. The kernel
 has no built-in datatypes at all: `Unit`/`Empty`/`Nat`/`Σ`/`Sum`/`Eq` (whose
 recursor `Eq.rec` is the equality eliminator J) are ordinary inductive
@@ -77,7 +78,13 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **α** — free (de Bruijn)
 - **δ** — `def`s unfold eagerly: a defined name is bound in the env to its
   value, so evaluation replaces it (no `Const` constructor, no kernel
-  lookup). Upgrade path if unfolded output hurts: glued evaluation.
+  lookup). A *universe-polymorphic* def is the one twist: its free `Sort u`
+  level variables are auto-bound as level parameters, and it is stored
+  level-abstracted (`Value.VPoly` at its context slot) and referenced by a
+  `Type.Def (i, levels)` node — still a de Bruijn index, but carrying use-site
+  level arguments that `eval`/`infer` instantiate (δ + level substitution in one
+  step). Monomorphic defs and locals stay plain `Var`. Upgrade path if unfolded
+  output hurts: glued evaluation.
 - **η for records** (surjective pairing, generalized) — at any
   single-constructor, non-recursive inductive, two values are equal iff their
   field projections are (the second compared at the family instantiated by the
@@ -93,16 +100,16 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **proof irrelevance** — at a type in `Prop`, any two values are equal
   (a one-line guard in `conv`, made possible by type direction); applies
   inside neutral spines, so `P h1 ≡ P h2` for any proofs `h1`, `h2`.
-- **cumulativity** (subsumption rule only, via `sub`): `Sort i ≤ Sort j`
-  when `i ≤ j` (Rocq-flavored: `Prop ≤ Type`); products invariant in
-  domains, covariant in codomains. `infer` still returns principal types
+- **no cumulativity** (Lean's model): `conv` compares sorts by level equality;
+  a smaller universe is not a subtype of a larger one. Spanning universes is done
+  with universe polymorphism, not subtyping. `infer` returns principal types
   (`Sort i : Sort (i+1)` exactly, Russell-style). The dependent pair `Σ` is no
-  longer a kernel type — it is the prelude record `Sigma`, formed by the generic
-  inductive rule (fixed at `Type`, pending universe polymorphism). A bare pair
-  still infers at the constant family (Lean-style: `(a, b) : A × B`), but that —
-  like recovering the family by checking against an expected `Σ` — is now the
-  elaborator's job (`elab.ml`), since neither is recoverable by the type-free
-  scope pass
+  longer a kernel type — it is the prelude record `Sigma`, now universe-
+  polymorphic (`Sigma.{u v}`, landing at `Sort (max u v)`), formed by the generic
+  inductive rule. A bare pair still infers at the constant family (Lean-style:
+  `(a, b) : A × B`), but that — like recovering the family and the level
+  arguments by checking against an expected `Σ` — is the elaborator's job
+  (`elab.ml`)
 
 ## Universes
 
@@ -111,7 +118,23 @@ Sort (i+1)` (predicative tower). Π formation lands in `Sort (imax i j)`
 where `imax i 0 = 0` — a product into a proposition is a proposition, no
 matter the domain — and `max i j` otherwise. The whole difference between
 `Prop` and `Type` is that one `imax` in `check.ml`'s Pi rule, plus proof
-irrelevance in `conv`. `Empty` (now a prelude inductive with no constructors,
+irrelevance in `conv`. Levels are `Level.t` (`Zero`/`Succ`/`Max`/`IMax`/`Var`, plus an
+elaboration-only `LMeta`; `level.ml`), so sorts can take **level parameters** — a declaration just writes
+`Sort u` and its free level variables are auto-bound as parameters (Lean-style;
+no `.{u v}` binder syntax), and a polymorphic inductive's use-site level
+arguments are inferred from its arguments' sorts (`Sigma`/`Sum`/`Eq` are all
+polymorphic — a recursor's level arguments come from the major's type, or from
+its explicit parameters). *Definitions* can be polymorphic too: a `def`'s free
+`Sort u` is auto-bound and the def is stored level-abstracted (`Value.VPoly`),
+referenced by `Type.Def (i, levels)` with use-site level arguments inferred by
+**level metavariables** (`Level.LMeta`, solved by the same unifier as term metas
+— extended to `Sort`/`VInd` level arguments — and zonked away). So the whole
+prelude equality toolkit (`rfl`/`symm`/`trans`/`subst`/`cong`) and `absurd` are
+universe-polymorphic: they work on `Prop` equalities and eliminate into any
+sort, the levels solved per use even when fixed only through an implicit
+argument. There is **no cumulativity** (Lean's model, not Rocq's): `conv`
+compares sorts by `Level.equal`, and code spans universes by polymorphism, not
+subtyping. `Empty` (now a prelude inductive with no constructors,
 not a kernel primitive — see Inductive types) eliminates into any sort via its
 recursor `Empty.rec`, which the prelude wraps as `absurd` — subsingleton
 elimination, the degenerate (zero-constructor) case of the generic
@@ -186,21 +209,24 @@ name, beside the de Bruijn context.
   `Σ` (a prelude record `Sigma (A : Type) (B : A → Type)` with `@[notation
   sigma]`; `Σ`/`×`/`(a,b)` retarget to it, `.1`/`.2` become `Proj 0`/`Proj 1`,
   and the `Sigma`/`Pair`/`Fst`/`Snd` nodes and `vfst`/`vsnd` are deleted), and
-  `Sum` (a prelude inductive `Sum (A B : Type)` with `@[notation sum]` for the
+  `Sum` (a prelude inductive `Sum (A : Sort u) (B : Sort v)` with `@[notation sum]` for the
   infix `+`; its injections and eliminator are the *qualified* `Sum.inl`/
   `Sum.inr`/`Sum.rec` like any other inductive — the `inl`/`inr`/`case` keywords
   are gone — deleting the `Sum`/`Inl`/`Inr`/`Case` nodes, `vcase`, and their
   machinery), and — the last one — `Eq` (a prelude **indexed** inductive
-  `Eq (A : Type) (x : A) : A → Prop := | refl : Eq A x x` with `@[notation eq]`;
+  `Eq (A : Sort u) (x : A) : A → Prop := | refl : Eq A x x` with `@[notation eq]`;
   `x = y` is the applied former with the type inferred, `rfl` an ordinary prelude
   def (`Eq.refl A x`, its implicits inserted on use), and the eliminator is the
   plain recursor `Eq.rec`
   (based path induction — Lean's `Eq.rec`); deleting the `Eq`/`Refl`/`J` nodes,
-  `vj`, and their cases, and there is no `J` keyword). `Σ`/`Sum`/`Eq` are **fixed
-  at `Type`**: a Σ/sum over the universe, a proof-irrelevant pair/disjunction of
-  Props, or equality *of types* (`Unit = Unit`) no longer forms, pending universe
-  polymorphism. With `Eq` gone the kernel has **no built-in datatypes** — only
-  `Sort`/`Π`/`λ`/`App`/`Var` and `Ind`/`Ctor`/`Rec`.
+  `vj`, and their cases, and there is no `J` keyword). `Σ`/`Sum`/`Eq` are all
+  **universe-polymorphic** (`Sum (A : Sort u) (B : Sort v) : Sort (max u v)`,
+  `Eq (A : Sort u) …`, landing at the max of their components' levels): a Σ/sum
+  over the universe, a proof-irrelevant pair/disjunction of Props, and equality
+  *of types* (`Unit = Unit`) all form, with the level arguments inferred per use.
+  With `Eq` gone the kernel has **no built-in datatypes** — only
+  `Sort`/`Π`/`λ`/`App`/`Var`/`Proj`, the polymorphic-def reference `Def`, and the
+  generic inductive machinery `Ind`/`Ctor`/`Rec`.
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
   only as a *direct* recursive field `T params idxs` (never under an arrow or
   nested, and never inside the `idxs` of such a field — more conservative than
@@ -389,7 +415,9 @@ declaration just extends the checking context (`stmt.ml`, which holds both
 the statement type and its processor, per the module-per-concept convention):
 
 - `axiom x : A` — `bind`: a fresh neutral, stuck forever
-- `def x [: A] = t` — `extend`: bound to `t`'s value, unfolds (δ)
+- `def x [: A] = t` — `extend`: bound to `t`'s value, unfolds (δ). With free
+  `Sort u` level variables it is universe-polymorphic — auto-bound and stored
+  level-abstracted (`extend_poly`/`Type.Def`); see Universes
 - `theorem x : A = t` — proof checked, then `bind`: opaque (Qed-style);
   a theorem behaves exactly like an axiom whose obligation was discharged
 - `inductive T params : sort := | c : ty | ...` — declares an inductive type;
@@ -400,8 +428,8 @@ the statement type and its processor, per the module-per-concept convention):
 ## Prelude
 
 `std/prelude.mtt` is a standard library written in mtt (functions, `not`, the
-Eq toolkit `sym`/`trans`/`cong`/`subst`, Nat arithmetic and lemmas — all
-axiom-free). A dune rule embeds it into the binary as a string constant
+universe-polymorphic Eq toolkit `rfl`/`symm`/`trans`/`subst`/`cong`, Nat
+arithmetic and lemmas — all axiom-free). A dune rule embeds it into the binary as a string constant
 (`prelude_data.ml`), so there is no runtime path lookup. It is loaded
 **automatically** (`Prelude.load` folds `Stmt.run` over the
 parsed source into the starting context). A file/REPL opts out by opening
@@ -426,8 +454,9 @@ primitive inductives that `prelude` does not opt out of (a two-tier prelude).
 - One module per concept, type named `t`.
 - Every library module has an `.mli`; doc comments live there (odoc and
   editor hover read them), `.ml` files keep implementation notes. `Check`
-  hides its conversion internals (`conv_ty`, `conv_neutral`, `sort_of`,
-  `sub`); the syntax/value types stay concrete — they're the shared
-  vocabulary, not an implementation detail.
+  hides its conversion internals (`conv_ty`, `conv_neutral`), exposing only
+  what the elaborator needs (e.g. `sort_of` for level inference); the
+  syntax/value types stay concrete — they're the shared vocabulary, not an
+  implementation detail.
 - Tests: `ppx_expect` snapshot tests per module (`dune promote` workflow);
   expected strings are always promoted, never hand-typed.

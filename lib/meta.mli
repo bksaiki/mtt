@@ -16,6 +16,13 @@ val empty : t
     [Value.Neutral (Value.Meta id)] and in core as [Type.Meta id]. *)
 val fresh : t -> blvl:int -> Value.t -> t * int
 
+(** [fresh_level ms] allocates a {e level} metavariable — a placeholder for an
+    unknown level argument of a polymorphic head — returning the extended
+    context and its id. It occurs as [Level.LMeta id]; unification solves it and
+    {!zonk} replaces it. (Level metas need no type or scope: a level has no
+    binders.) *)
+val fresh_level : t -> t * int
+
 (** [typ ms i] is metavariable [i]'s type. *)
 val typ : t -> int -> Value.t
 

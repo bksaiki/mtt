@@ -1,0 +1,57 @@
+(** Universe levels for the [Sort] hierarchy. A level is a CoC-style universe
+    index: [Prop = Sort zero], [Type i = Sort (succ^(i+1) zero)]. The
+    [Var]/[Max]/[IMax] cases support universe polymorphism (level variables and
+    the [max]/[imax] algebra); until level variables are introduced every level
+    in a checked term is closed, and [equal]/[leq] are exact on closed levels.
+*)
+type t =
+  | Zero
+  | Succ of t
+  | Max of t * t
+  | IMax of t * t
+  | Var of int  (** a level parameter, by de Bruijn index *)
+  | LMeta of int
+      (** a level metavariable, by id: an elaboration-only placeholder for an
+          unknown level argument, solved by unification and zonked away (the
+          {!Type.Meta} analogue for levels). An opaque atom to the algebra here;
+          it never appears in a checked term. *)
+
+val zero : t
+
+val succ : t -> t
+
+(** [of_int n] is [Succ^n Zero] *)
+val of_int : int -> t
+
+(** [to_int l] is the value of a closed level, or [None] if [l] mentions a
+    variable *)
+val to_int : t -> int option
+
+(** [max a b] is the least upper bound; reduces the closed case *)
+val max : t -> t -> t
+
+(** [imax a b] is [b] when [b] is (or normalizes to) [zero], else [max a b] — so
+    a product into a proposition stays a proposition *)
+val imax : t -> t -> t
+
+(** put a level in canonical form (exact for closed levels) *)
+val normalize : t -> t
+
+(** definitional equality of levels (exact on closed levels) *)
+val equal : t -> t -> bool
+
+(** whether the level mentions any level metavariable ({!LMeta}); the elaborator
+    uses it to keep an unsolved one out of a checked term *)
+val has_meta : t -> bool
+
+(** [leq a b] decides [a ≤ b]; used by predicativity *)
+val leq : t -> t -> bool
+
+(** [subst args l] replaces the level variables [Var 0 …] in [l] with the
+    corresponding level arguments (a level parameter beyond [args] is left
+    as-is) *)
+val subst : t list -> t -> t
+
+(** a debug rendering ([0], [3], [u0], [max …]); surface universes print via the
+    {!Type} printer, not this *)
+val to_string : t -> string
