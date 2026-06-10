@@ -2,6 +2,14 @@
     location on every node. The elaborator ({!Elab}) is the sole pass that turns
     it into the (location-free) de Bruijn core. *)
 
+(** a surface universe level: a concrete level, a level variable (resolved
+    against the level parameters in scope), or [max]/[imax] of two *)
+type lvl =
+  | LNat of int
+  | LVar of string
+  | LMax of lvl * lvl
+  | LIMax of lvl * lvl
+
 type t =
   { loc : Loc.t  (** the node's source span *)
   ; desc : desc
@@ -10,7 +18,7 @@ type t =
 and desc =
   | Var of string
   | Field of t * string  (** a named projection, e.g. the recursor [Nat.rec] *)
-  | Sort of int  (** Prop = Sort 0, Type i = Sort (i+1), as in the core *)
+  | Sort of lvl  (** a sort at a (possibly variable) level: Prop = Sort 0, … *)
   | Pi of Type.icit * string * t * t  (** [(x : A) -> B] or [{x : A} -> B] *)
   | Arrow of t * t  (** A -> B *)
   | Lam of Type.icit * string * t * t

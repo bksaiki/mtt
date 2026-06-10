@@ -29,6 +29,10 @@ rule token = parse
   | "Type" [' ' '\t']+ (digits as n) { TYPELEVEL (int_of_string n) }
   | "Type" { TYPE }
   | "Prop" { PROP }
+  (* explicit universe levels: [Sort u], with [max]/[imax] on level expressions *)
+  | "Sort" { SORT }
+  | "max" { MAX }
+  | "imax" { IMAX }
   | "prelude" { PRELUDE }
   | "#check" { CHECK }
   | "#check_equal" { CHECK_EQUAL }
@@ -60,6 +64,8 @@ rule token = parse
   (* [@f] makes every argument explicit (suppresses implicit insertion); the
      longer [@[] above wins by maximal munch, so a lone [@] is unambiguous *)
   | "@" { AT }
+  (* a level-parameter binder [.{u v}] on a declaration (before the [.] rules) *)
+  | ".{" { DOTLBRACE }
   | ".1" { FST }
   | ".2" { SND }
   | "." digits as s

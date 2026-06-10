@@ -2,6 +2,8 @@
    {!Inductive.spec}: names and types are still parameters/terms *)
 type ind_decl =
   { iname : string (* the inductive's name *)
+  ; ilevels :
+      string list (* universe level parameters [.{u v}] (empty if none) *)
   ; iparams : (string * Ast.t) list (* the parameter telescope (flattened) *)
   ; isort : Ast.t (* the result sort *)
   ; ictors :
@@ -44,6 +46,10 @@ let initial = { ctx = Check.empty; notation = Notation.empty }
 let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
   let sg = sess.ctx.Check.signature in
   let notation = sess.notation in
+  (* the declared universe level parameters, in scope as level variables for
+     every type in the declaration *)
+  let levels = d.ilevels in
+  let nlevels = List.length levels in
   (* the spec's parameter/index/field types use de Bruijn relative to the
      parameter telescope alone, with only the parameters and other inductives in
      scope (not the ambient definitions). They are therefore elaborated in a
@@ -55,7 +61,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
   let params, pctx =
     List.fold_left
       (fun (params, ctx) (x, aty) ->
-        let a = Elab.infer notation ctx aty in
+        let a = Elab.infer ~levels notation ctx aty in
         (params @ [ (x, a) ], Check.bind x (Value.eval ctx.Check.env a) ctx))
       ([], base sg)
       d.iparams
@@ -76,10 +82,10 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
                  optionally after an index telescope (e.g. Nat -> Type)"
             ]
     in
-    decompose (Elab.infer notation pctx d.isort)
+    decompose (Elab.infer ~levels notation pctx d.isort)
   in
   let provisional =
-    { Inductive.name = d.iname; nlevels = 0; params; indices; sort; ctors = [] }
+    { Inductive.name = d.iname; nlevels; params; indices; sort; ctors = [] }
   in
   let sg = Signature.add provisional sg in
   (* constructor types may mention the inductive being defined, so they see the
@@ -126,7 +132,9 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
               , result )
           | result -> ([], result)
         in
-        let fields, result = decompose 0 (Elab.infer notation cctx cty) in
+        let fields, result =
+          decompose 0 (Elab.infer ~levels notation cctx cty)
+        in
         match as_self (m + List.length fields) result with
         | Some result_indices -> { Inductive.cname; fields; result_indices }
         | None ->
@@ -138,7 +146,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
               ])
       d.ictors
   in
-  { Inductive.name = d.iname; nlevels = 0; params; indices; sort; ctors }
+  { Inductive.name = d.iname; nlevels; params; indices; sort; ctors }
 
 let run (sess : session) stmt =
   let ctx = sess.ctx in

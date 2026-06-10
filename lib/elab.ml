@@ -121,7 +121,19 @@ let abstract needle t =
   in
   go 0 t
 
-let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
+(* resolve a surface level against the level parameters [lvls] in scope (their
+   position is the level variable's de Bruijn index) *)
+let rec resolve_level lvls = function
+  | Ast.LNat n -> Level.of_int n
+  | Ast.LVar x -> (
+      match List.find_index (String.equal x) lvls with
+      | Some i -> Level.Var i
+      | None -> Error.type_error [ Error.txtf "unknown universe variable %s" x ]
+      )
+  | Ast.LMax (a, b) -> Level.max (resolve_level lvls a) (resolve_level lvls b)
+  | Ast.LIMax (a, b) -> Level.imax (resolve_level lvls a) (resolve_level lvls b)
+
+let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
   let sg = ctx0.Check.signature in
   let fresh (ctx : Check.ctx) = Value.Neutral (Value.Var ctx.Check.lvl) in
   (* the metacontext for this elaboration: a functional value threaded through a
@@ -326,7 +338,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                 Error.type_error
                   [ Error.txtf "the projection .%s expects a record value" field
                   ]))
-    | Ast.Sort i -> Type.Sort (Level.of_int i)
+    | Ast.Sort l -> Type.Sort (resolve_level levels l)
     | Ast.Pi (i, x, a, b) ->
         let a' = go ctx Infer a in
         let b' = go (Check.bind x (Value.eval ctx.Check.env a') ctx) Infer b in
@@ -890,6 +902,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
       [ Error.txt "could not infer a hole (_); add a type annotation" ];
   core
 
-let infer notation ctx s = elaborate notation ctx Infer s
+let infer ?(levels = []) notation ctx s = elaborate ~levels notation ctx Infer s
 
-let check notation ctx s expected = elaborate notation ctx (Check expected) s
+let check ?(levels = []) notation ctx s expected =
+  elaborate ~levels notation ctx (Check expected) s

@@ -1,3 +1,11 @@
+(* a surface universe level: a concrete level [n], a level variable [u]
+   (resolved against the level parameters in scope), or [max]/[imax] of two *)
+type lvl =
+  | LNat of int
+  | LVar of string
+  | LMax of lvl * lvl
+  | LIMax of lvl * lvl
+
 type t =
   { loc : Loc.t
   ; desc : desc
@@ -6,7 +14,7 @@ type t =
 and desc =
   | Var of string
   | Field of t * string (* a named projection, e.g. [Nat.rec] *)
-  | Sort of int
+  | Sort of lvl (* a sort at a (possibly variable) level: Prop=Sort 0, … *)
   | Pi of Type.icit * string * t * t (* (x : A) -> B / {x : A} -> B *)
   | Arrow of t * t (* A -> B *)
   | Lam of Type.icit * string * t * t (* fun (x : A) => b / fun {x : A} => b *)

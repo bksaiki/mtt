@@ -26,13 +26,15 @@
     The result is zonked to meta-free core; an unsolved hole is reported here,
     never handed to the kernel. *)
 
-(** [infer notation ctx s] elaborates [s] in inference position (no expected
-    type), returning the core term. Its type is then synthesized by
-    {!Check.infer}. *)
-val infer : Notation.t -> Check.ctx -> Ast.t -> Type.t
+(** [infer ?levels notation ctx s] elaborates [s] in inference position (no
+    expected type), returning the core term. Its type is then synthesized by
+    {!Check.infer}. [levels] names the universe level parameters in scope (for a
+    polymorphic declaration's body); a [Sort u] resolves [u] to its position. *)
+val infer : ?levels:string list -> Notation.t -> Check.ctx -> Ast.t -> Type.t
 
-(** [check notation ctx s expected] elaborates [s] against the expected type
-    [expected], returning the core term. The expected type flows into
+(** [check ?levels notation ctx s expected] elaborates [s] against the expected
+    type [expected], returning the core term. The expected type flows into
     constructor applications (so their parameters may be omitted) and through
     lambda bodies. The result is re-verified by {!Check.check}. *)
-val check : Notation.t -> Check.ctx -> Ast.t -> Value.t -> Type.t
+val check :
+  ?levels:string list -> Notation.t -> Check.ctx -> Ast.t -> Value.t -> Type.t
