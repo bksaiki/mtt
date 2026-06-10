@@ -291,7 +291,7 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
                     (Value.quote ctx.Check.lvl (Meta.force !ms v))
                 in
                 if inserted || has_lmeta ty || has_lmeta g then
-                  ms := Meta.unify !ms ctx.Check.lvl ty g;
+                  ms := Meta.unify !ms ctx ty g;
                 core
           in
           walk core ty false
@@ -919,7 +919,7 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
                  could fail on a check-only form like [rfl], and is needless
                  work *)
               if Type.has_meta (Value.quote ctx.Check.lvl dom) then
-                ms := Meta.unify !ms ctx.Check.lvl dom (elab_infer ctx a');
+                ms := Meta.unify !ms ctx dom (elab_infer ctx a');
               walk
                 (Type.App (core, a'))
                 (Value.apply_closure c (Value.eval ctx.Check.env a'))

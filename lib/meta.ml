@@ -164,70 +164,11 @@ let scope_ok ms blvl m entry rhs =
   in
   ok entry rhs
 
-(* solve an unapplied flex [?m := rhs] when [rhs] is in scope for it; an applied
-   flex [?m sp] is left alone (a higher-order case this pass does not handle) *)
-let solve_flex ms entry m sp rhs =
-  match sp with
-  | [] ->
-      if scope_ok ms (IMap.find m ms.entries).blvl m entry rhs then
-        solve ms m rhs
-      else
-        ms
-  | _ -> ms
-
-(* unify two values at de Bruijn level [lvl], returning the updated context *)
-let rec unify ms lvl (v1 : Value.t) (v2 : Value.t) : t =
-  let v1 = force ms v1 and v2 = force ms v2 in
-  match (as_flex v1, as_flex v2) with
-  | Some (m, sp), _ -> solve_flex ms lvl m sp v2
-  | _, Some (m, sp) -> solve_flex ms lvl m sp v1
-  | None, None -> unify_rigid ms lvl v1 v2
-
-and unify_rigid ms lvl v1 v2 =
-  match (v1, v2) with
-  | Value.Pi (_, _, a1, c1), Value.Pi (_, _, a2, c2)
-  | Value.Lam (_, _, a1, c1), Value.Lam (_, _, a2, c2) ->
-      let ms = unify ms lvl a1 a2 in
-      let v = Value.Neutral (Value.Var lvl) in
-      unify ms (lvl + 1) (Value.apply_closure c1 v) (Value.apply_closure c2 v)
-  (* sorts: solve any level meta on either side (the rest defers to the
-     kernel) *)
-  | Value.Sort l1, Value.Sort l2 -> unify_level ms l1 l2
-  | Value.VInd (n1, ls1, as1), Value.VInd (n2, ls2, as2) when String.equal n1 n2
-    ->
-      unify_args (unify_levels ms ls1 ls2) lvl as1 as2
-  | Value.VCtor (h1, as1), Value.VCtor (h2, as2)
-    when String.equal h1.Type.cname h2.Type.cname ->
-      unify_args (unify_levels ms h1.Type.clevels h2.Type.clevels) lvl as1 as2
-  | Value.VRec (h1, as1), Value.VRec (h2, as2)
-    when String.equal h1.Type.rind h2.Type.rind ->
-      unify_args (unify_levels ms h1.Type.rlevels h2.Type.rlevels) lvl as1 as2
-  | Value.Neutral n1, Value.Neutral n2 -> unify_neutral ms lvl n1 n2
-  (* refl and any rigid-rigid mismatch: nothing to solve — defer to the kernel's
-     own conversion check on the zonked term *)
-  | _ -> ms
-
-and unify_args ms lvl as1 as2 =
-  match (as1, as2) with
-  | a1 :: r1, a2 :: r2 -> unify_args (unify ms lvl a1 a2) lvl r1 r2
-  | _ -> ms
-
-and unify_neutral ms lvl (n1 : Value.neutral) (n2 : Value.neutral) =
-  match (n1, n2) with
-  | Value.App (f1, a1), Value.App (f2, a2) ->
-      unify (unify_neutral ms lvl f1 f2) lvl a1 a2
-  | Value.Proj (i1, f1), Value.Proj (i2, f2) when i1 = i2 ->
-      unify_neutral ms lvl f1 f2
-  | Value.Rec (h1, pre1, f1), Value.Rec (h2, pre2, f2)
-    when String.equal h1.Type.rind h2.Type.rind ->
-      let ms = unify_levels ms h1.Type.rlevels h2.Type.rlevels in
-      unify_neutral (unify_args ms lvl pre1 pre2) lvl f1 f2
-  | _ -> ms
-
 (* replace every solved metavariable in [t] by its solution, read back as core
    at the use-site level [lvl] (so de Bruijn indices are reuse-safe — a stored
-   solution is a value with absolute levels). An unsolved meta is left in place;
-   {!Type.has_meta} on the result then detects it. *)
+   solution is a value with absolute levels) and solved level metas by theirs.
+   An unsolved meta is left in place; {!Type.has_meta}/{!Type.has_level_meta} on
+   the result then detect it. *)
 let rec zonk ms lvl (t : Type.t) : Type.t =
   match t with
   | Type.Meta i -> (
@@ -235,7 +176,6 @@ let rec zonk ms lvl (t : Type.t) : Type.t =
       | Some v -> zonk ms lvl (Value.quote lvl v)
       | None -> t)
   | Type.Var _ -> t
-  (* resolve solved level metas in sorts and head level arguments *)
   | Type.Sort l -> Type.Sort (force_level ms l)
   | Type.Def (i, ls) -> Type.Def (i, List.map (force_level ms) ls)
   | Type.Ind (n, ls) -> Type.Ind (n, List.map (force_level ms) ls)
@@ -247,3 +187,86 @@ let rec zonk ms lvl (t : Type.t) : Type.t =
   | Type.Pi (i, x, a, b) -> Type.Pi (i, x, zonk ms lvl a, zonk ms (lvl + 1) b)
   | Type.Lam (i, x, a, b) -> Type.Lam (i, x, zonk ms lvl a, zonk ms (lvl + 1) b)
   | Type.App (f, a) -> Type.App (zonk ms lvl f, zonk ms lvl a)
+
+(* unify two values in context [ctx], returning the updated metacontext. [ctx]
+   (rather than a bare level) is threaded so that on solving a metavariable its
+   type can be reconciled with the solution's — see [propagate_meta_type]. *)
+let rec unify ms (ctx : Check.ctx) (v1 : Value.t) (v2 : Value.t) : t =
+  let v1 = force ms v1 and v2 = force ms v2 in
+  match (as_flex v1, as_flex v2) with
+  | Some (m, sp), _ -> solve_flex ms ctx m sp v2
+  | _, Some (m, sp) -> solve_flex ms ctx m sp v1
+  | None, None -> unify_rigid ms ctx v1 v2
+
+and unify_rigid ms ctx v1 v2 =
+  let lvl = ctx.Check.lvl in
+  match (v1, v2) with
+  | Value.Pi (_, x, a1, c1), Value.Pi (_, _, a2, c2)
+  | Value.Lam (_, x, a1, c1), Value.Lam (_, _, a2, c2) ->
+      let ms = unify ms ctx a1 a2 in
+      let v = Value.Neutral (Value.Var lvl) in
+      unify ms (Check.bind x a1 ctx) (Value.apply_closure c1 v)
+        (Value.apply_closure c2 v)
+  (* sorts: solve any level meta on either side (the rest defers to the
+     kernel) *)
+  | Value.Sort l1, Value.Sort l2 -> unify_level ms l1 l2
+  | Value.VInd (n1, ls1, as1), Value.VInd (n2, ls2, as2) when String.equal n1 n2
+    ->
+      unify_args (unify_levels ms ls1 ls2) ctx as1 as2
+  | Value.VCtor (h1, as1), Value.VCtor (h2, as2)
+    when String.equal h1.Type.cname h2.Type.cname ->
+      unify_args (unify_levels ms h1.Type.clevels h2.Type.clevels) ctx as1 as2
+  | Value.VRec (h1, as1), Value.VRec (h2, as2)
+    when String.equal h1.Type.rind h2.Type.rind ->
+      unify_args (unify_levels ms h1.Type.rlevels h2.Type.rlevels) ctx as1 as2
+  | Value.Neutral n1, Value.Neutral n2 -> unify_neutral ms ctx n1 n2
+  (* refl and any rigid-rigid mismatch: nothing to solve — defer to the kernel's
+     own conversion check on the zonked term *)
+  | _ -> ms
+
+and unify_args ms ctx as1 as2 =
+  match (as1, as2) with
+  | a1 :: r1, a2 :: r2 -> unify_args (unify ms ctx a1 a2) ctx r1 r2
+  | _ -> ms
+
+and unify_neutral ms ctx (n1 : Value.neutral) (n2 : Value.neutral) =
+  match (n1, n2) with
+  | Value.App (f1, a1), Value.App (f2, a2) ->
+      unify (unify_neutral ms ctx f1 f2) ctx a1 a2
+  | Value.Proj (i1, f1), Value.Proj (i2, f2) when i1 = i2 ->
+      unify_neutral ms ctx f1 f2
+  | Value.Rec (h1, pre1, f1), Value.Rec (h2, pre2, f2)
+    when String.equal h1.Type.rind h2.Type.rind ->
+      let ms = unify_levels ms h1.Type.rlevels h2.Type.rlevels in
+      unify_neutral (unify_args ms ctx pre1 pre2) ctx f1 f2
+  | _ -> ms
+
+(* solve an unapplied flex [?m := rhs] when [rhs] is in scope for it (an applied
+   flex [?m sp] is a higher-order case left alone), then propagate the meta's
+   type to the solution *)
+and solve_flex ms ctx m sp rhs =
+  match sp with
+  | [] ->
+      if scope_ok ms (IMap.find m ms.entries).blvl m ctx.Check.lvl rhs then
+        propagate_meta_type (solve ms m rhs) ctx m rhs
+      else
+        ms
+  | _ -> ms
+
+(* meta-assignment type unification: when a metavariable whose type is a sort
+   carrying an unsolved level meta is solved, pin that level by unifying the
+   meta's type against the solution's inferred type ([Sort ?v ~ Sort s] solves
+   [?v]). This is what lets a polymorphic def's implicit type parameter (e.g.
+   [cong]'s [{B : Sort v}]) fix its universe from the argument that determines
+   it, even in inference position. Lenient: any failure leaves the level for the
+   kernel re-check. *)
+and propagate_meta_type ms ctx m rhs =
+  match force ms (typ ms m) with
+  | Value.Sort l when Level.has_meta l -> (
+      let core = zonk ms ctx.Check.lvl (Value.quote ctx.Check.lvl rhs) in
+      if Type.has_meta core then
+        ms
+      else
+        try unify ms ctx (Value.Sort l) (Check.infer ctx core) with
+        | Error.Type_error _ -> ms)
+  | _ -> ms

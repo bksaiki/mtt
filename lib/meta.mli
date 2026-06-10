@@ -35,11 +35,13 @@ val solution : t -> int -> Value.t option
     the kernel does not. *)
 val force : t -> Value.t -> Value.t
 
-(** [unify ms lvl v1 v2] makes [v1] and [v2] convertible by solving
-    metavariables, returning the updated context; [lvl] is the number of binders
-    in scope. Lenient: it solves what it can (the flex-rigid pattern and
-    rigid-rigid structure) and leaves the rest to the kernel's re-check. *)
-val unify : t -> int -> Value.t -> Value.t -> t
+(** [unify ms ctx v1 v2] makes [v1] and [v2] convertible by solving
+    metavariables, returning the updated context; [ctx] supplies the binders in
+    scope (extended as unification descends under binders) so a solved meta's
+    type can be reconciled with its solution's. Lenient: it solves what it can
+    (the flex-rigid pattern and rigid-rigid structure) and leaves the rest to
+    the kernel's re-check. *)
+val unify : t -> Check.ctx -> Value.t -> Value.t -> t
 
 (** [zonk ms lvl t] replaces every solved metavariable in [t] by its solution,
     read back as core at level [lvl] (reuse-safe). A remaining {!Type.Meta} is
