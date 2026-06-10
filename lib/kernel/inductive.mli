@@ -29,6 +29,10 @@ type ctor =
 
 type spec =
   { name : string
+  ; nlevels : int
+        (** number of universe level parameters (0 if monomorphic); the spec's
+            types range over the level variables [Level.Var 0 … Var (nlevels-1)]
+        *)
   ; params : (string * Type.t) list  (** the parameter telescope *)
   ; indices : (string * Type.t) list
         (** the index telescope, in the context [params]; empty if non-indexed

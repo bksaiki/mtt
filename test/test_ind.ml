@@ -11,6 +11,7 @@ let norm t = print_endline (Type.to_string (Value.normalize t))
 (* inductive Nat := zero | succ (n : Nat) *)
 let nat_spec =
   { Inductive.name = "Nat"
+  ; nlevels = 0
   ; params = []
   ; indices = []
   ; sort = Level.of_int 1
@@ -46,6 +47,7 @@ let rec numeral k =
 (* inductive List (A : Type) := nil | cons (head : A) (tail : List A) *)
 let list_spec =
   { Inductive.name = "List"
+  ; nlevels = 0
   ; params = [ ("A", Type.Sort (Level.of_int 1)) ]
   ; indices = []
   ; sort = Level.of_int 1
@@ -208,6 +210,7 @@ let%expect_test "strict positivity rejects a non-recursive occurrence" =
   (* inductive Bad := mk : (Bad -> Bad) -> Bad — Bad left of an arrow *)
   let bad =
     { Inductive.name = "Bad"
+    ; nlevels = 0
     ; params = []
     ; indices = []
     ; sort = Level.of_int 1
@@ -239,6 +242,7 @@ let%expect_test "strict positivity rejects a non-recursive occurrence" =
    subsingleton: it may eliminate only into Prop *)
 let pbool_spec =
   { Inductive.name = "PBool"
+  ; nlevels = 0
   ; params = []
   ; indices = []
   ; sort = Level.of_int 0
@@ -260,6 +264,7 @@ let pbool_rec = Type.Rec (Inductive.rec_head pbool_spec)
    so (like Empty/Eq) it may eliminate into any sort *)
 let punit_spec =
   { Inductive.name = "PUnit"
+  ; nlevels = 0
   ; params = []
   ; indices = []
   ; sort = Level.of_int 0
@@ -322,6 +327,7 @@ let%expect_test "a stuck recursor on a Prop scrutinee ignores the proof" =
      hardcoded `absurd`. *)
   let bot_spec =
     { Inductive.name = "Bot"
+    ; nlevels = 0
     ; params = []
     ; indices = []
     ; sort = Level.of_int 0
@@ -383,6 +389,7 @@ let%expect_test "a stuck recursor on a non-Prop scrutinee compares it" =
    record *)
 let dpair_spec =
   { Inductive.name = "DPair"
+  ; nlevels = 0
   ; params =
       [ ("A", Type.Sort (Level.of_int 1))
       ; ( "B"
@@ -464,6 +471,7 @@ let%expect_test "record η: a value equals the tuple of its projections" =
 (* a 0-field record (Unit-like): η makes any two values equal *)
 let urec_spec =
   { Inductive.name = "URec"
+  ; nlevels = 0
   ; params = []
   ; indices = []
   ; sort = Level.of_int 1
@@ -491,6 +499,7 @@ let%expect_test "0-field record: any two values are equal (Unit-η)" =
    Nat) -> A -> Vec A k -> Vec A (succ k) *)
 let vec_spec =
   { Inductive.name = "Vec"
+  ; nlevels = 0
   ; params = [ ("A", Type.Sort (Level.of_int 1)) ]
   ; indices = [ ("n", nat) ]
   ; sort = Level.of_int 1
@@ -577,3 +586,43 @@ let%expect_test "indexed Vec: a recursor application is typed at P index major"
     =
   infers vec_ctx (vec_length (numeral 2) vec2);
   [%expect {| Nat |}]
+
+(* a *universe-polymorphic* inductive, built directly (no surface syntax yet):
+   Box.{u} (A : Sort u) : Sort u := | wrap (x : A). This exercises the kernel's
+   level-argument machinery — the former, constructor and recursor are typed at
+   whatever level the use site instantiates [u] to. *)
+let box_spec =
+  { Inductive.name = "Box"
+  ; nlevels = 1
+  ; params = [ ("A", Type.Sort (Level.Var 0)) ]
+  ; indices = []
+  ; sort = Level.Var 0
+  ; ctors =
+      [ { Inductive.cname = "wrap"
+        ; fields =
+            [ { Inductive.aname = "x"
+              ; aty = Type.Var 0 (* A *)
+              ; recursive = None
+              }
+            ]
+        ; result_indices = []
+        }
+      ]
+  }
+
+let box_ctx = Check.add_ind box_spec sig_ctx
+
+let%expect_test "universe-polymorphic inductive: levels instantiate per use" =
+  (* the polymorphic declaration is well-formed *)
+  Check.check_inductive box_ctx box_spec;
+  print_endline "ok";
+  [%expect {| ok |}];
+  (* the former, instantiated at Type (u := 1) then at Prop (u := 0) *)
+  infers box_ctx (Type.Ind ("Box", [ Level.of_int 1 ]));
+  [%expect {| Type -> Type |}];
+  infers box_ctx (Type.Ind ("Box", [ Level.zero ]));
+  [%expect {| Prop -> Prop |}];
+  (* the constructor at Type: its level argument flows through its type *)
+  infers box_ctx
+    (Type.Ctor (Inductive.ctor_head ~levels:[ Level.of_int 1 ] box_spec 0));
+  [%expect {| (A : Type) -> A -> Box A |}]

@@ -79,7 +79,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
     decompose (Elab.infer notation pctx d.isort)
   in
   let provisional =
-    { Inductive.name = d.iname; params; indices; sort; ctors = [] }
+    { Inductive.name = d.iname; nlevels = 0; params; indices; sort; ctors = [] }
   in
   let sg = Signature.add provisional sg in
   (* constructor types may mention the inductive being defined, so they see the
@@ -138,7 +138,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
               ])
       d.ictors
   in
-  { Inductive.name = d.iname; params; indices; sort; ctors }
+  { Inductive.name = d.iname; nlevels = 0; params; indices; sort; ctors }
 
 let run (sess : session) stmt =
   let ctx = sess.ctx in

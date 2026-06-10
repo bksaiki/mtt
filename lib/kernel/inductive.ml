@@ -24,6 +24,9 @@ type ctor =
 
 type spec =
   { name : string
+  ; nlevels : int
+        (* number of universe level parameters (0 if monomorphic); the spec's
+           types are over the level variables [Level.Var 0 … Var (nlevels-1)] *)
   ; params :
       (string * Type.t) list (* the parameter telescope (x1:P1)...(xm:Pm) *)
   ; indices : (string * Type.t) list
@@ -91,7 +94,10 @@ let apply spec depth =
     else
       go (Type.App (acc, Type.Var (depth - 1 - j))) (j + 1)
   in
-  go (Type.Ind (spec.name, [])) 0
+  (* the self-reference carries the inductive's own level variables, so a
+     use-site [subst_levels] instantiates them along with the rest *)
+  let self_levels = List.init spec.nlevels (fun i -> Level.Var i) in
+  go (Type.Ind (spec.name, self_levels)) 0
 
 (* wrap [body] in a telescope of explicit Π binders *)
 let pi_telescope tele body =
