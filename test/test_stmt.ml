@@ -636,15 +636,15 @@ let%expect_test "indexed families: Vec, its recursor, and index enforcement" =
     type error: this term has type Vec Nat 2 but Vec Nat 3 was expected
     |}]
 
-(* universe-polymorphic inductives can be *declared* via [.{u v}] level
-   parameters and [Sort u]/[Sort (max u v)]; the kernel validates the
-   polymorphic declaration. (Using them at inferred levels lands with use-site
-   level inference.) *)
+(* universe-polymorphic inductives can be *declared* with auto-bound universe
+   parameters (free [Sort u] variables) and [Sort u]/[Sort (max u v)]; the
+   kernel validates the polymorphic declaration. (Using them at inferred levels
+   lands with use-site level inference.) *)
 let%expect_test "polymorphic inductive declarations are accepted" =
   session
-    [ "inductive Box.{u} (A : Sort u) : Sort u := | wrap : A -> Box A"
-    ; "inductive Pair.{u v} (A : Sort u) (B : Sort v) : Sort (max u v) := | mk \
-       : A -> B -> Pair A B"
+    [ "inductive Box (A : Sort u) : Sort u := | wrap : A -> Box A"
+    ; "inductive Pair (A : Sort u) (B : Sort v) : Sort (max u v) := | mk : A \
+       -> B -> Pair A B"
     ];
   [%expect {| |}]
 
@@ -653,13 +653,13 @@ let%expect_test "polymorphic inductive declarations are accepted" =
    cumulativity needed). *)
 let%expect_test "polymorphic former: level arguments inferred per use" =
   session
-    [ "inductive Box.{u} (A : Sort u) : Sort u := | wrap : A -> Box A"
+    [ "inductive Box (A : Sort u) : Sort u := | wrap : A -> Box A"
     ; "axiom N : Type"
     ; "axiom p : Prop"
     ; "#check Box N"
     ; "#check Box p"
-    ; "inductive Pair.{u v} (A : Sort u) (B : Sort v) : Sort (max u v) := | mk \
-       : A -> B -> Pair A B"
+    ; "inductive Pair (A : Sort u) (B : Sort v) : Sort (max u v) := | mk : A \
+       -> B -> Pair A B"
     ; "#check Pair N p"
     ];
   [%expect {|

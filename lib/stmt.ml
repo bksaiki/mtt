@@ -2,8 +2,6 @@
    {!Inductive.spec}: names and types are still parameters/terms *)
 type ind_decl =
   { iname : string (* the inductive's name *)
-  ; ilevels :
-      string list (* universe level parameters [.{u v}] (empty if none) *)
   ; iparams : (string * Ast.t) list (* the parameter telescope (flattened) *)
   ; isort : Ast.t (* the result sort *)
   ; ictors :
@@ -46,9 +44,16 @@ let initial = { ctx = Check.empty; notation = Notation.empty }
 let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
   let sg = sess.ctx.Check.signature in
   let notation = sess.notation in
-  (* the declared universe level parameters, in scope as level variables for
-     every type in the declaration *)
-  let levels = d.ilevels in
+  (* universe level parameters are auto-bound (Lean-style): the free level
+     variables occurring in [Sort u] across the declaration's types, in order of
+     first appearance, become its level parameters — in scope for every type *)
+  let levels =
+    let terms = List.map snd d.iparams @ (d.isort :: List.map snd d.ictors) in
+    List.fold_left
+      (fun acc t ->
+        acc @ List.filter (fun x -> not (List.mem x acc)) (Ast.level_vars t))
+      [] terms
+  in
   let nlevels = List.length levels in
   (* the spec's parameter/index/field types use de Bruijn relative to the
      parameter telescope alone, with only the parameters and other inductives in

@@ -50,6 +50,12 @@ and desc =
 (** [mk loc desc] is the node [desc] located at [loc] *)
 val mk : Loc.t -> desc -> t
 
+(** [level_vars t] is the free universe-level variables in [t]'s [Sort u]
+    annotations, in order of first appearance (deduped). Used to auto-bind a
+    declaration's universe parameters (Lean-style), so no explicit binder syntax
+    is needed. *)
+val level_vars : t -> string list
+
 (** [lams loc groups body] wraps [body] in a lambda for every name of every
     binder group, e.g. [λ (x y : A) {z : B} ⇒ body]; each group carries its
     visibility. The synthetic binder nodes are stamped with [loc], the span of

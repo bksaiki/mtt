@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP SORT MAX IMAX TIMES PLUS EQOP COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE DOTLBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE AT MATCH WITH END EOF
+%token FUN PI SIGMA TYPE PROP SORT MAX IMAX TIMES PLUS EQOP COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE AT MATCH WITH END EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -47,11 +47,10 @@ decl_desc:
      bar-separated list of constructors. The parameters are explicit and in
      scope for the sort and every constructor. A type with no constructors (e.g.
      Empty) drops the [:=] entirely: [inductive Empty : Prop]. *)
-  | a = ioption(attribute); INDUCTIVE; x = ID; ls = level_params;
-    ps = list(binder_group); COLON; s = term; cs = ctors_opt
+  | a = ioption(attribute); INDUCTIVE; x = ID; ps = list(binder_group); COLON;
+    s = term; cs = ctors_opt
     { Stmt.Inductive
         { Stmt.iname = x
-        ; ilevels = ls
         ; iparams = List.concat_map (fun (_, xs, a) -> List.map (fun y -> (y, a)) xs) ps
         ; isort = s
         ; ictors = cs
@@ -78,14 +77,9 @@ ctors_opt:
 ctor:
   | BAR; c = ID; COLON; t = term { (c, t) }
 
-(* optional universe level parameters [.{u v}] on a declaration (empty if
-   absent); the names are in scope as level variables in its types *)
-level_params:
-  | { [] }
-  | DOTLBRACE; xs = nonempty_list(ID); RBRACE { xs }
-
 (* a universe level expression: a variable, a literal, [max]/[imax] of two
-   atoms, or a parenthesized level *)
+   atoms, or a parenthesized level. Free level variables in a declaration's
+   types are auto-bound as its universe parameters — no binder syntax needed. *)
 level_atom:
   | x = ID { Ast.LVar x }
   | n = INT { Ast.LNat n }

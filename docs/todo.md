@@ -25,10 +25,10 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
             self-level-vars. Kernel polymorphism unit-tested (`test_ind.ml`,
             `Box.{u}` at Type and Prop). Behavior-preserving for monomorphic.
       - [x] **Stage 1 surface (declarations)** — `Sort u`/`Sort (max u v)` terms
-            and `.{u v}` level-param binders (`lexer`/`parser`/`ast`); `stmt`
+            with auto-bound universe params (free `Sort u` vars; no binder syntax); `stmt`
             sets `nlevels` + a level-name env threaded to `Elab` (`?levels`),
-            resolving `Sort u`→`Sort (Var i)`. Declaring `Box.{u}`/`Pair.{u v}`
-            works (`test_stmt`).
+            resolving `Sort u`→`Sort (Var i)`. Declaring `Box`/`Pair` over
+            `Sort u`/`Sort (max u v)` works (`test_stmt`).
       - [x] **Stage 1 use-site inference (partial)** — `Elab.match_lvl` solves
             level vars by matching arg types vs param types. Done: polymorphic
             **former application** (`elab_poly_former`: `Box N : Type`,

@@ -31,7 +31,7 @@ def comp (A B C : Type) (g : B → C) (f : A → B) (x : A) : C := g (f x)
 -- of its components' levels, so it also pairs a `Prop` second component (e.g.
 -- `Σ (n : Nat) ⇒ Eq Nat n n`) and ranges over the universe (`Σ (A : Type) ⇒ A`).
 @[notation sigma]
-inductive Sigma.{u v} (A : Sort u) (B : A → Sort v) : Sort (max u v) :=
+inductive Sigma (A : Sort u) (B : A → Sort v) : Sort (max u v) :=
 | mk : (fst : A) → (snd : B fst) → Sigma A B
 
 -- the binary sum (coproduct). `@[notation sum]` registers it for the infix `+`

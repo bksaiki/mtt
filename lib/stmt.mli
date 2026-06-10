@@ -22,8 +22,6 @@
     unelaborated), as produced by the parser *)
 type ind_decl =
   { iname : string  (** the inductive's name *)
-  ; ilevels : string list
-        (** universe level parameters [.{u v}] (empty if monomorphic) *)
   ; iparams : (string * Ast.t) list  (** the parameter telescope, flattened *)
   ; isort : Ast.t  (** the result sort *)
   ; ictors : (string * Ast.t) list

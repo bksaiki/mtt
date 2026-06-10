@@ -113,10 +113,11 @@ where `imax i 0 = 0` — a product into a proposition is a proposition, no
 matter the domain — and `max i j` otherwise. The whole difference between
 `Prop` and `Type` is that one `imax` in `check.ml`'s Pi rule, plus proof
 irrelevance in `conv`. Levels are `Level.t` (`Zero`/`Succ`/`Max`/`IMax`/`Var`;
-`level.ml`), so sorts can take **level parameters** — declarations write
-`.{u v}` and `Sort u`, and a polymorphic inductive's use-site level arguments
-are inferred from its arguments' sorts (`Sigma` is polymorphic; `Sum`/`Eq` are
-not yet). There is **no cumulativity** (Lean's model, not Rocq's): `conv`
+`level.ml`), so sorts can take **level parameters** — a declaration just writes
+`Sort u` and its free level variables are auto-bound as parameters (Lean-style;
+no `.{u v}` binder syntax), and a polymorphic inductive's use-site level
+arguments are inferred from its arguments' sorts (`Sigma` is polymorphic;
+`Sum`/`Eq` are not yet). There is **no cumulativity** (Lean's model, not Rocq's): `conv`
 compares sorts by `Level.equal`, and code spans universes by polymorphism, not
 subtyping. `Empty` (now a prelude inductive with no constructors,
 not a kernel primitive — see Inductive types) eliminates into any sort via its
