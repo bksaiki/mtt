@@ -97,17 +97,17 @@ for real, or alongside parse-error recovery work.
 cumulativity is gone, so `conv` compares sorts by equality and code spans
 universes by polymorphism instead. Both inductives and definitions take
 auto-bound level parameters (free `Sort u` variables become parameters in
-first-appearance order); a use infers its level arguments — for inductives via
-direct matching (`Elab.match_lvl`), for defs via level metavariables
-(`Level.LMeta`, solved by the value unifier and zonked away) with
-meta-assignment type unification (a solved meta's type is reconciled with its
-solution's, pinning a level meta in the meta's sort). The prelude's
-`Sigma`/`Sum`/`Eq` and its whole equality toolkit (`rfl`/`symm`/`trans`/`subst`/
-`cong`) plus `absurd` are polymorphic, so a `Prop`-valued transport, a `Prop`
-disjunction, `Unit = Unit`, and even a bare `cong f p` (codomain universe
-inferred from `f`) all work without copies. The one remaining loose end is
-internal (see `todo.md`): two level-inference paths coexist (direct matching for
-formers/constructors, metavariables for defs) and could be unified.
+first-appearance order); every polymorphic use — former, constructor, recursor,
+or def — infers its level arguments by one mechanism: fresh level metavariables
+(`Level.LMeta`) on the instantiated head type, solved by the value unifier
+(`Elab.elab_poly_head`) and zonked away, with meta-assignment type unification (a
+solved meta's type is reconciled with its solution's, pinning a level meta in the
+meta's sort). The prelude's `Sigma`/`Sum`/`Eq` and its whole equality toolkit
+(`rfl`/`symm`/`trans`/`subst`/`cong`) plus `absurd` are polymorphic, so a
+`Prop`-valued transport, a `Prop` disjunction, `Unit = Unit`, and even a bare
+`cong f p` (codomain universe inferred from `f`) all work without copies. The
+only follow-up left is the orthogonal glued-`Const` question below (defs are
+eager δ).
 
 ## Display of unfolded definitions
 

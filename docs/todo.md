@@ -13,25 +13,17 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 - [x] Universe polymorphism + drop cumulativity (Lean's model — full account in
       `design.md` "Universes", rationale in `questions.md`). Levels are
       `Level.t` (`level.ml`); cumulativity is gone (`conv` by `Level.equal`).
-      Inductives and defs take auto-bound level parameters; uses infer their
-      level arguments — inductives by direct matching (`Elab.match_lvl`), defs by
-      level metavariables (`Level.LMeta`), with **meta-assignment type
-      unification** (`Meta.propagate_meta_type`: on solving `?m := t`, also unify
-      `typeof(?m)` with `typeof(t)`, so a level meta in `?m`'s sort is pinned) so
-      a def's implicit type parameter fixes its universe from the argument that
-      determines it — even in inference position (`cong f p`). The prelude's
-      `Sigma`/`Sum`/`Eq`, the equality toolkit
+      Inductives and defs take auto-bound level parameters; every polymorphic
+      use (former, constructor, recursor, def) infers its level arguments by one
+      mechanism — fresh level metavariables (`Level.LMeta`) on the instantiated
+      head type, solved by the value unifier (`Elab.elab_poly_head`), with
+      **meta-assignment type unification** (`Meta.propagate_meta_type`: on
+      solving `?m := t`, also unify `typeof(?m)` with `typeof(t)`, so a level
+      meta in `?m`'s sort is pinned) so a def's implicit type parameter fixes its
+      universe from the argument that determines it — even in inference position
+      (`cong f p`). The prelude's `Sigma`/`Sum`/`Eq`, the equality toolkit
       (`rfl`/`symm`/`trans`/`subst`/`cong`), and `absurd` are polymorphic.
-      Follow-ups:
-      - [ ] unify the two level-inference paths: formers/constructors use
-            `match_lvl`/`elab_poly_app`, defs use level metavariables (now the
-            more general path, since meta-assignment type unification closes the
-            gap). The metas could subsume both, retiring `match_lvl`. Note this
-            is all-or-nothing — it also touches the recursor's explicit-parameter
-            inference (`Rec` branch), which would have to check its
-            parameters/indices against a meta-instantiated telescope instead of
-            inferring them, a delicate change to the most intricate elaborator
-            code for an internal-only (no user-visible) gain.
+      Follow-up:
       - [ ] optional: a real glued `Const`/def table (pairs with the "glued
             evaluation" engineering item) — defs are eager δ today.
 - [ ] Align `absurd` with Lean. Ours is ex falso —
