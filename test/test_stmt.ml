@@ -667,3 +667,37 @@ let%expect_test "polymorphic former: level arguments inferred per use" =
     Box p : Prop
     Pair N p : Type
     |}]
+
+(* the prelude's Sum and Eq are universe-polymorphic; a *use* infers the level
+   arguments. The recursor reads them off its explicit parameters (or the
+   major's type when they are holes), and the [+]/[=] sugar from the operand
+   sorts — so the same eliminator serves a sum of data and a disjunction of
+   propositions, with no cumulativity. *)
+let%expect_test "polymorphic Sum/Eq: recursor and sugar infer levels per use" =
+  session
+    [ "axiom A : Type"
+    ; "axiom B : Type"
+    ; (* Sum at Type: the recursor's explicit parameters [A B] determine its
+         level arguments *)
+      "def elim (s : A + B) : B + A :="
+      ^ " Sum.rec A B (λ _ : A + B ⇒ B + A) (λ x : A ⇒ Sum.inr B A x)"
+      ^ " (λ y : B ⇒ Sum.inl B A y) s"
+    ; "#check elim"
+    ; (* Sum at Prop: the very same machinery forms a proof-irrelevant
+         disjunction (max 0 0 = 0, so [P + Q : Prop]) *)
+      "axiom P : Prop"
+    ; "axiom Q : Prop"
+    ; "#check P + Q"
+    ; (* Eq is polymorphic too: its former/recursor instantiate at the operand
+         sort, here Prop *)
+      "axiom h : P"
+    ; "#check h = h"
+    ];
+  [%expect
+    {|
+    fun (s : A + B) =>
+    Sum.rec A B (fun (_ : A + B) => B + A) (fun (x : A) => Sum.inr B A x)
+    (fun (y : B) => Sum.inl B A y) s : A + B -> B + A
+    P + Q : Prop
+    h = h : Prop
+    |}]

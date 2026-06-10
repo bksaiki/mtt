@@ -4,8 +4,9 @@
 -- what to conclude about the scrutinee, then one branch per injection. Sums are
 -- positive: there is no η, and a stuck sum is used only by recursion.
 --
--- (Fixed at Type: a proof-irrelevant disjunction `Or : Prop` of two Props
--- awaits universe polymorphism.)
+-- Universe-polymorphic: `Sum` lands at the max of its summands' levels, so on
+-- two `Prop`s it is itself a `Prop` — a genuine proof-irrelevant disjunction
+-- (see the `Or` section at the bottom).
 
 axiom A : Type
 axiom B : Type
@@ -30,3 +31,13 @@ axiom b : B
 #check_equal (swap B A (swap A B (Sum.inl a))) (Sum.inl a)
 -- ...but NOT definitionally on stuck values (no η for sums): on a stuck s, both
 -- sides freeze as distinct neutral recursions.
+
+-- A ∨ B as a Prop. Because Sum is universe-polymorphic, applied to two
+-- propositions it forms in Prop (its level is max 0 0 = 0): a logical
+-- disjunction, not just a tagged union of data. The injections and Sum.rec are
+-- exactly the same machinery as above; only the level instantiation differs.
+def Or (P Q : Prop) : Prop := P + Q
+def Or_inl (P Q : Prop) (x : P) : Or P Q := Sum.inl P Q x
+theorem Or_comm (P Q : Prop) (h : Or P Q) : Or Q P :=
+  Sum.rec P Q (λ _ : P + Q ⇒ Or Q P) (λ x : P ⇒ Sum.inr Q P x)
+    (λ y : Q ⇒ Sum.inl Q P y) h

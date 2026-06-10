@@ -116,8 +116,9 @@ irrelevance in `conv`. Levels are `Level.t` (`Zero`/`Succ`/`Max`/`IMax`/`Var`;
 `level.ml`), so sorts can take **level parameters** — a declaration just writes
 `Sort u` and its free level variables are auto-bound as parameters (Lean-style;
 no `.{u v}` binder syntax), and a polymorphic inductive's use-site level
-arguments are inferred from its arguments' sorts (`Sigma` is polymorphic;
-`Sum`/`Eq` are not yet). There is **no cumulativity** (Lean's model, not Rocq's): `conv`
+arguments are inferred from its arguments' sorts (`Sigma`/`Sum`/`Eq` are all
+polymorphic — a recursor's level arguments come from the major's type, or from
+its explicit parameters). There is **no cumulativity** (Lean's model, not Rocq's): `conv`
 compares sorts by `Level.equal`, and code spans universes by polymorphism, not
 subtyping. `Empty` (now a prelude inductive with no constructors,
 not a kernel primitive — see Inductive types) eliminates into any sort via its
@@ -194,20 +195,22 @@ name, beside the de Bruijn context.
   `Σ` (a prelude record `Sigma (A : Type) (B : A → Type)` with `@[notation
   sigma]`; `Σ`/`×`/`(a,b)` retarget to it, `.1`/`.2` become `Proj 0`/`Proj 1`,
   and the `Sigma`/`Pair`/`Fst`/`Snd` nodes and `vfst`/`vsnd` are deleted), and
-  `Sum` (a prelude inductive `Sum (A B : Type)` with `@[notation sum]` for the
+  `Sum` (a prelude inductive `Sum (A : Sort u) (B : Sort v)` with `@[notation sum]` for the
   infix `+`; its injections and eliminator are the *qualified* `Sum.inl`/
   `Sum.inr`/`Sum.rec` like any other inductive — the `inl`/`inr`/`case` keywords
   are gone — deleting the `Sum`/`Inl`/`Inr`/`Case` nodes, `vcase`, and their
   machinery), and — the last one — `Eq` (a prelude **indexed** inductive
-  `Eq (A : Type) (x : A) : A → Prop := | refl : Eq A x x` with `@[notation eq]`;
+  `Eq (A : Sort u) (x : A) : A → Prop := | refl : Eq A x x` with `@[notation eq]`;
   `x = y` is the applied former with the type inferred, `rfl` an ordinary prelude
   def (`Eq.refl A x`, its implicits inserted on use), and the eliminator is the
   plain recursor `Eq.rec`
   (based path induction — Lean's `Eq.rec`); deleting the `Eq`/`Refl`/`J` nodes,
-  `vj`, and their cases, and there is no `J` keyword). `Σ`/`Sum`/`Eq` are **fixed
-  at `Type`**: a Σ/sum over the universe, a proof-irrelevant pair/disjunction of
-  Props, or equality *of types* (`Unit = Unit`) no longer forms, pending universe
-  polymorphism. With `Eq` gone the kernel has **no built-in datatypes** — only
+  `vj`, and their cases, and there is no `J` keyword). `Σ`/`Sum`/`Eq` are all
+  **universe-polymorphic** (`Sum (A : Sort u) (B : Sort v) : Sort (max u v)`,
+  `Eq (A : Sort u) …`, landing at the max of their components' levels): a Σ/sum
+  over the universe, a proof-irrelevant pair/disjunction of Props, and equality
+  *of types* (`Unit = Unit`) all form, with the level arguments inferred per use.
+  With `Eq` gone the kernel has **no built-in datatypes** — only
   `Sort`/`Π`/`λ`/`App`/`Var` and `Ind`/`Ctor`/`Rec`.
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
   only as a *direct* recursive field `T params idxs` (never under an arrow or

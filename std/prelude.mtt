@@ -36,11 +36,11 @@ inductive Sigma (A : Sort u) (B : A → Sort v) : Sort (max u v) :=
 
 -- the binary sum (coproduct). `@[notation sum]` registers it for the infix `+`
 -- former; its injections and eliminator are the ordinary qualified names
--- `Sum.inl`/`Sum.inr`/`Sum.rec` (like every other inductive). Like `Sigma`,
--- fixed at `Type`; a proof-irrelevant disjunction `Or : Prop` awaits universe
--- polymorphism.
+-- `Sum.inl`/`Sum.inr`/`Sum.rec` (like every other inductive). Universe-
+-- polymorphic like `Sigma`: it lands at the max of its summands' levels, so a
+-- proof-irrelevant disjunction (both summands in `Prop`) is `Sum`-expressible.
 @[notation sum]
-inductive Sum (A B : Type) : Type :=
+inductive Sum (A : Sort u) (B : Sort v) : Sort (max u v) :=
 | inl : A → Sum A B
 | inr : B → Sum A B
 
@@ -71,7 +71,7 @@ def not (A : Type) := A → Empty
 -- It is the last builtin retired into the prelude — the kernel now knows only
 -- Sort/Π/λ/App/Var and the generic inductive machinery.
 @[notation eq]
-inductive Eq (A : Type) (x : A) : A -> Prop :=
+inductive Eq (A : Sort u) (x : A) : A -> Prop :=
 | refl : Eq A x x
 
 -- reflexivity: the equality's constructor with both endpoints the same, type and

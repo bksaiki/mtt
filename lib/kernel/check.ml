@@ -81,9 +81,12 @@ let pi_val ctx name aval k =
 let motive_app pmot idxs target =
   List.fold_left Value.apply pmot (idxs @ [ target ])
 
-let minor_type ctx spec pvals pmot i =
+let minor_type ?(levels = []) ctx spec pvals pmot i =
   let c = List.nth spec.Inductive.ctors i in
-  let chead = Inductive.ctor_head spec i in
+  let chead = Inductive.ctor_head ~levels spec i in
+  (* the spec's field and index types carry the inductive's level variables;
+     instantiate them with the recursor's level arguments before evaluating *)
+  let inst t = Type.subst_levels levels t in
   (* fieldvals is innermost-first; a spec term read in the context [params,
      earlier fields] is evaluated against [earlier fields (newest first)] ++
      [params (reverse)] *)
@@ -95,16 +98,20 @@ let minor_type ctx spec pvals pmot i =
             (Value.VCtor (chead, []))
             (pvals @ List.rev fieldvals)
         in
-        let idxs = List.map (Value.eval env) c.result_indices in
+        let idxs =
+          List.map (fun e -> Value.eval env (inst e)) c.result_indices
+        in
         motive_app pmot idxs ctor
     | (a : Inductive.arg) :: rest ->
         let env = fieldvals @ List.rev pvals in
-        let aval = Value.eval env a.aty in
+        let aval = Value.eval env (inst a.aty) in
         pi_val ctx a.aname aval (fun ctx' fv ->
             match a.recursive with
             | Some idx_exprs ->
                 (* the induction hypothesis [P field_indices field] *)
-                let idxs = List.map (Value.eval env) idx_exprs in
+                let idxs =
+                  List.map (fun e -> Value.eval env (inst e)) idx_exprs
+                in
                 pi_val ctx' "_ih" (motive_app pmot idxs fv) (fun ctx'' _ ->
                     go ctx'' (fv :: fieldvals) rest)
             | None -> go ctx' (fv :: fieldvals) rest)
@@ -298,6 +305,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
     when String.equal h.Type.rind h2.Type.rind ->
       let spec = lookup_ind ctx h.Type.rind in
       let rind = h.Type.rind in
+      let levels = h.Type.rlevels in
       let m = h.Type.nparams and nmin = List.length h.Type.recs in
       let params1 = List.take m pre1 and params2 = List.take m pre2 in
       let motive1 = List.nth pre1 m and motive2 = List.nth pre2 m in
@@ -307,7 +315,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
       and indices2 = List.drop (m + 1 + nmin) pre2 in
       let ind_ty =
         List.fold_left Value.apply
-          (Value.VInd (rind, [], []))
+          (Value.VInd (rind, levels, []))
           (params1 @ indices1)
       in
       (* the major is compared *at the inductive type*, not structurally: a Prop
@@ -319,14 +327,14 @@ and conv_neutral ctx n1 n2 : Value.t option =
       let motives_ok =
         let rec go ctx env idxs_rev = function
           | (x, ity) :: rest ->
-              let dom = Value.eval env ity in
+              let dom = Value.eval env (Type.subst_levels levels ity) in
               let v = fresh ctx in
               go (bind x dom ctx) (v :: env) (v :: idxs_rev) rest
           | [] ->
               let idxs = List.rev idxs_rev in
               let ity =
                 List.fold_left Value.apply
-                  (Value.VInd (rind, [], []))
+                  (Value.VInd (rind, levels, []))
                   (params1 @ idxs)
               in
               let ctx' = bind "x" ity ctx in
@@ -340,7 +348,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
       let minors_ok =
         List.for_all2
           (fun (i, mn1) mn2 ->
-            conv ctx (minor_type ctx spec params1 motive1 i) mn1 mn2)
+            conv ctx (minor_type ~levels ctx spec params1 motive1 i) mn1 mn2)
           (List.mapi (fun i mn -> (i, mn)) minors1)
           minors2
       in
@@ -514,13 +522,13 @@ and check_telescope ctx env0 tele tms =
 (* validates a recursor motive [P : (indices) -> Ind params indices -> Sort j]
    against the inductive's index telescope (instantiated by [pvals]), returning
    [j]. Walks the index binders, then the target binder. *)
-and check_motive ctx spec pvals mty =
+and check_motive ?(levels = []) ctx spec pvals mty =
   let rind = spec.Inductive.name in
   let rec walk ctx mty env idxs_rev = function
     | (x, ity) :: rest -> (
         match mty with
         | Value.Pi (_, _, dom, c) ->
-            let expected = Value.eval env ity in
+            let expected = Value.eval env (Type.subst_levels levels ity) in
             if not (conv_ty ctx dom expected) then
               Error.type_error
                 [ Error.txt "the motive's index argument has type "
@@ -540,7 +548,7 @@ and check_motive ctx spec pvals mty =
         | Value.Pi (_, _, dom, c) -> (
             let expected =
               List.fold_left Value.apply
-                (Value.VInd (rind, [], []))
+                (Value.VInd (rind, levels, []))
                 (pvals @ List.rev idxs_rev)
             in
             if not (conv_ty ctx dom expected) then
@@ -585,10 +593,17 @@ and infer_rec ctx rh args =
   let minor_tms = List.take nctors (List.drop (m + 1) args) in
   let index_tms = List.take nidx (List.drop (m + 1 + nctors) args) in
   let major_tm = List.nth args (m + 1 + nctors + nidx) in
-  let pvals = check_telescope ctx [] spec.Inductive.params param_tms in
+  (* the inductive's level arguments (empty if monomorphic); the spec's
+     parameter/index/field types carry its level variables, so instantiate
+     them *)
+  let levels = rh.Type.rlevels in
+  let inst_tele = List.map (fun (x, t) -> (x, Type.subst_levels levels t)) in
+  let pvals =
+    check_telescope ctx [] (inst_tele spec.Inductive.params) param_tms
+  in
   (* the motive P : (indices) -> Ind params indices -> Sort j *)
   let pmot = Value.eval ctx.env motive_tm in
-  let j = check_motive ctx spec pvals (infer ctx motive_tm) in
+  let j = check_motive ~levels ctx spec pvals (infer ctx motive_tm) in
   if
     Level.equal spec.Inductive.sort Level.zero
     && (not (Level.equal j Level.zero))
@@ -603,16 +618,18 @@ and infer_rec ctx rh args =
       ];
   (* each minor premise against its derived type *)
   List.iteri
-    (fun i mn -> check ctx mn (minor_type ctx spec pvals pmot i))
+    (fun i mn -> check ctx mn (minor_type ~levels ctx spec pvals pmot i))
     minor_tms;
   (* the index arguments (against the index telescope, instantiated by the
      parameters), then the major at [Ind params indices] *)
   let ivals =
-    check_telescope ctx (List.rev pvals) spec.Inductive.indices index_tms
+    check_telescope ctx (List.rev pvals)
+      (inst_tele spec.Inductive.indices)
+      index_tms
   in
   let ind_ty =
     List.fold_left Value.apply
-      (Value.VInd (rh.Type.rind, [], []))
+      (Value.VInd (rh.Type.rind, levels, []))
       (pvals @ ivals)
   in
   check ctx major_tm ind_ty;

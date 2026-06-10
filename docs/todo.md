@@ -10,7 +10,7 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 - [ ] Full strict positivity: accept strictly-positive function-typed recursive
       arguments (`(Nat -> T) -> T`); currently only direct recursive fields
       `T params` are allowed
-- [~] Universe polymorphism + drop cumulativity (Lean's model: polymorphism,
+- [x] Universe polymorphism + drop cumulativity (Lean's model: polymorphism,
       no `Prop ≤ Type`). Staged plan in `~/.claude/plans` (approved). Progress:
       - [x] **Stage 0** — `lib/kernel/level.ml`: `level` AST (`Zero`/`Succ`/`Max`/
             `IMax`/`Var`) with `normalize`/`equal`/`leq`/`subst` (open-level
@@ -48,11 +48,14 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
             `~cumul`/`sub` gone, predicativity keeps `Level.leq`; cumulativity
             tests in `test_check.ml` rewritten as no-cumulativity (type errors).
             **The headline goal (Lean-model universes) is done.**
-      - [ ] follow-ups (not required for the above): make `Sum`/`Eq`
-            polymorphic too (needs **recursor** level inference — levels from the
-            major's `VInd` — and explicit-param/inference-position constructor
-            inference); these stay monomorphic for now, which is fine since their
-            uses never relied on `Prop ≤ Type`.
+      - [x] **`Sum`/`Eq` polymorphic** too. This needed **recursor** level
+            inference: the `T.rec`/`match` level args come from the major's
+            `VInd` when the parameters are holes, and otherwise from matching the
+            explicit parameters/indices against the former telescope
+            (`elab.ml`'s `Rec`/`elab_match`); the `+`/`=` sugar takes its levels
+            from the operand sorts. `Sum (A : Sort u) (B : Sort v) : Sort
+            (max u v)` and `Eq (A : Sort u) …` in the prelude; a `Prop`-level
+            `Or`/`And` is now expressible (`examples/sum.mtt`, `test_stmt`).
 - [ ] Align `absurd` with Lean. Ours is ex falso —
       `absurd (A : Type) (h : Empty) : A`, i.e. Lean's `False.elim`. Lean's
       `absurd : a → ¬a → b` instead takes `p` and `¬p` and forms the

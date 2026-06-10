@@ -173,7 +173,7 @@ let%expect_test "sum formation and injections (Type-fixed inductive)" =
   (* the injection's derived type; checking against the sum recovers the
      parameters, so an injection may drop them *)
   infer "Sum.inl";
-  [%expect {| (A : Type) -> (B : Type) -> A -> A + B |}];
+  [%expect {| (A : Sort u0) -> (B : Sort u1) -> A -> A + B |}];
   infer "(Sum.inl () : Unit + Nat)";
   [%expect {| Unit + Nat |}];
   (* the recursor eliminating a data sum into Type (no restriction) *)
@@ -188,7 +188,7 @@ let%expect_test "equality formation and Eq.refl" =
      exercise the underlying constructor [Eq.refl], whose parameters are
      explicit *)
   infer "Eq.refl";
-  [%expect {| (A : Type) -> (x : A) -> x = x |}];
+  [%expect {| (A : Sort u0) -> (x : A) -> x = x |}];
   infer "Eq.refl Unit ()";
   [%expect {| () = () |}];
   (* Eq.refl reifies definitional equality: it checks against an equation whose

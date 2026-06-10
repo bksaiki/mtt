@@ -401,9 +401,17 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
         let spec = eq_spec () in
         let x' = go ctx Infer x in
         let tx = Meta.force !ms (elab_infer ctx x') in
+        (* when the equality former is universe-polymorphic, its level argument
+           is the sort of the operands' type *)
+        let levels =
+          if spec.Inductive.nlevels = 0 then
+            []
+          else
+            [ Check.sort_of ctx tx ]
+        in
         List.fold_left
           (fun f a -> Type.App (f, a))
-          (Type.Ind (spec.Inductive.name, []))
+          (Type.Ind (spec.Inductive.name, levels))
           [ Value.quote ctx.Check.lvl tx; x'; go ctx (Check tx) y ]
     (* a hole becomes a fresh metavariable; in checking position its type is the
        expected one, and unification (at the surrounding application) solves it.
@@ -476,8 +484,19 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
     | Ast.Sum (a, b) -> (
         match notation.Notation.sum with
         | Some name ->
-            Type.App
-              (Type.App (Type.Ind (name, []), go ctx Infer a), go ctx Infer b)
+            let a' = go ctx Infer a in
+            let b' = go ctx Infer b in
+            (* a polymorphic sum lands at the max of its summands' levels: its
+               level arguments are their sorts *)
+            let levels =
+              if (Check.lookup_ind ctx name).Inductive.nlevels = 0 then
+                []
+              else
+                [ Check.sort_of ctx (Value.eval ctx.Check.env a')
+                ; Check.sort_of ctx (Value.eval ctx.Check.env b')
+                ]
+            in
+            Type.App (Type.App (Type.Ind (name, levels), a'), b')
         | None ->
             Error.type_error
               [ Error.txt "+ requires the sum notation to be registered" ])
@@ -553,11 +572,11 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
              elaborated as written and re-checked by the kernel). Otherwise the
              parameters and indices are explicit and the major is checked
              against the type they determine (so a check-only major works). *)
-          let param_cores, index_cores, major_core =
+          let param_cores, index_cores, major_core, levels =
             if List.exists is_hole (param_asts @ index_asts) then
               let major_core = go ctx Infer major_ast in
               match Meta.force !ms (elab_infer ctx major_core) with
-              | Value.VInd (nm, _, margs)
+              | Value.VInd (nm, levels, margs)
                 when String.equal nm rh.Type.rind
                      && List.length margs = m + nidx ->
                   let recover i (a : Ast.t) =
@@ -568,7 +587,8 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
                   in
                   ( List.mapi recover param_asts
                   , List.mapi (fun j a -> recover (m + j) a) index_asts
-                  , major_core )
+                  , major_core
+                  , levels )
               | _ ->
                   Error.type_error
                     [ Error.txtf
@@ -583,16 +603,56 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
               let index_cores = List.map (go ctx Infer) index_asts in
               let pvals = List.map (Value.eval ctx.Check.env) param_cores in
               let ivals = List.map (Value.eval ctx.Check.env) index_cores in
+              (* the explicit parameters/indices also determine a polymorphic
+                 inductive's level arguments: match their inferred types against
+                 the former's parameter telescope (whose sorts mention the level
+                 variables), exactly as for a former application *)
+              let levels =
+                if spec.Inductive.nlevels = 0 then
+                  []
+                else begin
+                  let sols = Array.make spec.Inductive.nlevels None in
+                  let rec walk fty = function
+                    | [] -> ()
+                    | c :: rest -> (
+                        match Meta.force !ms fty with
+                        | Value.Pi (_, x, dom, cl) ->
+                            match_lvl ctx sols dom
+                              (Meta.force !ms (elab_infer ctx c));
+                            walk
+                              (Value.apply_closure cl
+                                 (Value.eval ctx.Check.env c))
+                              rest
+                        | _ -> ())
+                  in
+                  walk
+                    (Value.eval [] (Inductive.former_type spec))
+                    (param_cores @ index_cores);
+                  List.init spec.Inductive.nlevels (fun i ->
+                      match sols.(i) with
+                      | Some l -> l
+                      | None ->
+                          Error.type_error
+                            [ Error.txtf
+                                "cannot infer a universe level of %s.rec; it \
+                                 is not determined by the parameters"
+                                rh.Type.rind
+                            ])
+                end
+              in
               let major_core =
                 go ctx
                   (Check
                      (List.fold_left Value.apply
-                        (Value.VInd (rh.Type.rind, [], []))
+                        (Value.VInd (rh.Type.rind, levels, []))
                         (pvals @ ivals)))
                   major_ast
               in
-              (param_cores, index_cores, major_core)
+              (param_cores, index_cores, major_core, levels)
           in
+          (* a polymorphic recursor's level arguments come from the major's
+             type *)
+          let rh = { rh with Type.rlevels = levels } in
           let pvals = List.map (Value.eval ctx.Check.env) param_cores in
           let motive_core =
             match (motive_ast.Ast.desc, mode) with
@@ -622,7 +682,11 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
           let minor_cores =
             List.mapi
               (fun i ma ->
-                go ctx (Check (Check.minor_type ctx spec pvals pmot i)) ma)
+                go ctx
+                  (Check
+                     (Check.minor_type ~levels:rh.Type.rlevels ctx spec pvals
+                        pmot i))
+                  ma)
               minor_asts
           in
           List.fold_left
@@ -679,7 +743,14 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
             let head_core, field_ty = params (Type.Ctor h) cty h.Type.nparams in
             elab_spine ctx head_core field_ty args
         (* otherwise the parameters are explicit (or we are inferring): walk the
-           constructor's full type *)
+           constructor's full type. For a polymorphic inductive, infer the level
+           arguments from the explicit arguments as for a former. *)
+        | None when spec.Inductive.nlevels > 0 ->
+            elab_poly_app ctx ~name:h.Type.cname ~nlv:spec.Inductive.nlevels
+              ~hty:cty
+              ~mk_head:(fun levels ->
+                Type.Ctor { h with Type.clevels = levels })
+              args
         | None -> elab_spine ctx (Type.Ctor h) cty args)
     | Other -> (
         let head_core = go ctx Infer head in
@@ -697,9 +768,7 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
      parameter type to solve the level variables, then build [Ind (T, levels)]
      applied to the elaborated arguments (the kernel re-check validates the
      whole thing). *)
-  and elab_poly_former ctx name args : Type.t =
-    let spec = Check.lookup_ind ctx name in
-    let nlv = spec.Inductive.nlevels in
+  and elab_poly_app ctx ~name ~nlv ~hty ~mk_head args : Type.t =
     let sols = Array.make nlv None in
     let rec walk fty rev_cores = function
       | [] -> List.rev rev_cores
@@ -715,7 +784,7 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
              report *)
           | _ -> walk fty (a_core :: rev_cores) rest)
     in
-    let arg_cores = walk (Value.eval [] (Inductive.former_type spec)) [] args in
+    let arg_cores = walk hty [] args in
     let levels =
       List.init nlv (fun i ->
           match sols.(i) with
@@ -723,15 +792,19 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
           | None ->
               Error.type_error
                 [ Error.txtf
-                    "cannot infer the universe level of %s; it is not \
-                     determined by the arguments"
+                    "cannot infer a universe level of %s; it is not determined \
+                     by the arguments"
                     name
                 ])
     in
-    List.fold_left
-      (fun core a -> Type.App (core, a))
-      (Type.Ind (name, levels))
-      arg_cores
+    List.fold_left (fun core a -> Type.App (core, a)) (mk_head levels) arg_cores
+  (* a polymorphic inductive former applied to arguments *)
+  and elab_poly_former ctx name args : Type.t =
+    let spec = Check.lookup_ind ctx name in
+    elab_poly_app ctx ~name ~nlv:spec.Inductive.nlevels
+      ~hty:(Value.eval [] (Inductive.former_type spec))
+      ~mk_head:(fun levels -> Type.Ind (name, levels))
+      args
   (* elaborate each argument against the domain read off the head's (function)
      type, advancing that type as arguments are consumed so each argument is in
      checking position. [~explicit] (set under an [@f] head) makes an implicit
@@ -820,9 +893,9 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
   and elab_match ctx mode scrut arms : Type.t =
     let scrut_core = go ctx Infer scrut in
     match Meta.force !ms (elab_infer ctx scrut_core) with
-    | Value.VInd (tname, _, margs) ->
+    | Value.VInd (tname, levels, margs) ->
         let spec = Check.lookup_ind ctx tname in
-        let rh = Inductive.rec_head spec in
+        let rh = Inductive.rec_head ~levels spec in
         let m = rh.Type.nparams in
         if rh.Type.nindices > 0 then
           Error.type_error
@@ -919,7 +992,7 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
         let t_c =
           List.fold_left
             (fun c p -> Type.App (c, p))
-            (Type.Ind (tname, []))
+            (Type.Ind (tname, levels))
             param_cores
         in
         let scrut_nf = Value.quote lvl (Value.eval ctx.Check.env scrut_core) in
@@ -944,7 +1017,7 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
                      xs c.Inductive.fields)
               in
               build_minor ctx names body
-                (Check.minor_type ctx spec pvals pmot i))
+                (Check.minor_type ~levels ctx spec pvals pmot i))
             spec.Inductive.ctors
         in
         List.fold_left
