@@ -11,13 +11,12 @@ type t =
   (* a recursor accumulating its arguments [params @ motive :: minors @ [major]]
      until saturated, when it fires ι (see [vrec]) *)
   | VRec of Type.rec_head * t list
-  (* a universe-polymorphic definition's stored value: its definition-time
-     environment [denv] and core [body], abstracted over [nlevels] level
-     parameters (which appear as [Sort (Var j)] inside [body]). It is inert — it
-     only ever sits at a def's context slot and is consumed by [eval]/[infer] of
-     a [Type.Def] reference, which instantiates it by re-evaluating
-     [Type.subst_levels ls body] in [denv]. It never flows into [apply]/[quote]/
-     conversion. *)
+  (* a universe-polymorphic def's stored value: its definition-time environment
+     [denv] and core [body], abstracted over [nlevels] level parameters (as
+     [Sort (Var j)] in [body]). Inert: it sits only at a def's context slot and
+     is consumed by [eval]/[infer] of a [Type.Def], which instantiates it by
+     re-evaluating [subst_levels ls body] in [denv] — it never reaches
+     [apply]/[quote]/conversion. *)
   | VPoly of
       { nlevels : int
       ; denv : env

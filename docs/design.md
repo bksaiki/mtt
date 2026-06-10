@@ -118,8 +118,8 @@ Sort (i+1)` (predicative tower). Π formation lands in `Sort (imax i j)`
 where `imax i 0 = 0` — a product into a proposition is a proposition, no
 matter the domain — and `max i j` otherwise. The whole difference between
 `Prop` and `Type` is that one `imax` in `check.ml`'s Pi rule, plus proof
-irrelevance in `conv`. Levels are `Level.t` (`Zero`/`Succ`/`Max`/`IMax`/`Var`;
-`level.ml`), so sorts can take **level parameters** — a declaration just writes
+irrelevance in `conv`. Levels are `Level.t` (`Zero`/`Succ`/`Max`/`IMax`/`Var`, plus an
+elaboration-only `LMeta`; `level.ml`), so sorts can take **level parameters** — a declaration just writes
 `Sort u` and its free level variables are auto-bound as parameters (Lean-style;
 no `.{u v}` binder syntax), and a polymorphic inductive's use-site level
 arguments are inferred from its arguments' sorts (`Sigma`/`Sum`/`Eq` are all
@@ -225,7 +225,8 @@ name, beside the de Bruijn context.
   over the universe, a proof-irrelevant pair/disjunction of Props, and equality
   *of types* (`Unit = Unit`) all form, with the level arguments inferred per use.
   With `Eq` gone the kernel has **no built-in datatypes** — only
-  `Sort`/`Π`/`λ`/`App`/`Var` and `Ind`/`Ctor`/`Rec`.
+  `Sort`/`Π`/`λ`/`App`/`Var`/`Proj`, the polymorphic-def reference `Def`, and the
+  generic inductive machinery `Ind`/`Ctor`/`Rec`.
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
   only as a *direct* recursive field `T params idxs` (never under an arrow or
   nested, and never inside the `idxs` of such a field — more conservative than
@@ -414,7 +415,9 @@ declaration just extends the checking context (`stmt.ml`, which holds both
 the statement type and its processor, per the module-per-concept convention):
 
 - `axiom x : A` — `bind`: a fresh neutral, stuck forever
-- `def x [: A] = t` — `extend`: bound to `t`'s value, unfolds (δ)
+- `def x [: A] = t` — `extend`: bound to `t`'s value, unfolds (δ). With free
+  `Sort u` level variables it is universe-polymorphic — auto-bound and stored
+  level-abstracted (`extend_poly`/`Type.Def`); see Universes
 - `theorem x : A = t` — proof checked, then `bind`: opaque (Qed-style);
   a theorem behaves exactly like an axiom whose obligation was discharged
 - `inductive T params : sort := | c : ty | ...` — declares an inductive type;
@@ -425,8 +428,8 @@ the statement type and its processor, per the module-per-concept convention):
 ## Prelude
 
 `std/prelude.mtt` is a standard library written in mtt (functions, `not`, the
-Eq toolkit `sym`/`trans`/`cong`/`subst`, Nat arithmetic and lemmas — all
-axiom-free). A dune rule embeds it into the binary as a string constant
+universe-polymorphic Eq toolkit `rfl`/`symm`/`trans`/`subst`/`cong`, Nat
+arithmetic and lemmas — all axiom-free). A dune rule embeds it into the binary as a string constant
 (`prelude_data.ml`), so there is no runtime path lookup. It is loaded
 **automatically** (`Prelude.load` folds `Stmt.run` over the
 parsed source into the starting context). A file/REPL opts out by opening
@@ -451,8 +454,9 @@ primitive inductives that `prelude` does not opt out of (a two-tier prelude).
 - One module per concept, type named `t`.
 - Every library module has an `.mli`; doc comments live there (odoc and
   editor hover read them), `.ml` files keep implementation notes. `Check`
-  hides its conversion internals (`conv_ty`, `conv_neutral`, `sort_of`,
-  `sub`); the syntax/value types stay concrete — they're the shared
-  vocabulary, not an implementation detail.
+  hides its conversion internals (`conv_ty`, `conv_neutral`), exposing only
+  what the elaborator needs (e.g. `sort_of` for level inference); the
+  syntax/value types stay concrete — they're the shared vocabulary, not an
+  implementation detail.
 - Tests: `ppx_expect` snapshot tests per module (`dune promote` workflow);
   expected strings are always promoted, never hand-typed.

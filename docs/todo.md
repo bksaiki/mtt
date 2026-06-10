@@ -10,79 +10,27 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 - [ ] Full strict positivity: accept strictly-positive function-typed recursive
       arguments (`(Nat -> T) -> T`); currently only direct recursive fields
       `T params` are allowed
-- [x] Universe polymorphism + drop cumulativity (Lean's model: polymorphism,
-      no `Prop ≤ Type`). Staged plan in `~/.claude/plans` (approved). Progress:
-      - [x] **Stage 0** — `lib/kernel/level.ml`: `level` AST (`Zero`/`Succ`/`Max`/
-            `IMax`/`Var`) with `normalize`/`equal`/`leq`/`subst` (open-level
-            sound, max-fragment complete; `imax` reduced where decidable),
-            unit-tested in `test/test_level.ml`. `Type.Sort`/`Value.Sort` carry
-            `Level.t`; all of `check.ml` (imax/sort_of/conv/infer/predicativity)
-            uses `Level`. Behavior-preserving.
-      - [x] **Stage 1 kernel** — `Ind`/`VInd` carry a `Level.t list`,
-            `ctor_head`/`rec_head` carry `clevels`/`rlevels` (use-site level
-            args); `Inductive.spec.nlevels`; `Type.subst_levels` instantiates;
-            `infer`/`sort_of`/`conv` honor level args; `Inductive.apply` emits
-            self-level-vars. Kernel polymorphism unit-tested (`test_ind.ml`,
-            `Box.{u}` at Type and Prop). Behavior-preserving for monomorphic.
-      - [x] **Stage 1 surface (declarations)** — `Sort u`/`Sort (max u v)` terms
-            with auto-bound universe params (free `Sort u` vars; no binder syntax); `stmt`
-            sets `nlevels` + a level-name env threaded to `Elab` (`?levels`),
-            resolving `Sort u`→`Sort (Var i)`. Declaring `Box`/`Pair` over
-            `Sort u`/`Sort (max u v)` works (`test_stmt`).
-      - [x] **Stage 1 use-site inference (partial)** — `Elab.match_lvl` solves
-            level vars by matching arg types vs param types. Done: polymorphic
-            **former application** (`elab_poly_former`: `Box N : Type`,
-            `Box p : Prop`, `Pair N p`), and **constructor via the recovered
-            expected type** (`checked_ctor` instantiates with the head's
-            `clevels`; `Box.wrap n : Box N`).
-      - [x] **use-site inference** for the polymorphic `Sigma`: former
-            application (`elab_poly_former` + `match_lvl`), recovered
-            constructors (pairs / the `Ctor` branch instantiate with the
-            expected `VInd`'s levels), and the `Σ`/`×` sugar (`sigma_core`
-            computes level args via `Check.sort_of`).
-      - [x] **`Sigma` polymorphic** over `Sort` in the prelude, so a `Prop`
-            second component (`Σ (n:Nat) ⇒ Eq Nat n n`) and a Σ over the universe
-            (`Σ (A:Type) ⇒ A`) both form. `exfalso` rewritten via `Empty.rec`;
-            `nat.mtt`'s `code` uses a local Type-level `Void` (no Prop→Type).
-      - [x] **drop cumulativity** — `conv_ty` compares sorts by `Level.equal`,
-            `~cumul`/`sub` gone, predicativity keeps `Level.leq`; cumulativity
-            tests in `test_check.ml` rewritten as no-cumulativity (type errors).
-            **The headline goal (Lean-model universes) is done.**
-      - [x] **`Sum`/`Eq` polymorphic** too. This needed **recursor** level
-            inference: the `T.rec`/`match` level args come from the major's
-            `VInd` when the parameters are holes, and otherwise from matching the
-            explicit parameters/indices against the former telescope
-            (`elab.ml`'s `Rec`/`elab_match`); the `+`/`=` sugar takes its levels
-            from the operand sorts. `Sum (A : Sort u) (B : Sort v) : Sort
-            (max u v)` and `Eq (A : Sort u) …` in the prelude; a `Prop`-level
-            `Or`/`And` is now expressible (`examples/sum.mtt`, `test_stmt`).
-      - [x] **Stage 2 — polymorphic definitions.** A `def`'s free `Sort u` level
-            variables are auto-bound as level parameters (like an inductive's),
-            stored level-abstracted (`Value.VPoly` at the context slot,
-            `Check.extend_poly`) and referenced by a new core node
-            `Type.Def (i, levels)` whose `eval`/`infer` instantiate the
-            abstraction at the use site (kept in the de Bruijn context — no
-            global `Const` table, so monomorphic defs and locals are untouched
-            `Var`s). Use-site levels are inferred by **level metavariables**
-            (`Level.LMeta`, a `meta.ml` level-meta store + `unify_level`, hooked
-            into the value unifier at `Sort`/`VInd` and zonked away; tracked out
-            of checked terms by `Type.has_level_meta`): a polymorphic def applied
-            to arguments mints a fresh level meta per parameter and runs ordinary
-            spine elaboration, so its levels are solved whether they are fixed by
-            explicit arguments or only through implicit ones. The whole prelude
-            equality toolkit (`rfl`/`symm`/`trans`/`subst`/`cong`) and `absurd`
-            are now universe-polymorphic — they work on `Prop` equalities and
-            eliminate into any sort, no cumulativity (`examples/eq.mtt`,
-            `examples/empty.mtt`, `test_stmt`).
-            - [ ] minor: a bare `#check cong f p` in inference position can't
-                  infer the codomain universe (`{B : Sort v}` is determined only
-                  through `f`, and solving the term meta `?B` does not propagate
-                  to `?v` — that needs meta-assignment type unification). In
-                  checking position (a goal/ascription) the level is fixed, which
-                  is how `cong` is actually used.
-            - [ ] optional: a real glued `Const`/def table (pairs with the
-                  "glued evaluation" engineering item) if unfolded δ output or
-                  per-use re-eval ever matters.
+- [x] Universe polymorphism + drop cumulativity (Lean's model — full account in
+      `design.md` "Universes", rationale in `questions.md`). Levels are
+      `Level.t` (`level.ml`); cumulativity is gone (`conv` by `Level.equal`).
+      Inductives and defs take auto-bound level parameters; uses infer their
+      level arguments — inductives by direct matching (`Elab.match_lvl`), defs by
+      level metavariables (`Level.LMeta`). The prelude's `Sigma`/`Sum`/`Eq`, the
+      equality toolkit (`rfl`/`symm`/`trans`/`subst`/`cong`), and `absurd` are
+      polymorphic. Follow-ups:
+      - [ ] a bare `#check cong f p` (inference position) can't infer the
+            codomain universe — `{B : Sort v}` is fixed only through `f`, and
+            solving the term meta `?B` does not propagate to `?v`. The fix is
+            meta-assignment type unification (on `?m := t`, also unify
+            `typeof(?m)` with `typeof(t)`), which wants the unifier to carry a
+            typing context. In checking position the goal pins the level, which
+            is how `cong` is actually used.
+      - [ ] unify the two level-inference paths: formers/constructors use
+            `match_lvl`/`elab_poly_app`, defs use level metavariables. The
+            meta-based path is the more general one and could subsume both,
+            retiring `match_lvl`.
+      - [ ] optional: a real glued `Const`/def table (pairs with the "glued
+            evaluation" engineering item) — defs are eager δ today.
 - [ ] Align `absurd` with Lean. Ours is ex falso —
       `absurd (A : Sort u) (h : Empty) : A`, i.e. Lean's `False.elim` (now
       universe-polymorphic). Lean's `absurd : a → ¬a → b` instead takes `p` and

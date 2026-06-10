@@ -337,15 +337,13 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
           match List.find_index (String.equal x) ctx.Check.names with
           | Some i -> (
               match poly_def_info ctx i with
-              (* a polymorphic def used bare. In checking position its level
-                 arguments are metavariables, solved by coercing its type
-                 against the goal ([rfl] checked against [a = a]); this is also
-                 what keeps a bare poly def inside another poly def's body from
-                 capturing the enclosing level parameters. In inference position
-                 there is no goal, so fall back to the identity levels ([Var 0 …
-                 Var (k-1)]) — its type then prints with its universe parameters
-                 (as a polymorphic former does). An application re-solves the
-                 levels in the [Other] branch regardless. *)
+              (* a polymorphic def used bare. Checking position: level
+                 metavariables, solved by coercing its type against the goal
+                 ([rfl] against [a = a]) — also what stops it from capturing the
+                 enclosing def's level parameters. Inference position: no goal,
+                 so the identity levels [Var 0 … Var (k-1)], which print as its
+                 universe parameters. An application re-solves them
+                 ([Other]). *)
               | Some (nlevels, _, _) ->
                   let ls =
                     match mode with
@@ -818,12 +816,11 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
           when (Check.lookup_ind ctx name).Inductive.nlevels > 0 ->
             elab_poly_former ctx name args
         (* a polymorphic def applied to arguments: mint a fresh level meta per
-           level parameter and instantiate the def's type at them, then run the
-           ordinary spine elaboration. Implicit insertion and unification solve
-           the level metas through the head type's sorts and inductive level
-           arguments — so a def with implicit level-bearing parameters (e.g.
-           [subst]/[cong]'s [{A : Sort u}]) infers its levels, not just one
-           whose levels are fixed by explicit arguments. *)
+           level parameter, instantiate the def's type at them, and run the
+           ordinary spine elaboration. Implicit insertion and unification then
+           solve the metas through the head type's sorts and inductive level
+           arguments — so even a def with implicit level-bearing parameters
+           ([subst]/[cong]'s [{A : Sort u}]) infers its levels. *)
         | Type.Def (i, _) -> (
             match poly_def_info ctx i with
             | Some (nlevels, denv, tybody) ->

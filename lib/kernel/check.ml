@@ -23,13 +23,10 @@ let extend x v ty ctx =
    real value, so occurrences unfold (δ-reduction). *)
 let bind x ty ctx = extend x (Value.Neutral (Value.Var ctx.lvl)) ty ctx
 
-(* extends the context with a {e universe-polymorphic} def [x], abstracted over
-   [nlevels] level parameters: its core [body] and [ty] (both mentioning those
-   parameters as [Sort (Var j)]) are stored as [Value.VPoly] thunks over the
-   current environment. A use of [x] is a [Type.Def (i, ls)] whose
-   [eval]/[infer] instantiate the thunk at the use-site levels [ls].
-   (Monomorphic defs use {!extend} and a plain [Var]; this is the
-   level-abstracted counterpart.) *)
+(* extends the context with a universe-polymorphic def [x]: its core [body] and
+   [ty] (mentioning the [nlevels] level parameters as [Sort (Var j)]) are stored
+   as [Value.VPoly] thunks over the current environment, which a [Type.Def] use
+   instantiates. The level-abstracted counterpart of {!extend}. *)
 let extend_poly x ~nlevels ~body ~ty ctx =
   let thunk b = Value.VPoly { nlevels; denv = ctx.env; body = b } in
   { ctx with

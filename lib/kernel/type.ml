@@ -22,11 +22,10 @@ type icit =
 type t =
   | Var of int (* de Bruijn index *)
   | Def of int * Level.t list
-    (* a de Bruijn reference to a {e universe-polymorphic} definition, carrying
-       its use-site level arguments. The index resolves (like [Var]) to the
-       def's slot, where a [Value.VPoly] holds the level-abstracted body; [eval]
-       instantiates it at these levels. Monomorphic defs and local binders stay
-       plain [Var] — this node appears only for [nlevels > 0] defs. *)
+    (* a universe-polymorphic def reference: a de Bruijn index (like [Var]) into
+       the def's slot, which holds a level-abstracted [Value.VPoly] that [eval]
+       instantiates at the carried use-site levels. Only [nlevels > 0] defs use
+       it; monomorphic defs and locals stay [Var]. *)
   | Sort of Level.t (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of icit * string * t * t (* Π (x : A). B, B binds index 0 *)
   | Lam of icit * string * t * t (* λ (x : A). b *)
@@ -117,11 +116,11 @@ let rec has_meta = function
       has_meta a || has_meta b
   | App (a, b) -> has_meta a || has_meta b
 
-(* whether any {e level} metavariable occurs in [t] — in a [Sort] or in a head's
-   level arguments. Kept separate from {!has_meta} (which tracks term metas, and
-   drives the meta-aware type synthesis): a level meta is kernel-tolerable as an
-   opaque atom, so it need not force that slow path, but an {e unsolved} one is
-   still a hole the elaborator must reject before the kernel re-check. *)
+(* whether any level metavariable occurs in [t] (in a [Sort] or a head's level
+   arguments). Separate from {!has_meta} on term metas: a level meta is a
+   kernel-tolerable opaque atom, so it need not trigger meta-aware synthesis,
+   but an unsolved one is still a hole the elaborator rejects before
+   re-checking. *)
 let rec has_level_meta = function
   | Sort l -> Level.has_meta l
   | Def (_, ls)
