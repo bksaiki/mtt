@@ -48,7 +48,7 @@ let sugar n ~recurse names term =
       (* the registered equality former [Eq A x y] prints infix, dropping its
          type argument: [x = y] (non-associative, looser than + and ×, tighter
          than ->) *)
-      | Type.Ind name, [ _A; x; y ] when n.eq = Some name ->
+      | Type.Ind (name, _), [ _A; x; y ] when n.eq = Some name ->
           Some
             (2, Printf.sprintf "%s = %s" (recurse 3 names x) (recurse 3 names y))
       (* the equality's constructor [Eq.refl A x] prints as the bare [rfl],
@@ -56,7 +56,7 @@ let sugar n ~recurse names term =
       | Type.Ctor h, [ _A; _x ] when n.eq = Some h.Type.ind -> Some (11, "rfl")
       (* an applied [Sigma] former: dependent → [Σ (x : A) ⇒ B], else → [A ×
          B] *)
-      | Type.Ind name, [ a; Type.Lam (_, x, _, b) ]
+      | Type.Ind (name, _), [ a; Type.Lam (_, x, _, b) ]
         when match n.sigma with
              | Some mk -> String.equal name mk.Type.ind
              | None -> false ->
@@ -72,7 +72,7 @@ let sugar n ~recurse names term =
               , Printf.sprintf "%s × %s" (recurse 5 names a)
                   (recurse 4 ("" :: names) b) )
       (* an applied [Sum] former → [A + B] (right-associative) *)
-      | Type.Ind name, [ a; b ] when n.sum = Some name ->
+      | Type.Ind (name, _), [ a; b ] when n.sum = Some name ->
           Some
             (3, Printf.sprintf "%s + %s" (recurse 4 names a) (recurse 3 names b))
       | _ -> (

@@ -37,14 +37,16 @@ let nparams spec = List.length spec.params
 
 let nindices spec = List.length spec.indices
 
-(* the skeleton (see {!Type.ctor_head}) of the [i]-th constructor *)
-let ctor_head spec i =
+(* the skeleton (see {!Type.ctor_head}) of the [i]-th constructor; [levels] are
+   the use-site level arguments (empty for a monomorphic inductive) *)
+let ctor_head ?(levels = []) spec i =
   let c = List.nth spec.ctors i in
   { Type.ind = spec.name
   ; cname = c.cname
   ; cindex = i
   ; carity = nparams spec + List.length c.fields
   ; nparams = nparams spec
+  ; clevels = levels
   }
 
 (* a record is a single-constructor, non-recursive, *non-indexed* inductive; it
@@ -58,8 +60,9 @@ let is_record spec =
       && List.for_all (fun a -> Option.is_none a.recursive) c.fields
   | _ -> false
 
-(* the skeleton (see {!Type.rec_head}) of the recursor *)
-let rec_head spec =
+(* the skeleton (see {!Type.rec_head}) of the recursor; [levels] are the
+   use-site level arguments (empty for a monomorphic inductive) *)
+let rec_head ?(levels = []) spec =
   { Type.rind = spec.name
   ; nparams = nparams spec
   ; nindices = nindices spec
@@ -73,6 +76,7 @@ let rec_head spec =
               | Some idxs -> Type.Recursive idxs)
             c.fields)
         spec.ctors
+  ; rlevels = levels
   }
 
 (* [apply spec depth] is the inductive applied to its parameters as variables,
@@ -87,7 +91,7 @@ let apply spec depth =
     else
       go (Type.App (acc, Type.Var (depth - 1 - j))) (j + 1)
   in
-  go (Type.Ind spec.name) 0
+  go (Type.Ind (spec.name, [])) 0
 
 (* wrap [body] in a telescope of explicit Π binders *)
 let pi_telescope tele body =
@@ -123,7 +127,7 @@ let ctor_type spec i =
    uses it to reject the inductive appearing in a non-recursive field *)
 let rec occurs name (t : Type.t) =
   match t with
-  | Ind n -> String.equal n name
+  | Ind (n, _) -> String.equal n name
   | Ctor h -> String.equal h.ind name
   | Rec h -> String.equal h.rind name
   | Var _

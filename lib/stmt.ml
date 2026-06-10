@@ -95,7 +95,7 @@ let elaborate_inductive (sess : session) (d : ind_decl) : Inductive.spec =
   let as_self depth ty =
     let rec peel acc = function
       | Type.App (f, a) -> peel (a :: acc) f
-      | Type.Ind n when String.equal n d.iname -> Some acc
+      | Type.Ind (n, _) when String.equal n d.iname -> Some acc
       | _ -> None
     in
     match peel [] ty with

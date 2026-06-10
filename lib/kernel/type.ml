@@ -7,6 +7,7 @@ type ctor_head =
   ; cindex : int (* its position in the inductive's constructor list *)
   ; carity : int (* total arguments: leading parameters + fields *)
   ; nparams : int (* leading parameters, so a projection can skip them *)
+  ; clevels : Level.t list (* use-site level arguments (empty if monomorphic) *)
   }
 
 (* a binder's visibility: an explicit [(x : A)] argument is written at every
@@ -27,8 +28,9 @@ type t =
   | Proj of int * t (* x.(i+1): the i-th field projection of a record *)
   | Meta of
       int (* a metavariable, by id; elaboration-only, never in final core *)
-  | Ind of
-      string (* an inductive type former, applied to params/indices via App *)
+  | Ind of string * Level.t list
+    (* an inductive type former (with use-site level arguments), applied to
+       params/indices via App *)
   | Ctor of ctor_head (* a constructor, applied to args via App *)
   | Rec of rec_head (* an inductive's recursor, applied to args via App *)
 
@@ -45,6 +47,7 @@ and rec_head =
   ; nparams : int (* leading parameter arguments, shared and fixed *)
   ; nindices : int (* index arguments, between the minors and the major *)
   ; recs : field_rec list list
+  ; rlevels : Level.t list (* use-site level arguments (empty if monomorphic) *)
   }
 
 (* whether a constructor field is recursive, and if so the index instances of
@@ -193,7 +196,7 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
        nodes (so [Nat.rec P z s n] renders through application). Constructors
        and the recursor print qualified by their type; surface sugar like [()]
        or decimals is applied by [sugar] above, not here. *)
-    | Ind name -> Format.pp_print_string fmt name
+    | Ind (name, _) -> Format.pp_print_string fmt name
     | Ctor h -> Format.fprintf fmt "%s.%s" h.ind h.cname
     | Rec h -> Format.fprintf fmt "%s.rec" h.rind
   in

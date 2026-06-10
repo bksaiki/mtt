@@ -178,7 +178,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           Value.Sort (imax i j)
       | Type.Proj (i, e) -> (
           match Meta.force !ms (elab_infer ctx e) with
-          | Value.VInd (name, params) ->
+          | Value.VInd (name, _, params) ->
               Check.field_type
                 (Check.lookup_ind ctx name)
                 params
@@ -267,7 +267,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           | Some i -> Type.Var i
           | None -> (
               match Signature.find sg x with
-              | Some spec -> Type.Ind spec.Inductive.name
+              | Some spec -> Type.Ind (spec.Inductive.name, [])
               | None -> raise (Ast.Unbound_variable (s.loc, x)))
         in
         coerce_leaf ctx mode core
@@ -302,7 +302,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                constructor's field names, resolving to the positional [Proj] *)
             let e' = go ctx Infer e in
             match Meta.force !ms (elab_infer ctx e') with
-            | Value.VInd (name, _) -> (
+            | Value.VInd (name, _, _) -> (
                 let spec = Check.lookup_ind ctx name in
                 if not (Inductive.is_record spec) then
                   Error.type_error
@@ -367,7 +367,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         let tx = Meta.force !ms (elab_infer ctx x') in
         List.fold_left
           (fun f a -> Type.App (f, a))
-          (Type.Ind spec.Inductive.name)
+          (Type.Ind (spec.Inductive.name, []))
           [ Value.quote ctx.Check.lvl tx; x'; go ctx (Check tx) y ]
     (* a hole becomes a fresh metavariable; in checking position its type is the
        expected one, and unification (at the surrounding application) solves it.
@@ -403,7 +403,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
               match mode with
               | Check e -> (
                   match Meta.force !ms e with
-                  | Value.VInd (name, [ pa; pb ])
+                  | Value.VInd (name, _, [ pa; pb ])
                     when String.equal name mk.Type.ind ->
                       Some [ pa; pb ]
                   | _ -> None)
@@ -428,7 +428,8 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
     | Ast.Sum (a, b) -> (
         match notation.Notation.sum with
         | Some name ->
-            Type.App (Type.App (Type.Ind name, go ctx Infer a), go ctx Infer b)
+            Type.App
+              (Type.App (Type.Ind (name, []), go ctx Infer a), go ctx Infer b)
         | None ->
             Error.type_error
               [ Error.txt "+ requires the sum notation to be registered" ])
@@ -438,7 +439,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           go (Check.bind x (Value.eval ctx.Check.env a') ctx) Infer b
         in
         Type.App
-          ( Type.App (Type.Ind (sigma_form ()), a')
+          ( Type.App (Type.Ind (sigma_form (), []), a')
           , Type.Lam (Type.Explicit, x, a', body) )
     | Ast.Prod (a, b) ->
         let a' = go ctx Infer a in
@@ -446,7 +447,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           go (Check.bind "" (Value.eval ctx.Check.env a') ctx) Infer b
         in
         Type.App
-          ( Type.App (Type.Ind (sigma_form ()), a')
+          ( Type.App (Type.Ind (sigma_form (), []), a')
           , Type.Lam (Type.Explicit, "", a', body) )
     (* [()] is the constructor registered for the [unit] notation (the prelude's
        [Unit.unit]); the unit type itself is an ordinary inductive, resolved as
@@ -522,7 +523,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
             if List.exists is_hole (param_asts @ index_asts) then
               let major_core = go ctx Infer major_ast in
               match Meta.force !ms (elab_infer ctx major_core) with
-              | Value.VInd (nm, margs)
+              | Value.VInd (nm, _, margs)
                 when String.equal nm rh.Type.rind
                      && List.length margs = m + nidx ->
                   let recover i (a : Ast.t) =
@@ -552,7 +553,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                 go ctx
                   (Check
                      (List.fold_left Value.apply
-                        (Value.VInd (rh.Type.rind, []))
+                        (Value.VInd (rh.Type.rind, [], []))
                         (pvals @ ivals)))
                   major_ast
               in
@@ -570,7 +571,8 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
                 let t_c =
                   List.fold_left
                     (fun c p -> Type.App (c, p))
-                    (Type.Ind rh.Type.rind) param_cores
+                    (Type.Ind (rh.Type.rind, []))
+                    param_cores
                 in
                 let major_nf =
                   Value.quote lvl (Value.eval ctx.Check.env major_core)
@@ -604,7 +606,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
           match mode with
           | Check e -> (
               match Meta.force !ms e with
-              | Value.VInd (name, pvals)
+              | Value.VInd (name, _, pvals)
                 when String.equal name h.Type.ind && List.length args = nfields
                 ->
                   Some pvals
@@ -729,7 +731,7 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
   and elab_match ctx mode scrut arms : Type.t =
     let scrut_core = go ctx Infer scrut in
     match Meta.force !ms (elab_infer ctx scrut_core) with
-    | Value.VInd (tname, margs) ->
+    | Value.VInd (tname, _, margs) ->
         let spec = Check.lookup_ind ctx tname in
         let rh = Inductive.rec_head spec in
         let m = rh.Type.nparams in
@@ -828,7 +830,8 @@ let elaborate notation (ctx0 : Check.ctx) mode0 s0 =
         let t_c =
           List.fold_left
             (fun c p -> Type.App (c, p))
-            (Type.Ind tname) param_cores
+            (Type.Ind (tname, []))
+            param_cores
         in
         let scrut_nf = Value.quote lvl (Value.eval ctx.Check.env scrut_core) in
         let motive_core =

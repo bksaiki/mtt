@@ -87,7 +87,7 @@ let scope_ok ms blvl m entry rhs =
     | Value.Lam (_, _, a, c) ->
         ok lvl a
         && ok (lvl + 1) (Value.apply_closure c (Value.Neutral (Var lvl)))
-    | Value.VInd (_, args)
+    | Value.VInd (_, _, args) -> List.for_all (ok lvl) args
     | Value.VCtor (_, args)
     | Value.VRec (_, args) ->
         List.for_all (ok lvl) args
@@ -128,7 +128,7 @@ and unify_rigid ms lvl v1 v2 =
       let ms = unify ms lvl a1 a2 in
       let v = Value.Neutral (Value.Var lvl) in
       unify ms (lvl + 1) (Value.apply_closure c1 v) (Value.apply_closure c2 v)
-  | Value.VInd (n1, as1), Value.VInd (n2, as2) when String.equal n1 n2 ->
+  | Value.VInd (n1, _, as1), Value.VInd (n2, _, as2) when String.equal n1 n2 ->
       unify_args ms lvl as1 as2
   | Value.VCtor (h1, as1), Value.VCtor (h2, as2)
     when String.equal h1.Type.cname h2.Type.cname ->

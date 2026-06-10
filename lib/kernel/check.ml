@@ -140,7 +140,7 @@ let rec infer_neutral ctx (n : Value.neutral) : Value.t =
       | _ -> assert false (* values are well-typed by invariant *))
   | Value.Proj (i, n) -> (
       match infer_neutral ctx n with
-      | Value.VInd (name, params) ->
+      | Value.VInd (name, _, params) ->
           field_type (lookup_ind ctx name) params (Value.Neutral n) i
       | _ -> assert false)
   (* T.rec params P minors major : P major; the motive sits after the params in
@@ -160,8 +160,10 @@ let rec sort_of ctx (ty : Value.t) : Level.t =
       match infer_neutral ctx n with
       | Value.Sort i -> i
       | _ -> assert false)
-  (* an inductive type lives at its declared sort *)
-  | Value.VInd (name, _) -> (lookup_ind ctx name).Inductive.sort
+  (* an inductive type lives at its declared sort, instantiated by its level
+     arguments (identity while monomorphic) *)
+  | Value.VInd (name, ls, _) ->
+      Level.subst ls (lookup_ind ctx name).Inductive.sort
   (* not types *)
   | Value.VCtor _
   | Value.VRec _
@@ -184,7 +186,7 @@ let rec conv ctx ty v1 v2 =
         (Value.apply v2 v)
   (* at a sort, the values are types: compare strictly *)
   | Value.Sort _ -> conv_ty ~cumul:false ctx v1 v2
-  | Value.VInd (name, params) -> (
+  | Value.VInd (name, _, params) -> (
       let spec = lookup_ind ctx name in
       if Inductive.is_record spec then
         (* record η: equal iff every field projection is convertible (each at
@@ -236,9 +238,11 @@ and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
      name, and arguments convertible along the combined (instantiated) telescope
      (the index types may mention the parameters, which [conv_params]
      threads) *)
-  | Value.VInd (n1, ps1), Value.VInd (n2, ps2) ->
+  | Value.VInd (n1, ls1, ps1), Value.VInd (n2, ls2, ps2) ->
       let spec = lookup_ind ctx n1 in
       String.equal n1 n2
+      && List.length ls1 = List.length ls2
+      && List.for_all2 Level.equal ls1 ls2
       && conv_params ctx []
            (spec.Inductive.params @ spec.Inductive.indices)
            ps1 ps2
@@ -287,7 +291,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
       | _ -> None)
   | Value.Proj (i1, m1), Value.Proj (i2, m2) when i1 = i2 -> (
       match conv_neutral ctx m1 m2 with
-      | Some (Value.VInd (name, params)) ->
+      | Some (Value.VInd (name, _, params)) ->
           Some (field_type (lookup_ind ctx name) params (Value.Neutral m1) i1)
       | _ -> None)
   (* stuck inductive recursion: the recorded pre-major spine is [params @ motive
@@ -305,7 +309,9 @@ and conv_neutral ctx n1 n2 : Value.t option =
       let indices1 = List.drop (m + 1 + nmin) pre1
       and indices2 = List.drop (m + 1 + nmin) pre2 in
       let ind_ty =
-        List.fold_left Value.apply (Value.VInd (rind, [])) (params1 @ indices1)
+        List.fold_left Value.apply
+          (Value.VInd (rind, [], []))
+          (params1 @ indices1)
       in
       (* the major is compared *at the inductive type*, not structurally: a Prop
          scrutinee is a proof, so by irrelevance two stuck recursions on
@@ -323,7 +329,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
               let idxs = List.rev idxs_rev in
               let ity =
                 List.fold_left Value.apply
-                  (Value.VInd (rind, []))
+                  (Value.VInd (rind, [], []))
                   (params1 @ idxs)
               in
               let ctx' = bind "x" ity ctx in
@@ -441,7 +447,7 @@ let rec infer ctx t =
   (* (Proj): the i-th field of a record, at its dependent field type *)
   | Type.Proj (i, e) -> (
       match infer ctx e with
-      | Value.VInd (name, params) ->
+      | Value.VInd (name, _, params) ->
           let spec = lookup_ind ctx name in
           if not (Inductive.is_record spec) then
             Error.type_error
@@ -461,7 +467,8 @@ let rec infer ctx t =
             ])
   (* an inductive type former and its constructors have fixed (non-polymorphic)
      types derived from the declaration; they ride the normal (App) machinery *)
-  | Type.Ind name -> Value.eval [] (Inductive.former_type (lookup_ind ctx name))
+  | Type.Ind (name, _) ->
+      Value.eval [] (Inductive.former_type (lookup_ind ctx name))
   | Type.Ctor h ->
       Value.eval [] (Inductive.ctor_type (lookup_ind ctx h.ind) h.cindex)
   (* a bare recursor is motive-polymorphic; only a saturated application (caught
@@ -533,7 +540,7 @@ and check_motive ctx spec pvals mty =
         | Value.Pi (_, _, dom, c) -> (
             let expected =
               List.fold_left Value.apply
-                (Value.VInd (rind, []))
+                (Value.VInd (rind, [], []))
                 (pvals @ List.rev idxs_rev)
             in
             if not (conv_ty ~cumul:false ctx dom expected) then
@@ -604,7 +611,9 @@ and infer_rec ctx rh args =
     check_telescope ctx (List.rev pvals) spec.Inductive.indices index_tms
   in
   let ind_ty =
-    List.fold_left Value.apply (Value.VInd (rh.Type.rind, [])) (pvals @ ivals)
+    List.fold_left Value.apply
+      (Value.VInd (rh.Type.rind, [], []))
+      (pvals @ ivals)
   in
   check ctx major_tm ind_ty;
   (* result: P indices major *)

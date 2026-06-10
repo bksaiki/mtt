@@ -4,7 +4,7 @@ type t =
   | Lam of Type.icit * string * t * closure
   (* an inductive type former applied to its parameters (a type once the
      parameters are complete; a type-returning function while partial) *)
-  | VInd of string * t list
+  | VInd of string * Level.t list * t list
   (* a constructor applied to a spine of arguments (canonical data once
      saturated; a constructor function while partial) *)
   | VCtor of Type.ctor_head * t list
@@ -44,7 +44,7 @@ let rec eval env t =
   | Type.App (f, a) -> apply (eval env f) (eval env a)
   | Type.Proj (i, t) -> vproj i (eval env t)
   (* inductive heads start empty and accumulate their arguments via [apply] *)
-  | Type.Ind name -> VInd (name, [])
+  | Type.Ind (name, ls) -> VInd (name, ls, [])
   | Type.Ctor h -> VCtor (h, [])
   | Type.Rec h -> VRec (h, [])
 
@@ -57,7 +57,7 @@ and apply f a =
   | Lam (_, _, _, c) -> apply_closure c a
   | Neutral n -> Neutral (App (n, a))
   (* inductive heads accumulate arguments; a saturated recursor fires ι *)
-  | VInd (name, args) -> VInd (name, args @ [ a ])
+  | VInd (name, ls, args) -> VInd (name, ls, args @ [ a ])
   | VCtor (h, args) -> VCtor (h, args @ [ a ])
   | VRec (h, args) ->
       let args = args @ [ a ] in
@@ -143,7 +143,7 @@ let rec quote l v =
   | Sort i -> Type.Sort i
   | Pi (i, x, a, c) -> Type.Pi (i, x, quote l a, quote_closure l c)
   | Lam (i, x, a, c) -> Type.Lam (i, x, quote l a, quote_closure l c)
-  | VInd (name, args) -> quote_spine l (Type.Ind name) args
+  | VInd (name, ls, args) -> quote_spine l (Type.Ind (name, ls)) args
   | VCtor (h, args) -> quote_spine l (Type.Ctor h) args
   | VRec (h, args) -> quote_spine l (Type.Rec h) args
   | Neutral n -> quote_neutral l n

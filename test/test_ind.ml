@@ -19,7 +19,7 @@ let nat_spec =
       ; { Inductive.cname = "succ"
         ; fields =
             [ { Inductive.aname = "n"
-              ; aty = Type.Ind "Nat"
+              ; aty = Type.Ind ("Nat", [])
               ; recursive = Some []
               }
             ]
@@ -28,7 +28,7 @@ let nat_spec =
       ]
   }
 
-let nat = Type.Ind "Nat"
+let nat = Type.Ind ("Nat", [])
 
 let zero = Type.Ctor (Inductive.ctor_head nat_spec 0)
 
@@ -58,7 +58,7 @@ let list_spec =
               ; recursive = None
               }
             ; { Inductive.aname = "tail"
-              ; aty = Type.App (Type.Ind "List", Type.Var 1 (* A *))
+              ; aty = Type.App (Type.Ind ("List", []), Type.Var 1 (* A *))
               ; recursive = Some []
               }
             ]
@@ -122,7 +122,8 @@ let%expect_test "parameterized recursor: length of a two-element list" =
   (* length A xs = List.rec A (fun _ => Nat) zero (fun h t ih => succ ih) xs,
      with the parameter A and elements stripped/recursed correctly *)
   let motive =
-    Type.Lam (Type.Explicit, "_", Type.App (Type.Ind "List", Type.Var 0), nat)
+    Type.Lam
+      (Type.Explicit, "_", Type.App (Type.Ind ("List", []), Type.Var 0), nat)
   in
   let step =
     (* fun (h : A) (t : List A) (ih : Nat) => succ ih *)
@@ -133,7 +134,7 @@ let%expect_test "parameterized recursor: length of a two-element list" =
       , Type.Lam
           ( Type.Explicit
           , "t"
-          , Type.App (Type.Ind "List", Type.Var 1)
+          , Type.App (Type.Ind ("List", []), Type.Var 1)
           , Type.Lam (Type.Explicit, "ih", nat, succ (Type.Var 0)) ) )
   in
   let length a xs =
@@ -177,7 +178,7 @@ let%expect_test "former and constructors infer their derived types" =
   infers sig_ctx (Type.Ctor (Inductive.ctor_head nat_spec 1));
   [%expect {| Nat -> Nat |}];
   (* the parameterized former and a constructor *)
-  infers sig_ctx (Type.Ind "List");
+  infers sig_ctx (Type.Ind ("List", []));
   [%expect {| Type -> Type |}];
   infers sig_ctx (Type.Ctor (Inductive.ctor_head list_spec 1));
   [%expect {| (A : Type) -> A -> List A -> List A |}]
@@ -215,7 +216,11 @@ let%expect_test "strict positivity rejects a non-recursive occurrence" =
           ; fields =
               [ { Inductive.aname = "f"
                 ; aty =
-                    Type.Pi (Type.Explicit, "_", Type.Ind "Bad", Type.Ind "Bad")
+                    Type.Pi
+                      ( Type.Explicit
+                      , "_"
+                      , Type.Ind ("Bad", [])
+                      , Type.Ind ("Bad", []) )
                 ; recursive = None
                 }
               ]
@@ -245,7 +250,7 @@ let pbool_spec =
 
 let pbool_ctx = Check.add_ind pbool_spec Check.empty
 
-let pbool = Type.Ind "PBool"
+let pbool = Type.Ind ("PBool", [])
 
 let pt = Type.Ctor (Inductive.ctor_head pbool_spec 0)
 
@@ -295,7 +300,7 @@ let%expect_test "Prop large-elimination restriction" =
               , Type.Lam
                   ( Type.Explicit
                   , "_"
-                  , Type.Ind "PUnit"
+                  , Type.Ind ("PUnit", [])
                   , Type.Sort (Level.of_int 1) ) )
           , Type.Sort (Level.of_int 0) )
       , pstar )
@@ -325,11 +330,13 @@ let%expect_test "a stuck recursor on a Prop scrutinee ignores the proof" =
   in
   let ctx = Check.add_ind bot_spec Check.empty in
   let ctx = Check.bind "A" (Value.Sort (Level.of_int 1)) ctx in
-  let ctx = Check.bind "h1" (Value.VInd ("Bot", [])) ctx in
-  let ctx = Check.bind "h2" (Value.VInd ("Bot", [])) ctx in
+  let ctx = Check.bind "h1" (Value.VInd ("Bot", [], [])) ctx in
+  let ctx = Check.bind "h2" (Value.VInd ("Bot", [], [])) ctx in
   let bot_rec = Type.Rec (Inductive.rec_head bot_spec) in
   (* motive (fun _ => A); A is Var 2, shifted to Var 3 under the binder *)
-  let motive = Type.Lam (Type.Explicit, "_", Type.Ind "Bot", Type.Var 3) in
+  let motive =
+    Type.Lam (Type.Explicit, "_", Type.Ind ("Bot", []), Type.Var 3)
+  in
   let elim major = Type.App (Type.App (bot_rec, motive), major) in
   let v1 =
     Value.eval ctx.Check.env (elim (Type.Var 1))
@@ -347,8 +354,8 @@ let%expect_test "a stuck recursor on a non-Prop scrutinee compares it" =
   (* the same shape on Nat (a Type): distinct scrutinees x, y are relevant, so
      the eliminations are not equal *)
   let ctx = Check.add_ind nat_spec Check.empty in
-  let ctx = Check.bind "x" (Value.VInd ("Nat", [])) ctx in
-  let ctx = Check.bind "y" (Value.VInd ("Nat", [])) ctx in
+  let ctx = Check.bind "x" (Value.VInd ("Nat", [], [])) ctx in
+  let ctx = Check.bind "y" (Value.VInd ("Nat", [], [])) ctx in
   let motive = Type.Lam (Type.Explicit, "_", nat, nat) in
   let step =
     Type.Lam
@@ -430,7 +437,8 @@ let%expect_test "record η: a value equals the tuple of its projections" =
   let ctx = Check.add_ind dpair_spec Check.empty in
   let dty =
     Value.eval []
-      (Type.App (Type.App (Type.Ind "DPair", Type.Sort (Level.of_int 1)), ty_fam))
+      (Type.App
+         (Type.App (Type.Ind ("DPair", []), Type.Sort (Level.of_int 1)), ty_fam))
   in
   let ctx = Check.bind "x" dty ctx in
   let xv = Value.eval ctx.Check.env (Type.Var 0) in
@@ -464,11 +472,11 @@ let urec_spec =
 
 let%expect_test "0-field record: any two values are equal (Unit-η)" =
   let ctx = Check.add_ind urec_spec Check.empty in
-  let ctx = Check.bind "r1" (Value.VInd ("URec", [])) ctx in
-  let ctx = Check.bind "r2" (Value.VInd ("URec", [])) ctx in
+  let ctx = Check.bind "r1" (Value.VInd ("URec", [], [])) ctx in
+  let ctx = Check.bind "r2" (Value.VInd ("URec", [], [])) ctx in
   let r1 = Value.eval ctx.Check.env (Type.Var 1) in
   let r2 = Value.eval ctx.Check.env (Type.Var 0) in
-  print_endline (conv_str ctx (Value.VInd ("URec", [])) r1 r2);
+  print_endline (conv_str ctx (Value.VInd ("URec", [], [])) r1 r2);
   [%expect {| equal |}]
 
 (* === Indexed families ===
@@ -498,7 +506,7 @@ let vec_spec =
             ; { Inductive.aname = "v"
               ; aty =
                   Type.App
-                    ( Type.App (Type.Ind "Vec", Type.Var 2 (* A *))
+                    ( Type.App (Type.Ind ("Vec", []), Type.Var 2 (* A *))
                     , Type.Var 1 (* k *) )
               ; recursive = Some [ Type.Var 1 (* k *) ]
               }
@@ -522,7 +530,7 @@ let vec_rec = Type.Rec (Inductive.rec_head vec_spec)
 (* a length recursor at the constant motive [fun n v => Nat]: vnil ↦ 0, vcons k
    a v ih ↦ succ ih (the IH [ih] is the recursor on the tail [v : Vec A k]) *)
 let vec_length n vec =
-  let vec_ty m = Type.App (Type.App (Type.Ind "Vec", nat), m) in
+  let vec_ty m = Type.App (Type.App (Type.Ind ("Vec", []), nat), m) in
   let motive =
     Type.Lam
       ( Type.Explicit

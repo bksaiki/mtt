@@ -8,9 +8,10 @@ type t =
   | Sort of Level.t
   | Pi of Type.icit * string * t * closure
   | Lam of Type.icit * string * t * closure
-  | VInd of string * t list
-      (** an inductive type former applied to its parameters: a type once
-          complete, a type-returning function while partial *)
+  | VInd of string * Level.t list * t list
+      (** an inductive type former (with its level arguments) applied to its
+          parameters: a type once complete, a type-returning function while
+          partial *)
   | VCtor of Type.ctor_head * t list
       (** a constructor applied to a spine: canonical data once saturated, a
           constructor function while partial *)

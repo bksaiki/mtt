@@ -12,6 +12,9 @@ type ctor_head =
   ; cindex : int  (** its position in the inductive's constructor list *)
   ; carity : int  (** total arguments: leading parameters + fields *)
   ; nparams : int  (** leading parameters, so a projection can skip them *)
+  ; clevels : Level.t list
+        (** use-site level arguments instantiating the inductive's level
+            parameters; empty when the inductive is monomorphic *)
   }
 
 (** A binder's visibility. An [Explicit] [(x : A)] argument is supplied at every
@@ -38,9 +41,9 @@ type t =
           resolved by unification, then zonked away — it never reaches the
           trusted check of final core. Its local dependencies ride the enclosing
           [App] spine ([?m a b] is [App (App (Meta m, a), b)]). *)
-  | Ind of string
-      (** an inductive type former, applied to its parameters then indices via
-          [App] *)
+  | Ind of string * Level.t list
+      (** an inductive type former (with use-site level arguments), applied to
+          its parameters then indices via [App] *)
   | Ctor of ctor_head
       (** an inductive constructor, applied to its arguments via [App] *)
   | Rec of rec_head
@@ -60,6 +63,9 @@ and rec_head =
   ; nparams : int  (** leading parameter arguments, shared and fixed *)
   ; nindices : int  (** index arguments, between the minors and the major *)
   ; recs : field_rec list list
+  ; rlevels : Level.t list
+        (** use-site level arguments instantiating the inductive's level
+            parameters; empty when the inductive is monomorphic *)
   }
 
 (** whether a constructor field is recursive, and if so the index instances of
