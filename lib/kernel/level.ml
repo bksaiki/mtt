@@ -1,9 +1,11 @@
-(* Universe levels. Today every level in a checked term is *closed* — a [Succ^n
-   Zero], i.e. a concrete [Prop]/[Type n]; the [Var]/[Max]/[IMax] cases exist so
-   the representation is ready for universe polymorphism without another change
-   to [Type.t]/[Value.t]. [equal]/[leq] are exact on closed levels (all the
-   kernel produces today); the open-level normalizer is completeness-tested when
-   level variables actually land. *)
+(* Universe levels. Until universe polymorphism wires level variables into
+   checked terms, every level the kernel produces is *closed* — a [Succ^n Zero],
+   i.e. a concrete [Prop]/[Type n]. The full algebra ([Var]/[Max]/[IMax] with a
+   canonicalizing [normalize], [equal], [leq], and [subst]) is implemented and
+   unit-tested now (see [test/test_level.ml]) so the polymorphism stage builds
+   on a settled foundation; [equal]/[leq] are sound on open levels and complete
+   on the {Zero,Succ,Var,Max} fragment, with [imax] reduced wherever its second
+   argument's zero-ness is decidable. *)
 type t =
   | Zero
   | Succ of t
@@ -59,24 +61,106 @@ let imax a b =
   | Some _ -> max a b
   | None -> IMax (a, b)
 
-let rec normalize = function
+(* Canonical form, for deciding equality and [≤] of open levels. A level over
+   {Zero, Succ, Var, Max} is a max of summands [atom + offset]; we read it into
+   [(const, atoms)] where [const] is the constant floor (from [Zero] summands)
+   and [atoms] maps each atom (a [Var], or an irreducible [IMax]) to its largest
+   offset, then rebuild a deterministic [Max]-chain so structural equality
+   decides level equality. [IMax] is reduced where its second argument's
+   zero-ness is known ([imax _ 0 = 0], [imax a b = max a b] when [b] is nonzero
+   or distributes over a [Max]); an [IMax] over a bare variable stays an opaque
+   atom (compared structurally — sound, and complete enough in practice). *)
+let rec normalize l =
+  let const, atoms = summands l in
+  let atoms = List.sort compare atoms in
+  (* fold the constant floor and each [atom + offset] back into a Max chain *)
+  List.fold_left
+    (fun acc (atom, off) ->
+      let s = succ_n off atom in
+      if acc = Zero then
+        s
+      else
+        Max (acc, s))
+    (of_int const) atoms
+
+(* [summands l] reads [l] into its constant floor and a list of [(atom, offset)]
+   summands of the outer max, each atom appearing once (largest offset kept) *)
+and summands l =
+  (* record an atom (already normal) at [off], keeping the largest offset
+     seen *)
+  let add (const, atoms) atom off =
+    let here, others = List.partition (fun (x, _) -> x = atom) atoms in
+    let prev = List.fold_left (fun m (_, o) -> Stdlib.max m o) 0 here in
+    (const, (atom, Stdlib.max prev off) :: others)
+  in
+  let rec go acc off = function
+    | Zero -> (Stdlib.max (fst acc) off, snd acc)
+    | Succ a -> go acc (off + 1) a
+    | Max (a, b) -> go (go acc off a) off b
+    | Var _ as a -> add acc a off
+    | IMax (x, y) as a -> (
+        match reduce_imax a with
+        | Some a' -> go acc off a'
+        (* irreducible: an atom, with its components normalized *)
+        | None -> add acc (IMax (normalize x, normalize y)) off)
+  in
+  go (0, []) 0 l
+
+(* reduce an [IMax a b] by the zero-ness of its second argument: [imax a 0 = 0],
+   [imax a b = max a b] when [b] is definitely nonzero, and the distribution
+   [imax a (max b c) = max (imax a b) (imax a c)] otherwise; [None] leaves an
+   [imax a v] over a bare variable as an opaque atom. *)
+and reduce_imax = function
+  | IMax (a, b) -> (
+      let b = normalize b in
+      match to_int b with
+      | Some 0 -> Some Zero
+      | Some _ -> Some (max a b)
+      | None -> (
+          if min_value b >= 1 then
+            Some (max a b)
+          else
+            match b with
+            | Max (b1, b2) -> Some (max (imax a b1) (imax a b2))
+            | _ -> None))
+  | _ -> None
+
+(* the value of [l] when every level variable is [0] — its minimum over all
+   instantiations (levels are monotone in their variables), so [min_value l ≥ 1]
+   certifies [l] is nonzero under every instantiation *)
+and min_value = function
+  | Zero -> 0
+  | Succ a -> 1 + min_value a
+  | Max (a, b) -> Stdlib.max (min_value a) (min_value b)
+  | IMax (a, b) ->
+      let mb = min_value b in
+      if mb = 0 then
+        0
+      else
+        Stdlib.max (min_value a) mb
+  | Var _ -> 0
+
+and succ_n n l =
+  if n <= 0 then
+    l
+  else
+    Succ (succ_n (n - 1) l)
+
+let equal a b = normalize a = normalize b
+
+(* [a ≤ b] iff [max a b ≡ b] *)
+let leq a b = equal (max a b) b
+
+(* substitute the level arguments [args] for the level variables [Var 0…] *)
+let rec subst args = function
   | Zero -> Zero
-  | Var _ as l -> l
-  | Succ a -> Succ (normalize a)
-  | Max (a, b) -> max (normalize a) (normalize b)
-  | IMax (a, b) -> imax (normalize a) (normalize b)
-
-let equal a b =
-  match (to_int a, to_int b) with
-  | Some x, Some y -> x = y
-  | _ -> normalize a = normalize b
-
-let leq a b =
-  match (to_int a, to_int b) with
-  | Some x, Some y -> x <= y
-  (* best-effort on open levels (refined with level variables): u ≤ v iff max u
-     v ≡ v *)
-  | _ -> equal (max a b) b
+  | Succ a -> succ (subst args a)
+  | Max (a, b) -> max (subst args a) (subst args b)
+  | IMax (a, b) -> imax (subst args a) (subst args b)
+  | Var i -> (
+      match List.nth_opt args i with
+      | Some l -> l
+      | None -> Var i)
 
 let rec to_string = function
   | Zero -> "0"

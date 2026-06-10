@@ -35,8 +35,13 @@ val normalize : t -> t
 (** definitional equality of levels (exact on closed levels) *)
 val equal : t -> t -> bool
 
-(** [leq a b] decides [a ≤ b] (exact on closed levels); used by predicativity *)
+(** [leq a b] decides [a ≤ b]; used by predicativity *)
 val leq : t -> t -> bool
+
+(** [subst args l] replaces the level variables [Var 0 …] in [l] with the
+    corresponding level arguments (a level parameter beyond [args] is left
+    as-is) *)
+val subst : t list -> t -> t
 
 (** a debug rendering ([0], [3], [u0], [max …]); surface universes print via the
     {!Type} printer, not this *)
