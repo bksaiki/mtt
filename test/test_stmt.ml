@@ -647,3 +647,23 @@ let%expect_test "polymorphic inductive declarations are accepted" =
        : A -> B -> Pair A B"
     ];
   [%expect {| |}]
+
+(* a polymorphic former applied to arguments infers its level arguments from the
+   argument sorts — so the same inductive forms at Type and at Prop (no
+   cumulativity needed). *)
+let%expect_test "polymorphic former: level arguments inferred per use" =
+  session
+    [ "inductive Box.{u} (A : Sort u) : Sort u := | wrap : A -> Box A"
+    ; "axiom N : Type"
+    ; "axiom p : Prop"
+    ; "#check Box N"
+    ; "#check Box p"
+    ; "inductive Pair.{u v} (A : Sort u) (B : Sort v) : Sort (max u v) := | mk \
+       : A -> B -> Pair A B"
+    ; "#check Pair N p"
+    ];
+  [%expect {|
+    Box N : Type
+    Box p : Prop
+    Pair N p : Type
+    |}]

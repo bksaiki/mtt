@@ -10,9 +10,49 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 - [ ] Full strict positivity: accept strictly-positive function-typed recursive
       arguments (`(Nat -> T) -> T`); currently only direct recursive fields
       `T params` are allowed
-- [ ] Universe polymorphism (level-polymorphic defs; see questions.md); also
-      needed for inductive `Sum`/`Σ`/`Eq` to form at the max of their
-      components' levels rather than one fixed level
+- [~] Universe polymorphism + drop cumulativity (Lean's model: polymorphism,
+      no `Prop ≤ Type`). Staged plan in `~/.claude/plans` (approved). Progress:
+      - [x] **Stage 0** — `lib/kernel/level.ml`: `level` AST (`Zero`/`Succ`/`Max`/
+            `IMax`/`Var`) with `normalize`/`equal`/`leq`/`subst` (open-level
+            sound, max-fragment complete; `imax` reduced where decidable),
+            unit-tested in `test/test_level.ml`. `Type.Sort`/`Value.Sort` carry
+            `Level.t`; all of `check.ml` (imax/sort_of/conv/infer/predicativity)
+            uses `Level`. Behavior-preserving.
+      - [x] **Stage 1 kernel** — `Ind`/`VInd` carry a `Level.t list`,
+            `ctor_head`/`rec_head` carry `clevels`/`rlevels` (use-site level
+            args); `Inductive.spec.nlevels`; `Type.subst_levels` instantiates;
+            `infer`/`sort_of`/`conv` honor level args; `Inductive.apply` emits
+            self-level-vars. Kernel polymorphism unit-tested (`test_ind.ml`,
+            `Box.{u}` at Type and Prop). Behavior-preserving for monomorphic.
+      - [x] **Stage 1 surface (declarations)** — `Sort u`/`Sort (max u v)` terms
+            and `.{u v}` level-param binders (`lexer`/`parser`/`ast`); `stmt`
+            sets `nlevels` + a level-name env threaded to `Elab` (`?levels`),
+            resolving `Sort u`→`Sort (Var i)`. Declaring `Box.{u}`/`Pair.{u v}`
+            works (`test_stmt`).
+      - [x] **Stage 1 use-site inference (partial)** — `Elab.match_lvl` solves
+            level vars by matching arg types vs param types. Done: polymorphic
+            **former application** (`elab_poly_former`: `Box N : Type`,
+            `Box p : Prop`, `Pair N p`), and **constructor via the recovered
+            expected type** (`checked_ctor` instantiates with the head's
+            `clevels`; `Box.wrap n : Box N`).
+      - [x] **use-site inference** for the polymorphic `Sigma`: former
+            application (`elab_poly_former` + `match_lvl`), recovered
+            constructors (pairs / the `Ctor` branch instantiate with the
+            expected `VInd`'s levels), and the `Σ`/`×` sugar (`sigma_core`
+            computes level args via `Check.sort_of`).
+      - [x] **`Sigma` polymorphic** over `Sort` in the prelude, so a `Prop`
+            second component (`Σ (n:Nat) ⇒ Eq Nat n n`) and a Σ over the universe
+            (`Σ (A:Type) ⇒ A`) both form. `exfalso` rewritten via `Empty.rec`;
+            `nat.mtt`'s `code` uses a local Type-level `Void` (no Prop→Type).
+      - [x] **drop cumulativity** — `conv_ty` compares sorts by `Level.equal`,
+            `~cumul`/`sub` gone, predicativity keeps `Level.leq`; cumulativity
+            tests in `test_check.ml` rewritten as no-cumulativity (type errors).
+            **The headline goal (Lean-model universes) is done.**
+      - [ ] follow-ups (not required for the above): make `Sum`/`Eq`
+            polymorphic too (needs **recursor** level inference — levels from the
+            major's `VInd` — and explicit-param/inference-position constructor
+            inference); these stay monomorphic for now, which is fine since their
+            uses never relied on `Prop ≤ Type`.
 - [ ] Align `absurd` with Lean. Ours is ex falso —
       `absurd (A : Type) (h : Empty) : A`, i.e. Lean's `False.elim`. Lean's
       `absurd : a → ¬a → b` instead takes `p` and `¬p` and forms the

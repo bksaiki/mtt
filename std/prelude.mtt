@@ -27,10 +27,11 @@ def comp (A B C : Type) (g : B → C) (f : A → B) (x : A) : C := g (f x)
 -- fields), so it has definitional η and the positional projections .1/.2. The
 -- `@[notation sigma]` attribute registers it as the type the `Σ`/`×` formers
 -- and `(a, b)` tuples abbreviate; `B` is a family over `A`, and a non-dependent
--- `A × B` is `Sigma A (fun _ => B)`. Fixed at `Type` (a universe-polymorphic
--- Σ that lands at the max of its components awaits universe polymorphism).
+-- `A × B` is `Sigma A (fun _ => B)`. Universe-polymorphic: it lands at the max
+-- of its components' levels, so it also pairs a `Prop` second component (e.g.
+-- `Σ (n : Nat) ⇒ Eq Nat n n`) and ranges over the universe (`Σ (A : Type) ⇒ A`).
 @[notation sigma]
-inductive Sigma (A : Type) (B : A → Type) : Type :=
+inductive Sigma.{u v} (A : Sort u) (B : A → Sort v) : Sort (max u v) :=
 | mk : (fst : A) → (snd : B fst) → Sigma A B
 
 -- the binary sum (coproduct). `@[notation sum]` registers it for the infix `+`

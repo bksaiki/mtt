@@ -17,13 +17,19 @@ let empty =
    parenthesize (atoms use precedence 11); [recurse] renders a subterm at a
    given precedence for the infix forms. *)
 let sugar n ~recurse names term =
+  (* a constructor matches a registered one by name (ignoring use-site level
+     arguments, which a polymorphic constructor carries in its head) *)
+  let same_ctor (h1 : Type.ctor_head) (h2 : Type.ctor_head) =
+    String.equal h1.Type.ind h2.Type.ind
+    && String.equal h1.Type.cname h2.Type.cname
+  in
   let nat_lit term =
     match n.nat with
     | None -> None
     | Some (zero, succ) ->
         let rec count acc = function
-          | Type.Ctor h when h = zero -> Some acc
-          | Type.App (Type.Ctor h, m) when h = succ -> count (acc + 1) m
+          | Type.Ctor h when same_ctor h zero -> Some acc
+          | Type.App (Type.Ctor h, m) when same_ctor h succ -> count (acc + 1) m
           | _ -> None
         in
         count 0 term
@@ -38,11 +44,15 @@ let sugar n ~recurse names term =
   (* a saturated [Sigma.mk A B a b] peeled into its two components [(a, b)] *)
   let pair_components term =
     match (n.sigma, peel term) with
-    | Some mk, (Type.Ctor h, [ _A; _B; a; b ]) when h = mk -> Some (a, b)
+    | Some mk, (Type.Ctor h, [ _A; _B; a; b ]) when same_ctor h mk -> Some (a, b)
     | _ -> None
   in
   match term with
-  | Type.Ctor h when n.unit_ctor = Some h -> Some (11, "()")
+  | Type.Ctor h
+    when match n.unit_ctor with
+         | Some u -> same_ctor h u
+         | None -> false ->
+      Some (11, "()")
   | _ -> (
       match peel term with
       (* the registered equality former [Eq A x y] prints infix, dropping its

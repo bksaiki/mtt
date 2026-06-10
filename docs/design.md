@@ -2,7 +2,8 @@
 
 A small dependent type theory in the Calculus of Constructions family: Π types
 and indexed inductive families — under an impredicative `Prop` and a predicative
-cumulative `Type` tower, checked bidirectionally with normalization by evaluation
+`Type` tower (universe-polymorphic, not cumulative — Lean's model), checked
+bidirectionally with normalization by evaluation
 (NbE), type-directed conversion, and definitional proof irrelevance. The kernel
 has no built-in datatypes at all: `Unit`/`Empty`/`Nat`/`Σ`/`Sum`/`Eq` (whose
 recursor `Eq.rec` is the equality eliminator J) are ordinary inductive
@@ -93,16 +94,16 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **proof irrelevance** — at a type in `Prop`, any two values are equal
   (a one-line guard in `conv`, made possible by type direction); applies
   inside neutral spines, so `P h1 ≡ P h2` for any proofs `h1`, `h2`.
-- **cumulativity** (subsumption rule only, via `sub`): `Sort i ≤ Sort j`
-  when `i ≤ j` (Rocq-flavored: `Prop ≤ Type`); products invariant in
-  domains, covariant in codomains. `infer` still returns principal types
+- **no cumulativity** (Lean's model): `conv` compares sorts by level equality;
+  a smaller universe is not a subtype of a larger one. Spanning universes is done
+  with universe polymorphism, not subtyping. `infer` returns principal types
   (`Sort i : Sort (i+1)` exactly, Russell-style). The dependent pair `Σ` is no
-  longer a kernel type — it is the prelude record `Sigma`, formed by the generic
-  inductive rule (fixed at `Type`, pending universe polymorphism). A bare pair
-  still infers at the constant family (Lean-style: `(a, b) : A × B`), but that —
-  like recovering the family by checking against an expected `Σ` — is now the
-  elaborator's job (`elab.ml`), since neither is recoverable by the type-free
-  scope pass
+  longer a kernel type — it is the prelude record `Sigma`, now universe-
+  polymorphic (`Sigma.{u v}`, landing at `Sort (max u v)`), formed by the generic
+  inductive rule. A bare pair still infers at the constant family (Lean-style:
+  `(a, b) : A × B`), but that — like recovering the family and the level
+  arguments by checking against an expected `Σ` — is the elaborator's job
+  (`elab.ml`)
 
 ## Universes
 
@@ -111,7 +112,13 @@ Sort (i+1)` (predicative tower). Π formation lands in `Sort (imax i j)`
 where `imax i 0 = 0` — a product into a proposition is a proposition, no
 matter the domain — and `max i j` otherwise. The whole difference between
 `Prop` and `Type` is that one `imax` in `check.ml`'s Pi rule, plus proof
-irrelevance in `conv`. `Empty` (now a prelude inductive with no constructors,
+irrelevance in `conv`. Levels are `Level.t` (`Zero`/`Succ`/`Max`/`IMax`/`Var`;
+`level.ml`), so sorts can take **level parameters** — declarations write
+`.{u v}` and `Sort u`, and a polymorphic inductive's use-site level arguments
+are inferred from its arguments' sorts (`Sigma` is polymorphic; `Sum`/`Eq` are
+not yet). There is **no cumulativity** (Lean's model, not Rocq's): `conv`
+compares sorts by `Level.equal`, and code spans universes by polymorphism, not
+subtyping. `Empty` (now a prelude inductive with no constructors,
 not a kernel primitive — see Inductive types) eliminates into any sort via its
 recursor `Empty.rec`, which the prelude wraps as `absurd` — subsingleton
 elimination, the degenerate (zero-constructor) case of the generic

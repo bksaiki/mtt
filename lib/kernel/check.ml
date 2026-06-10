@@ -171,9 +171,9 @@ let rec sort_of ctx (ty : Value.t) : Level.t =
       assert false
 
 (* type-directed conversion: [conv] compares terms at a type, [conv_ty] compares
-   types themselves (with optional cumulativity). β/δ have already happened
-   during evaluation, so this is structural comparison of weak-head forms, going
-   under binders with fresh variables. *)
+   types themselves (by equality — there is no cumulativity). β/δ have already
+   happened during evaluation, so this is structural comparison of weak-head
+   forms, going under binders with fresh variables. *)
 let rec conv ctx ty v1 v2 =
   (* proof irrelevance: the type is a proposition (Sort 0) *)
   Level.equal (sort_of ctx ty) Level.zero
@@ -185,7 +185,7 @@ let rec conv ctx ty v1 v2 =
       conv (bind x a ctx) (Value.apply_closure c v) (Value.apply v1 v)
         (Value.apply v2 v)
   (* at a sort, the values are types: compare strictly *)
-  | Value.Sort _ -> conv_ty ~cumul:false ctx v1 v2
+  | Value.Sort _ -> conv_ty ctx v1 v2
   | Value.VInd (name, _, params) -> (
       let spec = lookup_ind ctx name in
       if Inductive.is_record spec then
@@ -218,21 +218,18 @@ let rec conv ctx ty v1 v2 =
           Option.is_some (conv_neutral ctx n1 n2)
       | _ -> false)
 
-and conv_ty ~cumul ctx (t1 : Value.t) (t2 : Value.t) =
+and conv_ty ctx (t1 : Value.t) (t2 : Value.t) =
   match (t1, t2) with
-  (* sorts: equal, or upward-included under cumulativity *)
-  | Value.Sort i, Value.Sort j ->
-      if cumul then
-        Level.leq i j
-      else
-        Level.equal i j
-  (* pi: domains are invariant, codomains covariant; the binder's visibility
-     ([icit]) is metadata the kernel ignores, so it is not compared *)
+  (* sorts are compared by level equality — there is no cumulativity (Lean's
+     model): a smaller universe is not a subtype of a larger one *)
+  | Value.Sort i, Value.Sort j -> Level.equal i j
+  (* pi: invariant in both domain and codomain; the binder's visibility ([icit])
+     is metadata the kernel ignores, so it is not compared *)
   | Value.Pi (_, x, a1, c1), Value.Pi (_, _, a2, c2) ->
-      conv_ty ~cumul:false ctx a1 a2
+      conv_ty ctx a1 a2
       &&
       let v = fresh ctx in
-      conv_ty ~cumul (bind x a1 ctx) (Value.apply_closure c1 v)
+      conv_ty (bind x a1 ctx) (Value.apply_closure c1 v)
         (Value.apply_closure c2 v)
   (* an inductive type former is invariant in its parameters and indices: same
      name, and arguments convertible along the combined (instantiated) telescope
@@ -334,7 +331,7 @@ and conv_neutral ctx n1 n2 : Value.t option =
               in
               let ctx' = bind "x" ity ctx in
               let tgt = fresh ctx in
-              conv_ty ~cumul:false ctx'
+              conv_ty ctx'
                 (List.fold_left Value.apply motive1 (idxs @ [ tgt ]))
                 (List.fold_left Value.apply motive2 (idxs @ [ tgt ]))
         in
@@ -361,8 +358,8 @@ and conv_neutral ctx n1 n2 : Value.t option =
         None
   | _ -> None
 
-(* the cumulativity relation t1 ≤ t2 on types, used by subsumption *)
-let sub ctx t1 t2 = conv_ty ~cumul:true ctx t1 t2
+(* subsumption is now plain type conversion — no cumulativity *)
+let sub = conv_ty
 
 (* peel an application into its head and its argument list (left-to-right) *)
 let spine t =
@@ -524,7 +521,7 @@ and check_motive ctx spec pvals mty =
         match mty with
         | Value.Pi (_, _, dom, c) ->
             let expected = Value.eval env ity in
-            if not (conv_ty ~cumul:false ctx dom expected) then
+            if not (conv_ty ctx dom expected) then
               Error.type_error
                 [ Error.txt "the motive's index argument has type "
                 ; vl ctx dom
@@ -546,7 +543,7 @@ and check_motive ctx spec pvals mty =
                 (Value.VInd (rind, [], []))
                 (pvals @ List.rev idxs_rev)
             in
-            if not (conv_ty ~cumul:false ctx dom expected) then
+            if not (conv_ty ctx dom expected) then
               Error.type_error
                 [ Error.txt "the motive's target "
                 ; vl ctx dom
@@ -630,7 +627,7 @@ and check ctx t expected =
   | Type.Lam (_, x, a, b), Value.Pi (_, _, dom, c) ->
       let _ = infer_univ ctx a in
       let va = Value.eval ctx.env a in
-      if not (conv_ty ~cumul:false ctx va dom) then
+      if not (conv_ty ctx va dom) then
         Error.type_error
           [ Error.txt "the annotation "
           ; vl ctx va
@@ -640,7 +637,7 @@ and check ctx t expected =
       check (bind x va ctx) b
         (Value.apply_closure c (Value.Neutral (Value.Var ctx.lvl)))
   (* subsumption: infer and compare up to definitional equality (βδη plus proof
-     irrelevance) and cumulativity *)
+     irrelevance); no cumulativity, so this is plain type conversion *)
   | _ ->
       let ty = infer ctx t in
       if not (sub ctx ty expected) then

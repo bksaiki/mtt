@@ -269,6 +269,30 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
     | Infer -> core
     | Check _ -> coerce ctx mode core (Meta.force !ms (elab_infer ctx core))
   in
+  (* universe-level inference for a use of a polymorphic inductive: solve the
+     level variable [Var i] in a parameter's type [pat] against the
+     corresponding argument's inferred type [act], filling the solution array
+     [sols]. Only a bare [Sort (Var i)] is solved (the shape the prelude's types
+     use); anything more complex is left for the kernel re-check to validate. *)
+  let solve_lvl sols lp la =
+    match lp with
+    | Level.Var i when i >= 0 && i < Array.length sols && sols.(i) = None ->
+        sols.(i) <- Some la
+    | _ -> ()
+  in
+  let rec match_lvl ctx sols pat act =
+    match (Meta.force !ms pat, Meta.force !ms act) with
+    | Value.Sort lp, Value.Sort la -> solve_lvl sols lp la
+    | Value.Pi (_, x, d1, c1), Value.Pi (_, _, d2, c2) ->
+        match_lvl ctx sols d1 d2;
+        let v = fresh ctx in
+        match_lvl (Check.bind x d1 ctx) sols (Value.apply_closure c1 v)
+          (Value.apply_closure c2 v)
+    | Value.VInd (_, ls1, _), Value.VInd (_, ls2, _)
+      when List.length ls1 = List.length ls2 ->
+        List.iter2 (solve_lvl sols) ls1 ls2
+    | _ -> ()
+  in
   let rec go (ctx : Check.ctx) mode (s : Ast.t) : Type.t =
     match s.desc with
     (* a bare name is a local binder (de Bruijn) first, otherwise a global
@@ -415,17 +439,29 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
               match mode with
               | Check e -> (
                   match Meta.force !ms e with
-                  | Value.VInd (name, _, [ pa; pb ])
+                  | Value.VInd (name, levels, [ pa; pb ])
                     when String.equal name mk.Type.ind ->
-                      Some [ pa; pb ]
+                      Some (levels, [ pa; pb ])
                   | _ -> None)
               | Infer -> None
             in
             match recovered with
-            | Some pvals -> checked_ctor ctx mk pvals [ a; b ]
+            | Some (levels, pvals) ->
+                checked_ctor ctx
+                  { mk with Type.clevels = levels }
+                  pvals [ a; b ]
             | None ->
                 let a' = go ctx Infer a and b' = go ctx Infer b in
-                let ta = elab_infer ctx a' and tb = elab_infer ctx b' in
+                let ta = Meta.force !ms (elab_infer ctx a')
+                and tb = Meta.force !ms (elab_infer ctx b') in
+                (* a polymorphic pair lands at the sorts of its components *)
+                let levels =
+                  if (Check.lookup_ind ctx mk.Type.ind).Inductive.nlevels = 0
+                  then
+                    []
+                  else
+                    [ Check.sort_of ctx ta; Check.sort_of ctx tb ]
+                in
                 let bfun =
                   Type.Lam
                     ( Type.Explicit
@@ -435,7 +471,7 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
                 in
                 List.fold_left
                   (fun core x -> Type.App (core, x))
-                  (Type.Ctor mk)
+                  (Type.Ctor { mk with Type.clevels = levels })
                   [ Value.quote ctx.Check.lvl ta; bfun; a'; b' ]))
     | Ast.Sum (a, b) -> (
         match notation.Notation.sum with
@@ -445,22 +481,8 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
         | None ->
             Error.type_error
               [ Error.txt "+ requires the sum notation to be registered" ])
-    | Ast.Sigma (x, a, b) ->
-        let a' = go ctx Infer a in
-        let body =
-          go (Check.bind x (Value.eval ctx.Check.env a') ctx) Infer b
-        in
-        Type.App
-          ( Type.App (Type.Ind (sigma_form (), []), a')
-          , Type.Lam (Type.Explicit, x, a', body) )
-    | Ast.Prod (a, b) ->
-        let a' = go ctx Infer a in
-        let body =
-          go (Check.bind "" (Value.eval ctx.Check.env a') ctx) Infer b
-        in
-        Type.App
-          ( Type.App (Type.Ind (sigma_form (), []), a')
-          , Type.Lam (Type.Explicit, "", a', body) )
+    | Ast.Sigma (x, a, b) -> sigma_core ctx x a b
+    | Ast.Prod (a, b) -> sigma_core ctx "" a b
     (* [()] is the constructor registered for the [unit] notation (the prelude's
        [Unit.unit]); the unit type itself is an ordinary inductive, resolved as
        a [Var] above *)
@@ -618,16 +640,18 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
           match mode with
           | Check e -> (
               match Meta.force !ms e with
-              | Value.VInd (name, _, pvals)
+              | Value.VInd (name, levels, pvals)
                 when String.equal name h.Type.ind && List.length args = nfields
                 ->
-                  Some pvals
+                  Some (levels, pvals)
               | _ -> None)
           | Infer -> None
         in
         let cty = Value.eval [] (Inductive.ctor_type spec h.Type.cindex) in
         match recovered with
-        | Some pvals -> checked_ctor ctx h pvals args
+        (* the expected inductive type also supplies the level arguments *)
+        | Some (levels, pvals) ->
+            checked_ctor ctx { h with Type.clevels = levels } pvals args
         (* the parameters are omitted but no expected inductive type pins them
            (inference position, or a non-matching goal): insert a fresh
            metavariable per parameter and let unifying the field arguments solve
@@ -657,9 +681,57 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
         (* otherwise the parameters are explicit (or we are inferring): walk the
            constructor's full type *)
         | None -> elab_spine ctx (Type.Ctor h) cty args)
-    | Other ->
+    | Other -> (
         let head_core = go ctx Infer head in
-        elab_spine ~explicit ~mode ctx head_core (elab_infer ctx head_core) args
+        match head_core with
+        (* a polymorphic inductive former: infer its level arguments from the
+           argument types, then build the applied former *)
+        | Type.Ind (name, _)
+          when (Check.lookup_ind ctx name).Inductive.nlevels > 0 ->
+            elab_poly_former ctx name args
+        | _ ->
+            elab_spine ~explicit ~mode ctx head_core (elab_infer ctx head_core)
+              args)
+  (* a use of a polymorphic inductive former [T args…]: walk [T]'s former type
+     consuming the arguments, matching each argument's inferred type against the
+     parameter type to solve the level variables, then build [Ind (T, levels)]
+     applied to the elaborated arguments (the kernel re-check validates the
+     whole thing). *)
+  and elab_poly_former ctx name args : Type.t =
+    let spec = Check.lookup_ind ctx name in
+    let nlv = spec.Inductive.nlevels in
+    let sols = Array.make nlv None in
+    let rec walk fty rev_cores = function
+      | [] -> List.rev rev_cores
+      | a :: rest -> (
+          let a_core = go ctx Infer a in
+          match Meta.force !ms fty with
+          | Value.Pi (_, _, dom, c) ->
+              match_lvl ctx sols dom (Meta.force !ms (elab_infer ctx a_core));
+              walk
+                (Value.apply_closure c (Value.eval ctx.Check.env a_core))
+                (a_core :: rev_cores) rest
+          (* over-applied / not a function: stop solving, let the kernel
+             report *)
+          | _ -> walk fty (a_core :: rev_cores) rest)
+    in
+    let arg_cores = walk (Value.eval [] (Inductive.former_type spec)) [] args in
+    let levels =
+      List.init nlv (fun i ->
+          match sols.(i) with
+          | Some l -> l
+          | None ->
+              Error.type_error
+                [ Error.txtf
+                    "cannot infer the universe level of %s; it is not \
+                     determined by the arguments"
+                    name
+                ])
+    in
+    List.fold_left
+      (fun core a -> Type.App (core, a))
+      (Type.Ind (name, levels))
+      arg_cores
   (* elaborate each argument against the domain read off the head's (function)
      type, advancing that type as arguments are consumed so each argument is in
      checking position. [~explicit] (set under an [@f] head) makes an implicit
@@ -721,8 +793,13 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
         (Type.Ctor h) pvals
     in
     (* a Pi is a type, so instantiate its parameter binders by walking the
-       closures, not by [Value.apply] *)
-    let cty = Value.eval [] (Inductive.ctor_type spec h.Type.cindex) in
+       closures, not by [Value.apply]; the constructor's level arguments
+       instantiate the type's level variables first *)
+    let cty =
+      Value.eval []
+        (Type.subst_levels h.Type.clevels
+           (Inductive.ctor_type spec h.Type.cindex))
+    in
     let rec instantiate ty = function
       | [] -> ty
       | p :: rest -> (
@@ -892,6 +969,27 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
               (Value.apply_closure cod v) )
     | [], final -> go ctx (Check final) body
     | _ -> assert false
+  (* the [Σ]/[×] sugar: the registered dependent-pair former applied to [A] and
+     the family [λ x ⇒ B]. When that inductive is universe-polymorphic its level
+     arguments are the sorts of the two components ([Sort u] of [A], [Sort v] of
+     [B]); monomorphic, they are empty. *)
+  and sigma_core ctx x a b : Type.t =
+    let name = sigma_form () in
+    let a' = go ctx Infer a in
+    let av = Value.eval ctx.Check.env a' in
+    let ctx' = Check.bind x av ctx in
+    let body = go ctx' Infer b in
+    let levels =
+      if (Check.lookup_ind ctx name).Inductive.nlevels = 0 then
+        []
+      else
+        [ Check.sort_of ctx av
+        ; Check.sort_of ctx' (Value.eval ctx'.Check.env body)
+        ]
+    in
+    Type.App
+      ( Type.App (Type.Ind (name, levels), a')
+      , Type.Lam (Type.Explicit, x, a', body) )
   in
   let core = go ctx0 mode0 s0 in
   (* replace solved metavariables with their solutions; an unsolved one left

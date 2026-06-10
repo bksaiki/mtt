@@ -59,20 +59,21 @@ let%expect_test "argument type mismatch is rejected" =
   [%expect
     {| type error: this term has type Type 1 but Type -> Type was expected |}]
 
-let%expect_test "cumulativity: universes include upward" =
+(* no cumulativity (Lean's model): a smaller universe is not a subtype of a
+   larger one, so a [Type i] does not flow into [Type j] for i < j — you must be
+   universe-polymorphic instead. *)
+let%expect_test "no cumulativity: a universe does not include upward" =
   infer "(fun (A : Type 2) => A) Type";
-  [%expect {| Type 2 |}];
+  [%expect {| type error: this term has type Type 1 but Type 2 was expected |}];
   infer "(fun (A : Type 3) => A) (Type -> Type 1)";
-  [%expect {| Type 3 |}]
+  [%expect {| type error: this term has type Type 2 but Type 3 was expected |}]
 
-let%expect_test "cumulativity: products are covariant in the codomain" =
-  (* the argument has type Type -> Type, used at Type -> Type 2 *)
+let%expect_test "no cumulativity: products are invariant in the codomain" =
   infer "(fun (f : Type -> Type 2) => f) (fun (A : Type) => A)";
-  [%expect {| Type -> Type 2 |}];
-  (* the bare lambda above goes through the lam-vs-pi rule; ascribed, it goes
-     through pi-subtyping in subsumption *)
+  [%expect {| type error: this term has type Type but Type 2 was expected |}];
   infer "(fun (f : Type -> Type 2) => f) ((fun (A : Type) => A) : Type -> Type)";
-  [%expect {| Type -> Type 2 |}]
+  [%expect
+    {| type error: this term has type Type -> Type but Type -> Type 2 was expected |}]
 
 let%expect_test "cumulativity: domains are invariant" =
   infer "(fun (f : Type 1 -> Type) => f) (fun (A : Type) => A)";
@@ -112,9 +113,9 @@ let%expect_test "Prop is impredicative" =
   infer "(p : Prop) -> (q : Prop) -> p -> q";
   [%expect {| Prop |}]
 
-let%expect_test "cumulativity: Prop flows into Type" =
+let%expect_test "no cumulativity: Prop does not flow into Type" =
   infer "(fun (A : Type) => A) ((p : Prop) -> p)";
-  [%expect {| Type |}]
+  [%expect {| type error: this term has type Prop but Type was expected |}]
 
 let%expect_test "Unit and its element" =
   infer "Unit";
@@ -137,9 +138,10 @@ let%expect_test "sigma formation sorts (Type-fixed inductive)" =
      included into Type by cumulativity) *)
   infer {|Σ (n : Nat) ⇒ Eq Nat n n|};
   [%expect {| Type |}];
-  (* fixed at Type: a Σ ranging over the universe itself no longer forms *)
+  (* universe-polymorphic: a Σ ranging over the universe forms, at the max of
+     its components' levels *)
   infer {|Σ (A : Type) ⇒ A|};
-  [%expect {| type error: this term has type Type 1 but Type was expected |}]
+  [%expect {| Type 1 |}]
 
 let%expect_test "pair inference defaults to the constant family (Lean-style)" =
   infer "((), ())";
