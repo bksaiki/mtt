@@ -88,6 +88,15 @@ val bind : string -> Value.t -> ctx -> ctx
     fresh-neutral counterpart. *)
 val extend : string -> Value.t -> Value.t -> ctx -> ctx
 
+(** [extend_poly x ~nlevels ~body ~ty ctx] adds a {e universe-polymorphic} def
+    [x] abstracted over [nlevels] level parameters: its core [body] and [ty]
+    (mentioning those parameters as [Sort (Var j)]) are stored as level
+    abstractions ([Value.VPoly]). A use of [x] is a [Type.Def (i, ls)] that
+    instantiates them at the use-site levels [ls]. {!extend} is the monomorphic
+    counterpart (a plain value referenced by [Var]). *)
+val extend_poly :
+  string -> nlevels:int -> body:Type.t -> ty:Type.t -> ctx -> ctx
+
 (** [show ctx v] renders a value against the context's binder names, {e without}
     notation — the kernel's faithful/debug view. User-facing output and error
     messages are rendered by the frontend, which owns notation. *)

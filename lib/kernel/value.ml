@@ -11,6 +11,18 @@ type t =
   (* a recursor accumulating its arguments [params @ motive :: minors @ [major]]
      until saturated, when it fires ι (see [vrec]) *)
   | VRec of Type.rec_head * t list
+  (* a universe-polymorphic definition's stored value: its definition-time
+     environment [denv] and core [body], abstracted over [nlevels] level
+     parameters (which appear as [Sort (Var j)] inside [body]). It is inert — it
+     only ever sits at a def's context slot and is consumed by [eval]/[infer] of
+     a [Type.Def] reference, which instantiates it by re-evaluating
+     [Type.subst_levels ls body] in [denv]. It never flows into [apply]/[quote]/
+     conversion. *)
+  | VPoly of
+      { nlevels : int
+      ; denv : env
+      ; body : Type.t
+      }
   | Neutral of neutral
 
 and neutral =
@@ -34,6 +46,13 @@ exception Not_a_function
 let rec eval env t =
   match t with
   | Type.Var i -> List.nth env i
+  (* a polymorphic def: instantiate its level-abstracted body at the use-site
+     levels, then evaluate in its definition-time environment. (δ + level
+     instantiation in one step; the stored [VPoly] is never anything else.) *)
+  | Type.Def (i, ls) -> (
+      match List.nth env i with
+      | VPoly p -> eval p.denv (Type.subst_levels ls p.body)
+      | v -> v)
   (* a metavariable is inert in the kernel: it evaluates to a stuck head and is
      never solved here. The frontend ({!Meta}) owns solutions and zonks them
      away, so a meta never reaches a final {!Check}. *)
@@ -146,6 +165,9 @@ let rec quote l v =
   | VInd (name, ls, args) -> quote_spine l (Type.Ind (name, ls)) args
   | VCtor (h, args) -> quote_spine l (Type.Ctor h) args
   | VRec (h, args) -> quote_spine l (Type.Rec h) args
+  (* a [VPoly] is inert and consumed by [eval]/[infer] of a [Def]; it is never a
+     subterm of a real value, so it is never quoted *)
+  | VPoly _ -> invalid_arg "Value.quote: VPoly"
   | Neutral n -> quote_neutral l n
 
 (* to go under a binder, apply the closure to a fresh stuck variable *)

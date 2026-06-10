@@ -78,7 +78,13 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
 - **α** — free (de Bruijn)
 - **δ** — `def`s unfold eagerly: a defined name is bound in the env to its
   value, so evaluation replaces it (no `Const` constructor, no kernel
-  lookup). Upgrade path if unfolded output hurts: glued evaluation.
+  lookup). A *universe-polymorphic* def is the one twist: its free `Sort u`
+  level variables are auto-bound as level parameters, and it is stored
+  level-abstracted (`Value.VPoly` at its context slot) and referenced by a
+  `Type.Def (i, levels)` node — still a de Bruijn index, but carrying use-site
+  level arguments that `eval`/`infer` instantiate (δ + level substitution in one
+  step). Monomorphic defs and locals stay plain `Var`. Upgrade path if unfolded
+  output hurts: glued evaluation.
 - **η for records** (surjective pairing, generalized) — at any
   single-constructor, non-recursive inductive, two values are equal iff their
   field projections are (the second compared at the family instantiated by the
@@ -118,7 +124,13 @@ irrelevance in `conv`. Levels are `Level.t` (`Zero`/`Succ`/`Max`/`IMax`/`Var`;
 no `.{u v}` binder syntax), and a polymorphic inductive's use-site level
 arguments are inferred from its arguments' sorts (`Sigma`/`Sum`/`Eq` are all
 polymorphic — a recursor's level arguments come from the major's type, or from
-its explicit parameters). There is **no cumulativity** (Lean's model, not Rocq's): `conv`
+its explicit parameters). *Definitions* can be polymorphic too: a `def`'s free
+`Sort u` is auto-bound and the def is stored level-abstracted (`Value.VPoly`),
+referenced by `Type.Def (i, levels)` with use-site level arguments inferred from
+its explicit arguments (so the prelude's `absurd (A : Sort u) (h : Empty) : A`
+eliminates into any sort; a def with *implicit* level-bearing params, like a
+fully-polymorphic `subst`/`cong`, awaits level metavariables). There is **no
+cumulativity** (Lean's model, not Rocq's): `conv`
 compares sorts by `Level.equal`, and code spans universes by polymorphism, not
 subtyping. `Empty` (now a prelude inductive with no constructors,
 not a kernel primitive — see Inductive types) eliminates into any sort via its

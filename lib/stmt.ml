@@ -193,17 +193,49 @@ let run (sess : session) stmt =
       let va = eval_ann sa in
       ({ sess with ctx = Check.bind x va ctx }, None)
   | Def (x, sa, st) ->
-      let t, va =
-        match sa with
-        | Some sa ->
-            let va = eval_ann sa in
-            (check_against st va, va)
-        | None ->
-            let t = infer st in
-            (t, Check.infer ctx t)
+      (* universe level parameters are auto-bound (as for inductives): the free
+         level variables in the def's annotation and body, in first-appearance
+         order, become its level parameters *)
+      let levels =
+        List.fold_left
+          (fun acc t ->
+            acc @ List.filter (fun y -> not (List.mem y acc)) (Ast.level_vars t))
+          []
+          (Option.to_list sa @ [ st ])
       in
-      let v = Value.eval ctx.env t in
-      ({ sess with ctx = Check.extend x v va ctx }, None)
+      let nlevels = List.length levels in
+      if nlevels = 0 then begin
+        let t, va =
+          match sa with
+          | Some sa ->
+              let va = eval_ann sa in
+              (check_against st va, va)
+          | None ->
+              let t = infer st in
+              (t, Check.infer ctx t)
+        in
+        let v = Value.eval ctx.env t in
+        ({ sess with ctx = Check.extend x v va ctx }, None)
+      end else begin
+        (* universe-polymorphic def: elaborate the type and body with the level
+           parameters in scope (so [Sort u] becomes [Sort (Var i)]) and store
+           them level-abstracted; each use instantiates them
+           ([Check.extend_poly] / the [Type.Def] reference) *)
+          let body, ty =
+            match sa with
+            | Some sa ->
+                let a = Elab.infer ~levels notation ctx sa in
+                let _ = Check.infer_univ ctx a in
+                let va = Value.eval ctx.env a in
+                let t = Elab.check ~levels notation ctx st va in
+                Check.check ctx t va;
+                (t, a)
+            | None ->
+                let t = Elab.infer ~levels notation ctx st in
+                (t, Value.quote ctx.lvl (Check.infer ctx t))
+          in
+          ({ sess with ctx = Check.extend_poly x ~nlevels ~body ~ty ctx }, None)
+      end
   | Theorem (x, sa, st) ->
       let va = eval_ann sa in
       let _ = check_against st va in

@@ -21,6 +21,12 @@ type icit =
 
 type t =
   | Var of int (* de Bruijn index *)
+  | Def of int * Level.t list
+    (* a de Bruijn reference to a {e universe-polymorphic} definition, carrying
+       its use-site level arguments. The index resolves (like [Var]) to the
+       def's slot, where a [Value.VPoly] holds the level-abstracted body; [eval]
+       instantiates it at these levels. Monomorphic defs and local binders stay
+       plain [Var] — this node appears only for [nlevels > 0] defs. *)
   | Sort of Level.t (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of icit * string * t * t (* Π (x : A). B, B binds index 0 *)
   | Lam of icit * string * t * t (* λ (x : A). b *)
@@ -63,6 +69,7 @@ and field_rec =
 let rec subst_levels args t =
   match t with
   | Sort l -> Sort (Level.subst args l)
+  | Def (i, ls) -> Def (i, List.map (Level.subst args) ls)
   | Var _
   | Meta _ ->
       t
@@ -76,6 +83,7 @@ let rec subst_levels args t =
 
 let rec occurs k = function
   | Var i -> i = k
+  | Def (i, _) -> i = k
   | Sort _ -> false
   | Pi (_, _, a, b)
   | Lam (_, _, a, b) ->
@@ -96,6 +104,7 @@ let rec occurs k = function
    with an unsolved hole before the trusted check ever sees it *)
 let rec has_meta = function
   | Meta _ -> true
+  | Def _
   | Var _
   | Sort _
   | Ind _
@@ -156,7 +165,8 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
     | None -> go_struct prec names fmt t
   and go_struct prec names fmt t =
     match t with
-    | Var i -> (
+    | Var i
+    | Def (i, _) -> (
         match List.nth_opt names i with
         | Some x -> Format.pp_print_string fmt x
         | None -> Format.fprintf fmt "!%d" i)

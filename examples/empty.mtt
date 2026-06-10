@@ -11,10 +11,10 @@ def neg_data_is_prop : Prop := Type → Empty
 axiom p : Prop
 axiom q : Prop
 
--- ex falso quodlibet: not p => (p => q). Empty.rec eliminates into any sort
--- (Empty is a subsingleton), so it proves a Prop goal directly — the prelude's
--- `absurd` is Type-only (no cumulativity to lift Prop into Type).
-theorem exfalso (np : negate p) (x : p) : q := Empty.rec _ (np x)
+-- ex falso quodlibet: not p => (p => q). The prelude's `absurd` is universe-
+-- polymorphic, so it eliminates into the Prop goal `q` directly (its level is
+-- inferred from the explicit `q`) — no cumulativity needed.
+theorem exfalso (np : negate p) (x : p) : q := absurd q (np x)
 
 -- double negation introduction
 theorem dni (x : p) : negate (negate p) := λ k : negate p ⇒ k x

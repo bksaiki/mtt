@@ -61,6 +61,15 @@ let classify_head sg (s : Ast.t) =
 
 let imax = Level.imax
 
+(* if context slot [i] holds a universe-polymorphic def, its level-parameter
+   count and its type at the identity instantiation (level params left as
+   [Level.Var j], the form [match_lvl] solves against) — else [None] *)
+let poly_def_info (ctx : Check.ctx) i =
+  match List.nth_opt ctx.Check.types i with
+  | Some (Value.VPoly { nlevels; denv; body }) ->
+      Some (nlevels, Value.eval denv body)
+  | _ -> None
+
 (* peel a core application into its head and argument list (outermost first) *)
 let core_spine t =
   let rec go acc = function
@@ -78,6 +87,13 @@ let rec lift d c (t : Type.t) : Type.t =
            i + d
          else
            i)
+  | Type.Def (i, ls) ->
+      Type.Def
+        ( (if i >= c then
+             i + d
+           else
+             i)
+        , ls )
   | Type.Pi (ic, x, a, b) -> Type.Pi (ic, x, lift d c a, lift d (c + 1) b)
   | Type.Lam (ic, x, a, b) -> Type.Lam (ic, x, lift d c a, lift d (c + 1) b)
   | Type.App (f, a) -> Type.App (lift d c f, lift d c a)
@@ -108,6 +124,13 @@ let abstract needle t =
                i + 1
              else
                i)
+      | Type.Def (i, ls) ->
+          Type.Def
+            ( (if i >= k then
+                 i + 1
+               else
+                 i)
+            , ls )
       | Type.Pi (ic, x, a, b) -> Type.Pi (ic, x, go k a, go (k + 1) b)
       | Type.Lam (ic, x, a, b) -> Type.Lam (ic, x, go k a, go (k + 1) b)
       | Type.App (f, a) -> Type.App (go k f, go k a)
@@ -300,7 +323,15 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
     | Ast.Var x ->
         let core =
           match List.find_index (String.equal x) ctx.Check.names with
-          | Some i -> Type.Var i
+          | Some i -> (
+              match poly_def_info ctx i with
+              (* a polymorphic def used bare: instantiate at the identity levels
+                 ([Var 0 … Var (k-1)]), so its type prints with its universe
+                 parameters (like a polymorphic former). In application position
+                 the [Other] branch below re-solves the real levels. *)
+              | Some (nlevels, _) ->
+                  Type.Def (i, List.init nlevels (fun j -> Level.Var j))
+              | None -> Type.Var i)
           | None -> (
               match Signature.find sg x with
               | Some spec -> Type.Ind (spec.Inductive.name, [])
@@ -760,6 +791,23 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
         | Type.Ind (name, _)
           when (Check.lookup_ind ctx name).Inductive.nlevels > 0 ->
             elab_poly_former ctx name args
+        (* a polymorphic def applied to arguments: infer its level arguments
+           from the argument types (the same machinery as a former), then build
+           the [Def] reference at the solved levels *)
+        | Type.Def (i, _) -> (
+            match poly_def_info ctx i with
+            | Some (nlv, hty) ->
+                let name =
+                  match head.Ast.desc with
+                  | Ast.Var x -> x
+                  | _ -> "definition"
+                in
+                elab_poly_app ctx ~name ~nlv ~hty
+                  ~mk_head:(fun levels -> Type.Def (i, levels))
+                  args
+            | None ->
+                elab_spine ~explicit ~mode ctx head_core
+                  (elab_infer ctx head_core) args)
         | _ ->
             elab_spine ~explicit ~mode ctx head_core (elab_infer ctx head_core)
               args)

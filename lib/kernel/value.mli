@@ -18,6 +18,16 @@ type t =
   | VRec of Type.rec_head * t list
       (** a recursor accumulating [params @ motive :: minors @ [major]] until
           saturated, when it fires ι *)
+  | VPoly of
+      { nlevels : int
+      ; denv : env
+      ; body : Type.t
+      }
+      (** a universe-polymorphic definition's stored value: its definition-time
+          environment and core body, abstracted over [nlevels] level parameters.
+          Inert — it sits only at a def's context slot and is consumed by
+          [eval]/{!Check.infer} of a {!Type.Def}, which instantiates it; it
+          never flows into {!apply}, {!quote}, or conversion. *)
   | Neutral of neutral
 
 (** a stuck term: a variable applied to a spine of eliminations *)

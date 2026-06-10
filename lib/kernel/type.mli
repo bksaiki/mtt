@@ -28,6 +28,13 @@ type icit =
 
 type t =
   | Var of int  (** de Bruijn index *)
+  | Def of int * Level.t list
+      (** a de Bruijn reference to a universe-polymorphic definition, carrying
+          its use-site level arguments. Like {!Var} the index resolves to the
+          def's context slot, where a [Value.VPoly] holds the level-abstracted
+          body; evaluation instantiates it at these levels. Monomorphic defs and
+          local binders use {!Var} — this node appears only for polymorphic
+          ([nlevels > 0]) defs. *)
   | Sort of Level.t
       (** the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of icit * string * t * t  (** Π (x : A). B, where B binds index 0 *)

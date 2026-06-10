@@ -91,6 +91,9 @@ let scope_ok ms blvl m entry rhs =
     | Value.VCtor (_, args)
     | Value.VRec (_, args) ->
         List.for_all (ok lvl) args
+    (* a [VPoly] is inert (it sits only at a def slot, consumed by [Def]); it
+       never appears as a meta solution candidate *)
+    | Value.VPoly _ -> false
     | Value.Neutral n -> okn lvl n
   and okn lvl n =
     match n with
@@ -168,6 +171,7 @@ let rec zonk ms lvl (t : Type.t) : Type.t =
       | Some v -> zonk ms lvl (Value.quote lvl v)
       | None -> t)
   | Type.Var _
+  | Type.Def _
   | Type.Sort _
   | Type.Ind _
   | Type.Ctor _

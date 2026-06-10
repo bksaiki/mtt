@@ -701,3 +701,33 @@ let%expect_test "polymorphic Sum/Eq: recursor and sugar infer levels per use" =
     P + Q : Prop
     h = h : Prop
     |}]
+
+(* a universe-polymorphic *definition*: its free [Sort u] level variable is
+   auto-bound as a level parameter (stored level-abstracted), and each use
+   instantiates it — here from the explicit argument's sort. So one [absurd]
+   eliminates into a type and into a proposition, with no cumulativity (which is
+   exactly what the [Type]-only monomorphic version could not do). *)
+let%expect_test "polymorphic def: level parameter inferred per use" =
+  session
+    [ "inductive Void : Prop"
+    ; "def exfalso (A : Sort u) (h : Void) : A := Void.rec _ h"
+    ; (* the level parameter shows in the polymorphic type *)
+      "#check exfalso"
+    ; "axiom N : Type"
+    ; "axiom p : Prop"
+    ; "axiom v : Void"
+    ; (* instantiated at Type and at Prop from the explicit [A] *)
+      "#check exfalso N v"
+    ; "#check exfalso p v"
+    ; (* a polymorphic def calling another, threading its own level parameter *)
+      "def exfalso2 (B : Sort w) (h : Void) : B := exfalso B h"
+    ; "#check exfalso2 p v"
+    ; "#check_equal (exfalso2 N v) (exfalso N v)"
+    ];
+  [%expect
+    {|
+    fun (A : Sort u0) => fun (h : Void) => Void.rec (fun (x : Void) => A) h : (A : Sort u0) -> Void -> A
+    Void.rec (fun (x : Void) => N) v : N
+    Void.rec (fun (x : Void) => p) v : p
+    Void.rec (fun (x : Void) => p) v : p
+    |}]

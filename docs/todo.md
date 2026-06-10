@@ -56,12 +56,31 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
             from the operand sorts. `Sum (A : Sort u) (B : Sort v) : Sort
             (max u v)` and `Eq (A : Sort u) …` in the prelude; a `Prop`-level
             `Or`/`And` is now expressible (`examples/sum.mtt`, `test_stmt`).
+      - [~] **Stage 2 — polymorphic definitions.** A `def`'s free `Sort u` level
+            variables are auto-bound as level parameters (like an inductive's),
+            stored level-abstracted (`Value.VPoly` at the context slot,
+            `Check.extend_poly`) and referenced by a new core node
+            `Type.Def (i, levels)` whose `eval`/`infer` instantiate the
+            abstraction at the use site (kept in the de Bruijn context — no
+            global `Const` table, so monomorphic defs and locals are untouched
+            `Var`s). Done: defs whose level args are fixed by **explicit**
+            arguments, via the former machinery (`elab_poly_app` with a `Def`
+            head); `absurd (A : Sort u) (h : Empty) : A` is now polymorphic and
+            eliminates into any sort (`examples/empty.mtt`, `test_stmt`).
+            Remaining:
+            - [ ] **level metavariables** so a def with *implicit* level-bearing
+                  params infers them: make `subst`/`cong` fully polymorphic
+                  (their `{A : Sort u}` is solved as a term meta, and `u` must be
+                  solved alongside — needs a level-meta flavor in `meta.ml` and
+                  sort unification). Until then they stay `Type`-only.
+            - [ ] optional: a real glued `Const`/def table (pairs with the
+                  "glued evaluation" engineering item) if unfolded δ output or
+                  per-use re-eval ever matters.
 - [ ] Align `absurd` with Lean. Ours is ex falso —
-      `absurd (A : Type) (h : Empty) : A`, i.e. Lean's `False.elim`. Lean's
-      `absurd : a → ¬a → b` instead takes `p` and `¬p` and forms the
-      contradiction itself; switching would leave raw ex falso as just
-      `Empty.rec`. Wants implicit args + universe polymorphism for full parity
-      (`b : Sort v`)
+      `absurd (A : Sort u) (h : Empty) : A`, i.e. Lean's `False.elim` (now
+      universe-polymorphic). Lean's `absurd : a → ¬a → b` instead takes `p` and
+      `¬p` and forms the contradiction itself; switching would leave raw ex falso
+      as just `Empty.rec`. Wants implicit args for full parity.
 
 ## Elaborator (type-directed surface → core)
 

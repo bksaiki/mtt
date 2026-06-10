@@ -138,7 +138,10 @@ let rec occurs name (t : Type.t) =
   | Rec h -> String.equal h.rind name
   | Var _
   | Sort _
-  | Meta _ ->
+  | Meta _
+  (* a def reference cannot mention this inductive: defs are elaborated before
+     the inductive they precede, so the not-yet-declared name cannot occur *)
+  | Def _ ->
       false
   | Proj (_, a) -> occurs name a
   | Pi (_, _, a, b)

@@ -23,6 +23,22 @@ let extend x v ty ctx =
    real value, so occurrences unfold (δ-reduction). *)
 let bind x ty ctx = extend x (Value.Neutral (Value.Var ctx.lvl)) ty ctx
 
+(* extends the context with a {e universe-polymorphic} def [x], abstracted over
+   [nlevels] level parameters: its core [body] and [ty] (both mentioning those
+   parameters as [Sort (Var j)]) are stored as [Value.VPoly] thunks over the
+   current environment. A use of [x] is a [Type.Def (i, ls)] whose
+   [eval]/[infer] instantiate the thunk at the use-site levels [ls].
+   (Monomorphic defs use {!extend} and a plain [Var]; this is the
+   level-abstracted counterpart.) *)
+let extend_poly x ~nlevels ~body ~ty ctx =
+  let thunk b = Value.VPoly { nlevels; denv = ctx.env; body = b } in
+  { ctx with
+    env = thunk body :: ctx.env
+  ; types = thunk ty :: ctx.types
+  ; names = x :: ctx.names
+  ; lvl = ctx.lvl + 1
+  }
+
 (* registers an inductive declaration in the context's signature *)
 let add_ind spec ctx = { ctx with signature = Signature.add spec ctx.signature }
 
@@ -174,6 +190,7 @@ let rec sort_of ctx (ty : Value.t) : Level.t =
   (* not types *)
   | Value.VCtor _
   | Value.VRec _
+  | Value.VPoly _
   | Value.Lam _ ->
       assert false
 
@@ -411,6 +428,12 @@ let subsingleton ctx spec =
 let rec infer ctx t =
   match t with
   | Type.Var i -> List.nth ctx.types i (* (Var) *)
+  (* a polymorphic def reference: its type is stored level-abstracted at the
+     slot, so instantiate it at the use-site levels *)
+  | Type.Def (i, ls) -> (
+      match List.nth ctx.types i with
+      | Value.VPoly p -> Value.eval p.denv (Type.subst_levels ls p.body)
+      | v -> v)
   (* metavariables are an elaboration-only node; the elaborator zonks them away,
      so a meta reaching the kernel is a bug, not a typeable term *)
   | Type.Meta _ ->
