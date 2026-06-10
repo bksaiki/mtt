@@ -679,8 +679,9 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
               in
               (param_cores, index_cores, major_core, metas)
           in
-          (* a polymorphic recursor's level arguments come from the major's
-             type *)
+          (* a polymorphic recursor's level arguments: recovered from the
+             major's type above, or solved as level metas from the explicit
+             parameters/indices *)
           let rh = { rh with Type.rlevels = levels } in
           let pvals = List.map (Value.eval ctx.Check.env) param_cores in
           let motive_core =
