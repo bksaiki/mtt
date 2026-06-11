@@ -92,9 +92,14 @@ let rec repl sess initialized =
       | { desc = Stmt.Prelude; _ } ->
           print_endline "prelude must be the first statement";
           repl sess initialized
-      | stmt when not initialized ->
+      | stmt when not initialized -> (
           (* first real statement: auto-load the prelude, then run it *)
-          repl (run_repl (Prelude.load Stmt.initial) stmt) true
+          match Prelude.load Stmt.initial with
+          | sess -> repl (run_repl sess stmt) true
+          | exception Prelude.Load_error msg ->
+              Printf.eprintf
+                "internal error: the standard prelude failed to load:\n%s\n" msg;
+              exit 1)
       | stmt -> repl (run_repl sess stmt) true)
 
 (* checks a whole file, stopping at the first error with a nonzero exit *)
@@ -112,10 +117,15 @@ let run_file path =
       die "%s: syntax error: %s" (Loc.to_string loc) msg
   | stmts ->
       (* auto-load the prelude unless the file opens with `prelude` *)
+      let load_prelude () =
+        try Prelude.load Stmt.initial with
+        | Prelude.Load_error msg ->
+            die "internal error: the standard prelude failed to load:\n%s" msg
+      in
       let init, stmts =
         match stmts with
         | { Stmt.desc = Stmt.Prelude; _ } :: rest -> (Stmt.initial, rest)
-        | _ -> (Prelude.load Stmt.initial, stmts)
+        | _ -> (load_prelude (), stmts)
       in
       let step (sess : Stmt.session) (stmt : Stmt.t) =
         match stmt.desc with
