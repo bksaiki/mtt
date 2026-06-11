@@ -472,8 +472,26 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
         let va = Value.eval ctx.Check.env a' in
         let t' = go ctx (Check va) t in
         Type.App (Type.Lam (Type.Explicit, "x", a', Type.Var 0), t')
-    (* TODO(let): elaboration in Stage 3 *)
-    | Ast.Let _ -> Error.type_error [ Error.txt "let is not yet supported" ]
+    (* a transparent local binding. Elaborate the value (against its annotation
+       if given, else inferring its type), then the body under [x] bound to the
+       value itself ([Check.extend], as for a def) so it is definitionally [v]
+       inside [b] — [let n := 2 in (rfl : n = 2)] checks. The mode flows into
+       the body, and the kernel re-checks the [Let] (which δ-reduces [x] to
+       [v]). *)
+    | Ast.Let (x, aopt, v, b) ->
+        let a', v', va =
+          match aopt with
+          | Some a ->
+              let a' = go ctx Infer a in
+              let va = Value.eval ctx.Check.env a' in
+              (a', go ctx (Check va) v, va)
+          | None ->
+              let v' = go ctx Infer v in
+              let va = Meta.force !ms (elab_infer ctx v') in
+              (Value.quote ctx.Check.lvl va, v', va)
+        in
+        let ctx' = Check.extend x (Value.eval ctx.Check.env v') va ctx in
+        Type.Let (x, a', v', go ctx' mode b)
     (* a pair is sugar for the dependent-pair record's constructor [mk]: checked
        against the Σ it recovers the parameters and elaborates only the
        components; inferred (no expected Σ) it falls back to a constant second
