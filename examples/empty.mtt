@@ -1,38 +1,33 @@
--- The empty type: no elements, living in Prop — it is falsity. It is the
--- prelude inductive `inductive Empty : Prop` (no constructors), so its recursor
--- `Empty.rec` is ex falso: from a proof of Empty it produces a proof of any
--- goal. Unlike Unit there is no η law: Empty's content is logical rather than
--- equational.
-
-def negate (A : Prop) := A → Empty
-
--- negation of data is a proposition too, by the imax rule
-def neg_data_is_prop : Prop := Type → Empty
+-- Falsity is the prelude's `False : Prop`: the proposition with no proof, so a
+-- proof of it yields a proof of anything via `False.rec` (ex falso). Negation
+-- `Not p` is `p → False`. (`Empty : Type` is the data sibling — the empty
+-- *type* — exercised in `examples/nat.mtt`; falsity, being logical, lives in
+-- Prop.)
 
 axiom p : Prop
 axiom q : Prop
 
--- ex falso quodlibet: not p => (p => q). `Empty.rec` eliminates a proof of
--- Empty into any goal — here the Prop `q`, with the motive recovered from it.
-theorem exfalso (np : negate p) (x : p) : q := Empty.rec _ (np x)
+-- ex falso quodlibet: not p => (p => q). `False.rec` eliminates a proof of
+-- False into any goal — here the Prop `q`, with the motive recovered from it.
+theorem exfalso (np : Not p) (x : p) : q := False.rec _ (np x)
 
 -- double negation introduction
-theorem dni (x : p) : negate (negate p) := λ k : negate p ⇒ k x
+theorem dni (x : p) : Not (Not p) := λ k : Not p ⇒ k x
 
 -- contraposition: (p => q) => (not q => not p)
-theorem contrapose (f : p → q) (nq : negate q) : negate p :=
+theorem contrapose (f : p → q) (nq : Not q) : Not p :=
   λ x : p ⇒ nq (f x)
 
 -- triple negation collapses to single negation...
-theorem tne (nnnp : negate (negate (negate p))) : negate p :=
-  λ x : p ⇒ nnnp (λ np : negate p ⇒ np x)
+theorem tne (nnnp : Not (Not (Not p))) : Not p :=
+  λ x : p ⇒ nnnp (λ np : Not p ⇒ np x)
 
 -- ...but double negation ELIMINATION (not not p => p) is not provable:
 -- that is exactly classical logic, and this theory is intuitionistic.
 
--- proofs of Empty are irrelevant like any other proofs, so even stuck
--- eliminations of different proofs are definitionally equal
-axiom h1 : Empty
-axiom h2 : Empty
+-- proofs of False are irrelevant like any other proofs (it is a Prop), so even
+-- stuck eliminations of different proofs are definitionally equal
+axiom h1 : False
+axiom h2 : False
 axiom A : Type
-#check_equal (Empty.rec _ h1 : A) (Empty.rec _ h2 : A)
+#check_equal (False.rec _ h1 : A) (False.rec _ h2 : A)

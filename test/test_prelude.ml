@@ -11,12 +11,14 @@ let%expect_test "prelude is well-typed and its defs are usable" =
           ("type error: " ^ Notation.render_error sess.notation frags)
   in
   check "#check id";
-  [%expect {| fun (A : Type) => fun (x : A) => x : (A : Type) -> A -> A |}];
+  [%expect
+    {| fun {A : Sort u0} => fun (x : A) => x : {A : Sort u0} -> A -> A |}];
   check "#check comp";
   [%expect
     {|
-    fun (A : Type) =>
-    fun (B : Type) =>
-    fun (C : Type) =>
-    fun (g : B -> C) => fun (f : A -> B) => fun (x : A) => g (f x) : (A : Type) -> (B : Type) -> (C : Type) -> (B -> C) -> (A -> B) -> A -> C
+    fun {A : Sort u0} =>
+    fun {B : Sort u1} =>
+    fun {C : Sort u2} =>
+    fun (g : B -> C) => fun (f : A -> B) => fun (x : A) => g (f x) : {A : Sort u0} ->
+    {B : Sort u1} -> {C : Sort u2} -> (B -> C) -> (A -> B) -> A -> C
     |}]

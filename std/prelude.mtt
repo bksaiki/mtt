@@ -20,6 +20,22 @@ def Not (p : Prop) : Prop := p → False
 -- Anything follows from a contradiction.
 def absurd {a : Prop} {b : Sort v} (h1 : a) (h2 : Not a) : b := False.rec _ (h2 h1)
 
+-- Conjunction: `And a b` holds when both `a` and `b` do. Build it with
+-- `And.intro`; project the two halves with `.1` and `.2`.
+inductive And (a b : Prop) : Prop :=
+| intro : a → b → And a b
+
+-- Disjunction: `Or a b` holds when at least one of `a`, `b` does. Build it with
+-- `Or.inl`/`Or.inr` and eliminate with `Or.rec`.
+inductive Or (a b : Prop) : Prop :=
+| inl : a → Or a b
+| inr : b → Or a b
+
+-- Logical equivalence: `Iff a b` packages both implications. Build it with
+-- `Iff.intro`; `.1` and `.2` are the forward and backward directions.
+inductive Iff (a b : Prop) : Prop :=
+| intro : (a → b) → (b → a) → Iff a b
+
 
 -- Propositional equality. The infix `x = y` is notation for `Eq`; `rfl` (below)
 -- proves reflexivity and `Eq.rec` is the eliminator.
@@ -47,6 +63,9 @@ def subst {A : Sort u} (P : A → Sort v) {x y : A} (p : x = y) (h : P x) : P y 
 def cong {A : Sort u} {B : Sort v} (f : A → B) {x y : A} (p : x = y) : f x = f y :=
   Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ f x = f z) rfl _ p
 
+-- inequality: `Ne a b` is `¬ (a = b)`.
+def Ne {A : Sort u} (a b : A) : Prop := Not (a = b)
+
 -- === Functions ===
 
 -- The identity function.
@@ -72,13 +91,30 @@ inductive Sum (A : Sort u) (B : Sort v) : Sort (max u v) :=
 
 
 -- The empty type. It has no constructors.
-inductive Empty : Prop
+inductive Empty : Type
 
 -- The canonical type with just one element: a single element `()`.
 -- Any two elements are equal.
 @[notation unit]
 inductive Unit : Type :=
 | unit : Unit
+
+-- The two-element type of booleans.
+inductive Bool : Type :=
+| true : Bool
+| false : Bool
+
+-- if-then-else: `cond b t e` is `t` when `b` is true, `e` when it is false.
+def cond {A : Sort u} (b : Bool) (t e : A) : A := Bool.rec _ t e b
+
+-- boolean negation.
+def bnot (b : Bool) : Bool := cond b Bool.false Bool.true
+
+-- boolean conjunction.
+def band (a b : Bool) : Bool := cond a b Bool.false
+
+-- boolean disjunction.
+def bor (a b : Bool) : Bool := cond a Bool.true b
 
 -- The natural numbers. Decimal literals (`0`, `1`, `2`, …) are notation for
 -- `Nat.zero`/`Nat.succ`; eliminate with `Nat.rec`.
@@ -125,3 +161,23 @@ theorem add_comm (m n : Nat) : add m n = add n m :=
     (λ k : Nat ⇒ λ ih : add k n = add n k ⇒
       trans (cong (λ z : Nat ⇒ Nat.succ z) ih) (symm (add_succ n k)))
     m
+
+-- addition is associative.
+theorem add_assoc (m n k : Nat) : add (add m n) k = add m (add n k) :=
+  Nat.rec _
+    rfl
+    (λ j : Nat ⇒ λ ih : add (add j n) k = add j (add n k) ⇒
+      cong (λ z : Nat ⇒ Nat.succ z) ih)
+    m
+
+-- `succ` is injective: it reflects equality (by `cong pred`).
+theorem succ_inj {m n : Nat} (p : Nat.succ m = Nat.succ n) : m = n := cong pred p
+
+-- zero is not a successor. The witness is a predicate that is `True` at zero and
+-- `False` at every successor; transporting `True.intro` along `p` lands in
+-- `False`.
+theorem zero_ne_succ (n : Nat) : Ne Nat.zero (Nat.succ n) :=
+  λ p : Nat.zero = Nat.succ n ⇒
+    subst
+      (λ k : Nat ⇒ Nat.rec (λ _ : Nat ⇒ Prop) True (λ _ : Nat ⇒ λ _ : Prop ⇒ False) k)
+      p True.intro

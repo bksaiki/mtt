@@ -3,10 +3,10 @@ definitions with no ceremony:
 
   $ cat > p.mtt <<EOF
   > #check id
-  > #check_equal (id Nat 0) 0
+  > #check_equal (id 0) 0
   > EOF
   $ mtt p.mtt
-  fun (A : Type) => fun (x : A) => x : (A : Type) -> A -> A
+  fun {A : Sort u0} => fun (x : A) => x : {A : Sort u0} -> A -> A
 
 A file that opens with `prelude` opts out — a bare environment, for defining
 the prelude itself or a from-scratch development. Its names are then unbound:
