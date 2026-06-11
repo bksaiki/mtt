@@ -83,8 +83,11 @@ compared *at a type*, reconstructing spine types via `infer_neutral`):
   level-abstracted (`Value.VPoly` at its context slot) and referenced by a
   `Type.Def (i, levels)` node — still a de Bruijn index, but carrying use-site
   level arguments that `eval`/`infer` instantiate (δ + level substitution in one
-  step). Monomorphic defs and locals stay plain `Var`. Upgrade path if unfolded
-  output hurts: glued evaluation.
+  step). Monomorphic defs and locals stay plain `Var`. A local `let x := v in b`
+  is the same δ in term form — a transparent `Type.Let` node whose `eval` binds
+  `x` to `v`, so no `Let` survives evaluation and `x ≡ v` holds inside `b`
+  (a dependent `let` like `let n := 2 in (rfl : n = 2)` checks). Upgrade path if
+  unfolded output hurts: glued evaluation.
 - **η for records** (surjective pairing, generalized) — at any
   single-constructor, non-recursive inductive, two values are equal iff their
   field projections are (the second compared at the family instantiated by the
@@ -227,8 +230,9 @@ name, beside the de Bruijn context.
   over the universe, a proof-irrelevant pair/disjunction of Props, and equality
   *of types* (`Unit = Unit`) all form, with the level arguments inferred per use.
   With `Eq` gone the kernel has **no built-in datatypes** — only
-  `Sort`/`Π`/`λ`/`App`/`Var`/`Proj`, the polymorphic-def reference `Def`, and the
-  generic inductive machinery `Ind`/`Ctor`/`Rec`.
+  `Sort`/`Π`/`λ`/`App`/`Var`/`Proj`, the transparent local binding `Let`, the
+  polymorphic-def reference `Def`, and the generic inductive machinery
+  `Ind`/`Ctor`/`Rec`.
 - **Soundness gates** (`check.ml`): strict positivity — the inductive may occur
   only as a *direct* recursive field `T params idxs` (never under an arrow or
   nested, and never inside the `idxs` of such a field — more conservative than
@@ -310,6 +314,11 @@ type drives every inference the surface leaves implicit:
 - **Named projections.** `e.field` on a record value resolves to the positional
   `Proj` by looking the field name up in the (single) constructor's fields, so
   `p.fst`/`p.snd` work alongside `p.1`/`p.2`.
+- **Local `let`.** `let x [: A] := v in b` elaborates to the transparent
+  `Type.Let` node: the value is elaborated (against `A`, or its type inferred),
+  the body under `x` bound to `v`'s value (so `x ≡ v` inside `b`, even for a
+  dependent `let`), with the mode threaded so a checking goal flows into the
+  body.
 - **Recursors.** A recursor's minors and major are elaborated in *checking*
   position (against the derived minor-premise and `Ind`-applied types), so
   check-only forms — a `rfl` base case, a constructor major — work. Two
