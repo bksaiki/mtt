@@ -29,16 +29,14 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
       Follow-up:
       - [ ] optional: a real glued `Const`/def table (pairs with the "glued
             evaluation" engineering item) — defs are eager δ today.
-- [~] Align the prelude's logic with Lean. Done: the prelude now has
-      `True`/`False`/`Not` and Lean's `absurd : a → ¬a → b` (over `Not`/`False`,
-      `b : Sort v`); raw ex falso is `False.rec _ h`. Remaining cleanup:
-      - [ ] `Empty : Prop` and `False : Prop` are now redundant (both the empty
-            proposition). Lean keeps them distinct by universe — `Empty : Type`
-            (data), `False : Prop` (logic); decide whether to make `Empty : Type`
-            or drop one. `True` is currently unused.
-      - [ ] sync the stale prose that still describes the old `Empty`-based
-            `absurd`/`not`: `design.md`, `questions.md`, this file, and
-            `check.mli`'s header.
+- [x] Align the prelude's logic with Lean. The prelude has `True`/`False`/`Not`
+      and Lean's `absurd : a → ¬a → b` (over `Not`/`False`, `b : Sort v`); raw ex
+      falso is `False.rec _ h`. `Empty : Type` (data) and `False : Prop` (logic)
+      are kept distinct by universe, as in Lean. The logical connectives
+      `And`/`Or`/`Iff` (with infix `∧`/`∨`/`↔` notation) and `Ne` round out the
+      logic; `Bool` and the `add`/`mul` facts (`add_comm`/`add_assoc`/`succ_inj`/
+      `zero_ne_succ`/…) round out the data. The prose in `design.md`/
+      `questions.md`/`check.mli` was synced to the `False`-based ex falso.
 
 ## Elaborator (type-directed surface → core)
 

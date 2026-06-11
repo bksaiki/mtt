@@ -4,6 +4,8 @@ prelude
 -- equality, arithmetic) loaded automatically into every file and REPL session.
 -- Being ordinary mtt, it also doubles as a reference for how the basics look.
 
+-- === Logic ===
+
 -- `True` is a proposition with a single introduction rule.
 -- In other words, `True` is just true.
 inductive True : Prop :=
@@ -40,10 +42,12 @@ inductive Iff (a b : Prop) : Prop :=
 | intro : (a → b) → (b → a) → Iff a b
 
 
+-- === Equality ===
+
 -- Propositional equality. The infix `x = y` is notation for `Eq`; `rfl` (below)
 -- proves reflexivity and `Eq.rec` is the eliminator.
 @[notation eq]
-inductive Eq (A : Sort u) (x : A) : A -> Prop :=
+inductive Eq (A : Sort u) (x : A) : A → Prop :=
 | refl : Eq A x x
 
 -- reflexivity: `rfl : x = x`. The type and endpoint are implicit, so it proves
@@ -77,6 +81,8 @@ def id {A : Sort u} (x : A) : A := x
 -- Function composition: `comp g f` applies `f`, then `g`.
 def comp {A : Sort u} {B : Sort v} {C : Sort w} (g : B → C) (f : A → B) (x : A) : C := g (f x)
 
+
+-- === Data ===
 
 -- The dependent pair: `(a, b)` is a pair and `p.1`/`p.2` its projections. The
 -- type is `Σ (x : A) ⇒ B` with `B` a family over `A`, or `A × B` when `B` does
@@ -118,6 +124,8 @@ def band (a b : Bool) : Bool := cond a b Bool.false
 
 -- boolean disjunction.
 def bor (a b : Bool) : Bool := cond a Bool.true b
+
+-- === Arithmetic ===
 
 -- The natural numbers. Decimal literals (`0`, `1`, `2`, …) are notation for
 -- `Nat.zero`/`Nat.succ`; eliminate with `Nat.rec`.
