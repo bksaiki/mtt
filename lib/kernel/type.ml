@@ -29,6 +29,10 @@ type t =
   | Sort of Level.t (* the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of icit * string * t * t (* Π (x : A). B, B binds index 0 *)
   | Lam of icit * string * t * t (* λ (x : A). b *)
+  | Let of string * t * t * t
+    (* let x : A := v in b — a transparent local binding (b binds index 0; x is
+       definitionally v inside b). Evaluation substitutes v, so no [Let] ever
+       appears in a value: it is δ, performed eagerly like a top-level def. *)
   | App of t * t
   | Proj of int * t (* x.(i+1): the i-th field projection of a record *)
   | Meta of
@@ -74,6 +78,8 @@ let rec subst_levels args t =
       t
   | Pi (i, x, a, b) -> Pi (i, x, subst_levels args a, subst_levels args b)
   | Lam (i, x, a, b) -> Lam (i, x, subst_levels args a, subst_levels args b)
+  | Let (x, a, v, b) ->
+      Let (x, subst_levels args a, subst_levels args v, subst_levels args b)
   | App (f, a) -> App (subst_levels args f, subst_levels args a)
   | Proj (i, e) -> Proj (i, subst_levels args e)
   | Ind (n, ls) -> Ind (n, List.map (Level.subst args) ls)
@@ -87,6 +93,7 @@ let rec occurs k = function
   | Pi (_, _, a, b)
   | Lam (_, _, a, b) ->
       occurs k a || occurs (k + 1) b
+  | Let (_, a, v, b) -> occurs k a || occurs k v || occurs (k + 1) b
   | App (f, a) -> occurs k f || occurs k a
   | Proj (_, t) -> occurs k t
   (* a metavariable carries no de Bruijn index of its own; its dependencies ride
@@ -114,6 +121,7 @@ let rec has_meta = function
   | Pi (_, _, a, b)
   | Lam (_, _, a, b) ->
       has_meta a || has_meta b
+  | Let (_, a, v, b) -> has_meta a || has_meta v || has_meta b
   | App (a, b) -> has_meta a || has_meta b
 
 (* whether any level metavariable occurs in [t] (in a [Sort] or a head's level
@@ -135,6 +143,7 @@ let rec has_level_meta = function
   | Pi (_, _, a, b)
   | Lam (_, _, a, b) ->
       has_level_meta a || has_level_meta b
+  | Let (_, a, v, b) -> has_level_meta a || has_level_meta v || has_level_meta b
   | App (a, b) -> has_level_meta a || has_level_meta b
 
 (* makes the hint [x] distinct from every name in scope *)
@@ -232,6 +241,13 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
         in
         paren_if fmt (prec > 0) (fun fmt ->
             Format.fprintf fmt "@[fun %s%s : %a%s =>@ %a@]" l x (go 0 names) a r
+              (go 0 (x :: names))
+              b)
+    | Let (x, a, v, b) ->
+        let x = freshen names x in
+        paren_if fmt (prec > 0) (fun fmt ->
+            Format.fprintf fmt "@[let %s : %a := %a in@ %a@]" x (go 0 names) a
+              (go 0 names) v
               (go 0 (x :: names))
               b)
     | App (f, a) ->

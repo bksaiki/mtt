@@ -24,6 +24,7 @@ and desc =
     (* match e with | C x… => b … end: scrutinee and per-arm constructor name,
        pattern variables, body — case-analysis sugar for the recursor *)
   | Ascribe of t * t (* (t : A) *)
+  | Let of string * t option * t * t (* let x [: A] := v in b *)
   | MkUnit (* (), sugar for the prelude's Unit.unit *)
   | Sigma of string * t * t (* Σ (x : A) ⇒ B *)
   | Prod of t * t (* A × B *)
@@ -80,6 +81,10 @@ let level_vars t =
     | Match (e, arms) ->
         go e;
         List.iter (fun (_, _, b) -> go b) arms
+    | Let (_, a, v, b) ->
+        Option.iter go a;
+        go v;
+        go b
   in
   go t;
   !seen

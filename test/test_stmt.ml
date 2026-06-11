@@ -770,3 +770,38 @@ let%expect_test "polymorphic equality toolkit: levels inferred, incl. at Prop" =
     Eq.rec Prop P (fun (z : Prop) => fun (q : P = z) => z) hp Q hpq : Q
     Eq.rec N a (fun (z : N) => fun (q : a = z) => g a = g z) rfl b pab : g a = g b
     |}]
+
+(* local [let x [: A] := v in b]: a transparent binding (x is definitionally v
+   inside b), elaborated to the kernel's [Let] node. Like a def it unfolds, so
+   results print in their expanded form. *)
+let%expect_test "local let bindings" =
+  session
+    [ (* the binding unfolds in the body *)
+      "#check let x := 0 in Nat.succ x"
+    ; (* an annotation, plus nesting and shadowing (inner x is succ of outer) *)
+      "#check let x : Nat := 0 in let x := Nat.succ x in x"
+    ; (* dependent: x is definitionally its value in the body, so a proof about
+         the value checks against a goal that mentions x *)
+      "#check let n := 2 in (rfl : n = 2)"
+    ; (* a type-level let *)
+      "#check let T := Nat in (0 : T)"
+    ; (* in a def body, and computing through the binding *)
+      "def quad (n : Nat) : Nat := let m := add n n in add m m"
+    ; "#check_equal (quad 1) 4"
+    ; (* a let-bound proof in checking position *)
+      "axiom P : Prop"
+    ; "axiom h : P"
+    ; "theorem keep : P := let p := h in p"
+    ; (* the value must match its annotation *)
+      "axiom A : Type"
+    ; "axiom a : A"
+    ; "#check let x : Nat := a in x"
+    ];
+  [%expect
+    {|
+    1 : Nat
+    1 : Nat
+    rfl : 2 = 2
+    0 : Nat
+    type error: this term has type A but Nat was expected
+    |}]

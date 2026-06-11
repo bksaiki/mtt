@@ -46,6 +46,9 @@ rule token = parse
   | "match" { MATCH }
   | "with" { WITH }
   | "end" { END }
+  (* [let x [: A] := v in b]: a transparent local binding *)
+  | "let" { LET }
+  | "in" { IN }
   | "->" { ARROW }
   | "→" { ARROW }
   | "=>" { DARROW }

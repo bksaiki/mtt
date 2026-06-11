@@ -1,0 +1,29 @@
+-- Local bindings: `let x [: A] := v in b`. The binding is *transparent* — inside
+-- the body, x is definitionally equal to v (just like a top-level `def`), so it
+-- both names a shared subexpression and lets the checker see through it. A `let`
+-- evaporates under evaluation (it is δ, performed eagerly), so results print in
+-- their expanded form.
+
+-- naming a shared subexpression
+def quad (n : Nat) : Nat := let m := add n n in add m m
+#check_equal (quad 1) 4
+
+-- transparency: x is definitionally its value in the body, so a proof about the
+-- value checks against a goal that mentions the bound name
+#check let n := 2 in (rfl : n = 2)
+
+-- an optional annotation, plus nesting and shadowing (the inner x is succ of the
+-- outer one)
+#check let x : Nat := 0 in let x := Nat.succ x in x
+
+-- a type-level let: T stands for Nat throughout the body
+#check let T := Nat in (0 : T)
+
+-- in a checking position the expected type flows into the body, so a let-bound
+-- proof keeps its type
+axiom P : Prop
+axiom hp : P
+theorem keep : P := let p := hp in p
+
+-- a let also nests inside a larger term (here, the argument of a function)
+#check Nat.succ (let k := 1 in add k k)

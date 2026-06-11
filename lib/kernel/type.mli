@@ -37,6 +37,10 @@ type t =
       (** the Sort hierarchy: Prop = Sort 0, Type i = Sort (i+1) *)
   | Pi of icit * string * t * t  (** Π (x : A). B, where B binds index 0 *)
   | Lam of icit * string * t * t  (** λ (x : A). b, where b binds index 0 *)
+  | Let of string * t * t * t
+      (** [let x : A := v in b] — a transparent local binding ([b] binds index
+          0; [x] is definitionally [v] in [b]). Evaluation substitutes [v]
+          (eager δ), so no [Let] survives into a value. *)
   | App of t * t
   | Proj of int * t
       (** [x.(i+1)]: the [i]-th (0-based) field projection of a record (a

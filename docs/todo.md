@@ -5,7 +5,10 @@
 Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
 `inductive.ml`/`signature.ml`); everything here is checked, not elaborated.
 
-- [ ] Local `let` expressions
+- [x] Local `let` expressions — `let x [: A] := v in b`, a transparent core node
+      (`Type.Let`): `eval` binds `x` to `v` (eager δ, so no `Let` survives into a
+      value), and the body sees `x ≡ v` definitionally (a dependent
+      `let n := 2 in (rfl : n = 2)` checks). See `examples/let.mtt`.
 - [ ] Mutual and nested inductives
 - [ ] Full strict positivity: accept strictly-positive function-typed recursive
       arguments (`(Nat -> T) -> T`); currently only direct recursive fields

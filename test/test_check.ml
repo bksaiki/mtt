@@ -220,3 +220,21 @@ let%expect_test "Nat.rec at the surface (large elimination into Type)" =
   infer
     {|λ n : Nat ⇒ Nat.rec (λ x : Nat ⇒ Type) Unit (λ k : Nat ⇒ λ ih : Type ⇒ ih) n|};
   [%expect {| Nat -> Type |}]
+
+(* a transparent local binding, built directly as core (the surface [let] is
+   elaborated in a later stage): its body's type must unfold the let-bound
+   variable, since that variable is out of scope outside the [let] — so [let A :
+   Type 1 := Type in (fun x : A => x)] has type [Type -> Type], not a dangling
+   [A -> A]. *)
+let%expect_test "kernel: transparent let unfolds in the body's type" =
+  let t =
+    Type.Let
+      ( "A"
+      , Type.Sort (Level.of_int 2)
+      , Type.Sort (Level.of_int 1)
+      , Type.Lam (Type.Explicit, "x", Type.Var 0, Type.Var 0) )
+  in
+  print_endline
+    (Notation.show prelude.notation prelude.ctx.names prelude.ctx.lvl
+       (Check.infer prelude.ctx t));
+  [%expect {| Type -> Type |}]

@@ -96,6 +96,8 @@ let rec lift d c (t : Type.t) : Type.t =
         , ls )
   | Type.Pi (ic, x, a, b) -> Type.Pi (ic, x, lift d c a, lift d (c + 1) b)
   | Type.Lam (ic, x, a, b) -> Type.Lam (ic, x, lift d c a, lift d (c + 1) b)
+  | Type.Let (x, a, v, b) ->
+      Type.Let (x, lift d c a, lift d c v, lift d (c + 1) b)
   | Type.App (f, a) -> Type.App (lift d c f, lift d c a)
   | Type.Proj (i, e) -> Type.Proj (i, lift d c e)
   | Type.Sort _
@@ -133,6 +135,7 @@ let abstract needle t =
             , ls )
       | Type.Pi (ic, x, a, b) -> Type.Pi (ic, x, go k a, go (k + 1) b)
       | Type.Lam (ic, x, a, b) -> Type.Lam (ic, x, go k a, go (k + 1) b)
+      | Type.Let (x, a, v, b) -> Type.Let (x, go k a, go k v, go (k + 1) b)
       | Type.App (f, a) -> Type.App (go k f, go k a)
       | Type.Proj (i, e) -> Type.Proj (i, go k e)
       | Type.Sort _
@@ -469,6 +472,26 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
         let va = Value.eval ctx.Check.env a' in
         let t' = go ctx (Check va) t in
         Type.App (Type.Lam (Type.Explicit, "x", a', Type.Var 0), t')
+    (* a transparent local binding. Elaborate the value (against its annotation
+       if given, else inferring its type), then the body under [x] bound to the
+       value itself ([Check.extend], as for a def) so it is definitionally [v]
+       inside [b] — [let n := 2 in (rfl : n = 2)] checks. The mode flows into
+       the body, and the kernel re-checks the [Let] (which δ-reduces [x] to
+       [v]). *)
+    | Ast.Let (x, aopt, v, b) ->
+        let a', v', va =
+          match aopt with
+          | Some a ->
+              let a' = go ctx Infer a in
+              let va = Value.eval ctx.Check.env a' in
+              (a', go ctx (Check va) v, va)
+          | None ->
+              let v' = go ctx Infer v in
+              let va = Meta.force !ms (elab_infer ctx v') in
+              (Value.quote ctx.Check.lvl va, v', va)
+        in
+        let ctx' = Check.extend x (Value.eval ctx.Check.env v') va ctx in
+        Type.Let (x, a', v', go ctx' mode b)
     (* a pair is sugar for the dependent-pair record's constructor [mk]: checked
        against the Σ it recovers the parameters and elaborates only the
        components; inferred (no expected Σ) it falls back to a constant second

@@ -59,6 +59,9 @@ let rec eval env t =
   | Type.Sort i -> Sort i
   | Type.Pi (i, x, a, b) -> Pi (i, x, eval env a, { env; body = b })
   | Type.Lam (i, x, a, b) -> Lam (i, x, eval env a, { env; body = b })
+  (* a transparent let binds [x] directly to [v]'s value (δ), so the binding
+     vanishes — exactly like a top-level def in the environment *)
+  | Type.Let (_, _, v, b) -> eval (eval env v :: env) b
   | Type.App (f, a) -> apply (eval env f) (eval env a)
   | Type.Proj (i, t) -> vproj i (eval env t)
   (* inductive heads start empty and accumulate their arguments via [apply] *)
