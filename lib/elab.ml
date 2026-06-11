@@ -96,6 +96,8 @@ let rec lift d c (t : Type.t) : Type.t =
         , ls )
   | Type.Pi (ic, x, a, b) -> Type.Pi (ic, x, lift d c a, lift d (c + 1) b)
   | Type.Lam (ic, x, a, b) -> Type.Lam (ic, x, lift d c a, lift d (c + 1) b)
+  | Type.Let (x, a, v, b) ->
+      Type.Let (x, lift d c a, lift d c v, lift d (c + 1) b)
   | Type.App (f, a) -> Type.App (lift d c f, lift d c a)
   | Type.Proj (i, e) -> Type.Proj (i, lift d c e)
   | Type.Sort _
@@ -133,6 +135,7 @@ let abstract needle t =
             , ls )
       | Type.Pi (ic, x, a, b) -> Type.Pi (ic, x, go k a, go (k + 1) b)
       | Type.Lam (ic, x, a, b) -> Type.Lam (ic, x, go k a, go (k + 1) b)
+      | Type.Let (x, a, v, b) -> Type.Let (x, go k a, go k v, go (k + 1) b)
       | Type.App (f, a) -> Type.App (go k f, go k a)
       | Type.Proj (i, e) -> Type.Proj (i, go k e)
       | Type.Sort _

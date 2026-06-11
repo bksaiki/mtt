@@ -451,6 +451,15 @@ let rec infer ctx t =
          codomain closure *)
       Value.Pi
         (vis, x, va, { env = ctx.env; body = Value.quote (ctx.lvl + 1) vb })
+  (* (Let) — a transparent local binding: check [v : A], then type [b] under [x]
+     bound to [v]'s value ([extend], as for a def). [b]'s type comes back with
+     [x] already δ-reduced to [v], so it is self-contained in the outer context
+     (the binder leaves no trace). *)
+  | Type.Let (x, a, v, b) ->
+      let _ = infer_univ ctx a in
+      let va = Value.eval ctx.env a in
+      check ctx v va;
+      infer (extend x (Value.eval ctx.env v) va ctx) b
   (* (App) — but a recursor is motive-polymorphic, so it has no type as a
      constant: a fully-applied recursor spine gets a bespoke rule (like NatRec),
      detected by peeling the application head *)
@@ -673,6 +682,14 @@ and check ctx t expected =
           ];
       check (bind x va ctx) b
         (Value.apply_closure c (Value.Neutral (Value.Var ctx.lvl)))
+  (* a let against a goal: check [v : A], then check [b] against the goal under
+     [x] bound to [v] (transparent), so the goal flows into the body. The goal
+     is from the outer context, valid unchanged under the extra binder. *)
+  | Type.Let (x, a, v, b), _ ->
+      let _ = infer_univ ctx a in
+      let va = Value.eval ctx.env a in
+      check ctx v va;
+      check (extend x (Value.eval ctx.env v) va ctx) b expected
   (* subsumption: infer and compare up to definitional equality (βδη plus proof
      irrelevance); no cumulativity, so this is plain type conversion *)
   | _ ->

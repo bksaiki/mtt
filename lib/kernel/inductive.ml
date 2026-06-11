@@ -147,4 +147,5 @@ let rec occurs name (t : Type.t) =
   | Pi (_, _, a, b)
   | Lam (_, _, a, b) ->
       occurs name a || occurs name b
+  | Let (_, a, v, b) -> occurs name a || occurs name v || occurs name b
   | App (a, b) -> occurs name a || occurs name b

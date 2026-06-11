@@ -186,6 +186,8 @@ let rec zonk ms lvl (t : Type.t) : Type.t =
   | Type.Proj (i, a) -> Type.Proj (i, zonk ms lvl a)
   | Type.Pi (i, x, a, b) -> Type.Pi (i, x, zonk ms lvl a, zonk ms (lvl + 1) b)
   | Type.Lam (i, x, a, b) -> Type.Lam (i, x, zonk ms lvl a, zonk ms (lvl + 1) b)
+  | Type.Let (x, a, v, b) ->
+      Type.Let (x, zonk ms lvl a, zonk ms lvl v, zonk ms (lvl + 1) b)
   | Type.App (f, a) -> Type.App (zonk ms lvl f, zonk ms lvl a)
 
 (* unify two values in context [ctx], returning the updated metacontext. [ctx]
