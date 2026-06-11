@@ -195,35 +195,38 @@ let%expect_test "eta for Unit: every element is definitionally ()" =
   [%expect
     {| type error: #check_equal failed: Unit is not convertible with Prop |}]
 
-let%expect_test "Empty: irrelevance and stuck absurd" =
-  (* Empty and absurd come from the prelude *)
+let%expect_test "False: irrelevance and stuck elimination" =
+  (* False is the prelude's falsity (a Prop); False.rec is ex falso *)
   session
     [ "axiom N : Type"
-    ; "axiom h1 : Empty"
-    ; "axiom h2 : Empty"
-    ; (* all proofs of Empty are equal (it is a Prop) *)
+    ; "axiom h1 : False"
+    ; "axiom h2 : False"
+    ; (* all proofs of False are equal (it is a Prop) *)
       "#check_equal h1 h2"
     ; (* and so stuck eliminations of them are equal too *)
-      "#check_equal (absurd N h1) (absurd N h2)"
+      "#check_equal (False.rec _ h1 : N) (False.rec _ h2 : N)"
     ; (* native negation, and double-negation introduction *)
-      "def negate (A : Prop) := A → Empty"
+      "def negate (A : Prop) := A → False"
     ; "#check negate"
     ; "axiom p : Prop"
     ; "theorem dni (x : p) : negate (negate p) := λ k : negate p ⇒ k x"
     ];
-  [%expect {| fun (A : Prop) => A -> Empty : Prop -> Prop |}]
+  [%expect {| fun (A : Prop) => A -> False : Prop -> Prop |}]
 
 (* a hole [_] elaborates to a metavariable that unification solves from the
    surrounding term; an unsolvable one is rejected. *)
 let%expect_test "holes: solved by unification, rejected when unsolvable" =
   session
-    [ (* the type argument is recovered from the value argument *)
-      "#check id _ 0"
-    ; "#eval id _ 0"
-    ; "#check_equal (id _ 0) 0"
+    [ (* an explicit-argument identity, so the type argument is written [_] (the
+         prelude's [id] takes it implicitly) *)
+      "def myid (A : Type) (x : A) : A := x"
+    ; (* the type argument is recovered from the value argument *)
+      "#check myid _ 0"
+    ; "#eval myid _ 0"
+    ; "#check_equal (myid _ 0) 0"
     ; (* solved from a local variable, under binders: the solution is read back
          as a reuse-safe de Bruijn index, so the def is usable at other types *)
-      "def appId (A : Type) (x : A) : A := id _ x"
+      "def appId (A : Type) (x : A) : A := myid _ x"
     ; "#check appId"
     ; "#check_equal (appId Nat 0) 0"
     ; (* nothing determines the hole: rejected *)
@@ -804,4 +807,34 @@ let%expect_test "local let bindings" =
     rfl : 2 = 2
     0 : Nat
     type error: this term has type A but Nat was expected
+    |}]
+
+(* the logical connectives `∧`/`∨`/`↔` are infix notation for the prelude's
+   `And`/`Or`/`Iff` formers: ∧ binds tighter than ∨ tighter than ↔, all tighter
+   than `->`; ASCII aliases parse identically, and a bare former folds back to
+   infix on printing. *)
+let%expect_test "logical connective notation" =
+  session
+    [ "axiom p : Prop"
+    ; "axiom q : Prop"
+    ; "axiom r : Prop"
+    ; "#check p ∧ q"
+    ; "#check p ∨ q"
+    ; "#check p ↔ q"
+    ; "#check p ∧ q ∨ r ↔ p"
+    ; "#check p → q ∧ r"
+    ; "#check (p ↔ q) → r"
+    ; "#check p /\\ q"
+    ; "#check And p q"
+    ];
+  [%expect
+    {|
+    p ∧ q : Prop
+    p ∨ q : Prop
+    p ↔ q : Prop
+    p ∧ q ∨ r ↔ p : Prop
+    p -> q ∧ r : Prop
+    p ↔ q -> r : Prop
+    p ∧ q : Prop
+    p ∧ q : Prop
     |}]

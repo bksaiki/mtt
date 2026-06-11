@@ -21,6 +21,9 @@ type t =
         (** the equality inductive, by name: an applied former [Eq A x y]
             renders as [x = y] and its constructor [Eq.refl A x] as [rfl]. The
             recursor ([Eq.rec], i.e. [J]) is an ordinary qualified name. *)
+  ; and_ : string option  (** conjunction former, by name: [a ∧ b] *)
+  ; or_ : string option  (** disjunction former, by name: [a ∨ b] *)
+  ; iff_ : string option  (** equivalence former, by name: [a ↔ b] *)
   }
 
 (** the empty registry: no role bound, so nothing is sugared *)

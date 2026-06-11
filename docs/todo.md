@@ -29,11 +29,14 @@ Type theory implemented in `type.ml`/`value.ml`/`check.ml` (and
       Follow-up:
       - [ ] optional: a real glued `Const`/def table (pairs with the "glued
             evaluation" engineering item) — defs are eager δ today.
-- [ ] Align `absurd` with Lean. Ours is ex falso —
-      `absurd (A : Sort u) (h : Empty) : A`, i.e. Lean's `False.elim` (now
-      universe-polymorphic). Lean's `absurd : a → ¬a → b` instead takes `p` and
-      `¬p` and forms the contradiction itself; switching would leave raw ex falso
-      as just `Empty.rec`. Wants implicit args for full parity.
+- [x] Align the prelude's logic with Lean. The prelude has `True`/`False`/`Not`
+      and Lean's `absurd : a → ¬a → b` (over `Not`/`False`, `b : Sort v`); raw ex
+      falso is `False.rec _ h`. `Empty : Type` (data) and `False : Prop` (logic)
+      are kept distinct by universe, as in Lean. The logical connectives
+      `And`/`Or`/`Iff` (with infix `∧`/`∨`/`↔` notation) and `Ne` round out the
+      logic; `Bool` and the `add`/`mul` facts (`add_comm`/`add_assoc`/`succ_inj`/
+      `zero_ne_succ`/…) round out the data. The prose in `design.md`/
+      `questions.md`/`check.mli` was synced to the `False`-based ex falso.
 
 ## Elaborator (type-directed surface → core)
 
@@ -64,6 +67,19 @@ the remaining work is below.
 
 ## Surface syntax
 
+- [ ] Dot notation and per-type namespaces. Generalize the per-inductive
+      namespace (today only `T.rec`/`T.c`, hardcoded in the signature) to also
+      hold associated definitions: allow `def T.f …`/`theorem T.f …`, resolve a
+      qualified `T.f` as a term, and add Lean-style value dot notation
+      `e.f args` ⇒ `T.f … e …` for `e : T …` (the receiver inserted at the first
+      explicit `T`-typed argument, found from `T.f`'s type). This is the enabling
+      half of the `<type>.<name>` theorem-naming convention (`Eq.symm`,
+      `Nat.add_comm`) and would let `symm`/`trans`/… and `(h : False).elim` be
+      written method-style. Subtleties: `e.name` already means a record
+      projection, so projection-vs-method needs a defined precedence (Lean: field
+      first); resolution must fall back from ctor/`rec` to a namespaced def.
+      Distinct from a module/file system (`<module>.<name>`), an orthogonal later
+      concern. Subsumes the `open` item below.
 - [ ] `open`-style form to use a type's constructors unqualified (`nil` instead
       of `List.nil`); also lets the printer drop the qualifier when unambiguous
 - [ ] Block comments: `/- ... -/` (nesting)

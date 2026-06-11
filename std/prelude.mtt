@@ -1,128 +1,155 @@
 prelude
 
--- The mtt standard prelude. Brought into scope by the `prelude` keyword;
--- everything here is axiom-free (definable from the core). Because it is
--- ordinary mtt, this file doubles as the reference for how the basics are
--- built.
+-- The mtt standard prelude: small, axiom-free definitions (data, logic,
+-- equality, arithmetic) loaded automatically into every file and REPL session.
+-- Being ordinary mtt, it also doubles as a reference for how the basics look.
 
--- === Data ===
+-- === Logic ===
 
--- the unit type: a record (single constructor, no fields), so it has
--- definitional η — any two elements are equal. The `@[notation unit]` attribute
--- registers it as the type whose constructor `()` abbreviates (and which the
--- printer renders back as `()`).
-@[notation unit]
-inductive Unit : Type :=
-| unit : Unit
+-- `True` is a proposition with a single introduction rule.
+-- In other words, `True` is just true.
+inductive True : Prop :=
+| intro : True
+
+-- `False` is the empty proposition, with no introduction rules.
+-- It represents a contradiction.
+inductive False : Prop
+
+-- `Not p` is the negation of `p`, defined as `p → False`.
+-- It holds exactly when `p` is unprovable.
+def Not (p : Prop) : Prop := p → False
+
+-- Anything follows from a contradiction.
+def absurd {a : Prop} {b : Sort v} (h1 : a) (h2 : Not a) : b := False.rec _ (h2 h1)
+
+-- Conjunction `a ∧ b`: holds when both `a` and `b` do. Build it with
+-- `And.intro`; project the two halves with `.1` and `.2`.
+@[notation and]
+inductive And (a b : Prop) : Prop :=
+| intro : a → b → And a b
+
+-- Disjunction `a ∨ b`: holds when at least one of `a`, `b` does. Build it with
+-- `Or.inl`/`Or.inr` and eliminate with `Or.rec`.
+@[notation or]
+inductive Or (a b : Prop) : Prop :=
+| inl : a → Or a b
+| inr : b → Or a b
+
+-- Logical equivalence `a ↔ b`: packages both implications. Build it with
+-- `Iff.intro`; `.1` and `.2` are the forward and backward directions.
+@[notation iff]
+inductive Iff (a b : Prop) : Prop :=
+| intro : (a → b) → (b → a) → Iff a b
+
+
+-- === Equality ===
+
+-- Propositional equality. The infix `x = y` is notation for `Eq`; `rfl` (below)
+-- proves reflexivity and `Eq.rec` is the eliminator.
+@[notation eq]
+inductive Eq (A : Sort u) (x : A) : A → Prop :=
+| refl : Eq A x x
+
+-- reflexivity: `rfl : x = x`. The type and endpoint are implicit, so it proves
+-- any goal of the form `a = a`.
+def rfl {A : Sort u} {x : A} : x = x := Eq.refl A x
+
+-- symmetry: if `x = y` then `y = x`.
+def symm {A : Sort u} {x y : A} (p : x = y) : y = x :=
+  Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ z = x) rfl _ p
+
+-- transitivity: if `x = y` and `y = z` then `x = z`.
+def trans {A : Sort u} {x y z : A} (p : x = y) (q : y = z) : x = z :=
+  Eq.rec _ _ (λ w : A ⇒ λ r : y = w ⇒ x = w) p _ q
+
+-- transport: given `x = y`, rewrite a proof of `P x` into a proof of `P y`.
+def subst {A : Sort u} (P : A → Sort v) {x y : A} (p : x = y) (h : P x) : P y :=
+  Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ P z) h _ p
+
+-- congruence: from `p : x = y`, `cong f p : f x = f y`.
+def cong {A : Sort u} {B : Sort v} (f : A → B) {x y : A} (p : x = y) : f x = f y :=
+  Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ f x = f z) rfl _ p
+
+-- inequality: `Ne a b` is `¬ (a = b)`.
+def Ne {A : Sort u} (a b : A) : Prop := Not (a = b)
 
 -- === Functions ===
 
-def id (A : Type) (x : A) : A := x
+-- The identity function.
+def id {A : Sort u} (x : A) : A := x
 
-def comp (A B C : Type) (g : B → C) (f : A → B) (x : A) : C := g (f x)
+-- Function composition: `comp g f` applies `f`, then `g`.
+def comp {A : Sort u} {B : Sort v} {C : Sort w} (g : B → C) (f : A → B) (x : A) : C := g (f x)
 
--- === Pairs ===
 
--- the dependent pair (Σ-type): a record (single constructor, no recursive
--- fields), so it has definitional η and the positional projections .1/.2. The
--- `@[notation sigma]` attribute registers it as the type the `Σ`/`×` formers
--- and `(a, b)` tuples abbreviate; `B` is a family over `A`, and a non-dependent
--- `A × B` is `Sigma A (fun _ => B)`. Universe-polymorphic: it lands at the max
--- of its components' levels, so it also pairs a `Prop` second component (e.g.
--- `Σ (n : Nat) ⇒ Eq Nat n n`) and ranges over the universe (`Σ (A : Type) ⇒ A`).
+-- === Data ===
+
+-- The dependent pair: `(a, b)` is a pair and `p.1`/`p.2` its projections. The
+-- type is `Σ (x : A) ⇒ B` with `B` a family over `A`, or `A × B` when `B` does
+-- not depend on `A`. It works at any universe, so it can also pair proofs.
 @[notation sigma]
 inductive Sigma (A : Sort u) (B : A → Sort v) : Sort (max u v) :=
 | mk : (fst : A) → (snd : B fst) → Sigma A B
 
--- the binary sum (coproduct). `@[notation sum]` registers it for the infix `+`
--- former; its injections and eliminator are the ordinary qualified names
--- `Sum.inl`/`Sum.inr`/`Sum.rec` (like every other inductive). Universe-
--- polymorphic like `Sigma`: it lands at the max of its summands' levels, so a
--- proof-irrelevant disjunction (both summands in `Prop`) is `Sum`-expressible.
+-- The binary sum `A + B`: inject with `Sum.inl`/`Sum.inr`, eliminate with
+-- `Sum.rec`. It works for propositions too (a disjunction), not just data.
 @[notation sum]
 inductive Sum (A : Sort u) (B : Sort v) : Sort (max u v) :=
 | inl : A → Sum A B
 | inr : B → Sum A B
 
--- === Logic ===
 
--- falsity: an inductive with no constructors. Empty.rec is ex falso — with no
--- minor premises it eliminates a proof of Empty into any motive (subsingleton
--- elimination, sound because there are no introduction forms)
-inductive Empty : Prop
+-- The empty type. It has no constructors.
+inductive Empty : Type
 
--- ex falso quodlibet: from a proof of Empty, anything follows. Universe-
--- polymorphic (`A : Sort u`), so it eliminates into any sort — a Prop, a type,
--- or a higher universe — with the level inferred from the explicit `A`.
-def absurd (A : Sort u) (h : Empty) : A := Empty.rec _ h
+-- The canonical type with just one element: a single element `()`.
+-- Any two elements are equal.
+@[notation unit]
+inductive Unit : Type :=
+| unit : Unit
 
--- negation; by the imax rule A → Empty is a proposition for any A, so `not`
--- applies to data as well as propositions
-def not (A : Type) := A → Empty
+-- The two-element type of booleans.
+inductive Bool : Type :=
+| true : Bool
+| false : Bool
 
--- === Equality ===
+-- if-then-else: `cond b t e` is `t` when `b` is true, `e` when it is false.
+def cond {A : Sort u} (b : Bool) (t e : A) : A := Bool.rec _ t e b
 
--- propositional equality as an indexed inductive family: the first endpoint is
--- a parameter, the second an index, and the sole constructor `refl` proves
--- `Eq A x x` (matching Lean's `Eq.refl`). Its recursor `Eq.rec` is based path
--- induction (the motive abstracts the second endpoint, the first fixed) — the
--- equivalent of Lean's `Eq.rec`. The surface form `x = y` is sugar for the
--- former; the eliminator is written out as `Eq.rec` (there is no `J` keyword).
--- It is the last builtin retired into the prelude — the kernel now knows only
--- Sort/Π/λ/App/Var and the generic inductive machinery.
-@[notation eq]
-inductive Eq (A : Sort u) (x : A) : A -> Prop :=
-| refl : Eq A x x
+-- boolean negation.
+def bnot (b : Bool) : Bool := cond b Bool.false Bool.true
 
--- reflexivity: the equality's constructor with both endpoints the same, type and
--- point implicit. `rfl` is an ordinary def (not a keyword) — checking it against
--- a goal `a = a` inserts the implicits and recovers `Eq.refl`'s parameters.
-def rfl {A : Sort u} {x : A} : x = x := Eq.refl A x
+-- boolean conjunction.
+def band (a b : Bool) : Bool := cond a b Bool.false
 
--- equality is symmetric: if `a = b` then `b = a`.
-def symm {A : Sort u} {x y : A} (p : x = y) : y = x :=
-  Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ z = x) rfl _ p
+-- boolean disjunction.
+def bor (a b : Bool) : Bool := cond a Bool.true b
 
--- equality is transitive: if `a = b` and `b = c` then `a = c`.
-def trans {A : Sort u} {x y z : A} (p : x = y) (q : y = z) : x = z :=
-  Eq.rec _ _ (λ w : A ⇒ λ r : y = w ⇒ x = w) p _ q
+-- === Arithmetic ===
 
--- transport along an equality (large elimination: the motive lands in Type).
--- Transparent (a `def`) so transport along `rfl` computes away (ι). The types
--- and endpoints are implicit.
-def subst {A : Sort u} (P : A → Sort v) {x y : A} (p : x = y) (h : P x) : P y :=
-  Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ P z) h _ p
-
--- congruence: equal arguments give equal images. The types and endpoints are
--- implicit ({…}) — recovered from the equality proof — so a call is just
--- `cong f p`.
-def cong {A : Sort u} {B : Sort v} (f : A → B) {x y : A} (p : x = y) : f x = f y :=
-  Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ f x = f z) rfl _ p
-
--- === Naturals === (arithmetic by recursion on the first argument)
-
--- the naturals: an ordinary inductive. `@[notation nat]` registers it as the
--- type whose constructors decimal literals abbreviate (`0`, `2`, …) and which
--- the printer folds succ-chains back into; `Nat.succ`/`Nat.zero`/`Nat.rec` are
--- the qualified constructor and recursor names.
+-- The natural numbers. Decimal literals (`0`, `1`, `2`, …) are notation for
+-- `Nat.zero`/`Nat.succ`; eliminate with `Nat.rec`.
 @[notation nat]
 inductive Nat : Type :=
 | zero : Nat
 | succ : Nat → Nat
 
+-- addition, by recursion on the first argument.
 def add (m n : Nat) : Nat :=
   Nat.rec _ n (λ k : Nat ⇒ λ ih : Nat ⇒ Nat.succ ih) m
 
+-- multiplication.
 def mul (m n : Nat) : Nat :=
   Nat.rec _ 0 (λ k : Nat ⇒ λ ih : Nat ⇒ add n ih) m
 
+-- predecessor, with `pred 0 = 0`.
 def pred (n : Nat) : Nat :=
   Nat.rec _ 0 (λ k : Nat ⇒ λ ih : Nat ⇒ k) n
 
--- foundational lemmas. add recurses on its first argument, so add 0 n reduces
--- to n (zero_add is rfl) but add n 0 is stuck on n and needs induction.
+-- `0 + n = n`. Holds by `rfl`, since `add` recurses on its first argument.
 theorem zero_add (n : Nat) : add 0 n = n := rfl
 
+-- `n + 0 = n`. The mirror of `zero_add`, but needs induction on `n`.
 theorem add_zero (n : Nat) : add n 0 = n :=
   Nat.rec _
     rfl
@@ -130,6 +157,7 @@ theorem add_zero (n : Nat) : add n 0 = n :=
       cong (λ m : Nat ⇒ Nat.succ m) ih)
     n
 
+-- `n + (m + 1) = (n + m) + 1`: addition commutes with `succ` on the right.
 theorem add_succ (n m : Nat) : add n (Nat.succ m) = Nat.succ (add n m) :=
   Nat.rec _
     rfl
@@ -137,9 +165,30 @@ theorem add_succ (n m : Nat) : add n (Nat.succ m) = Nat.succ (add n m) :=
       cong (λ z : Nat ⇒ Nat.succ z) ih)
     n
 
+-- addition is commutative.
 theorem add_comm (m n : Nat) : add m n = add n m :=
   Nat.rec _
     (symm (add_zero n))
     (λ k : Nat ⇒ λ ih : add k n = add n k ⇒
       trans (cong (λ z : Nat ⇒ Nat.succ z) ih) (symm (add_succ n k)))
     m
+
+-- addition is associative.
+theorem add_assoc (m n k : Nat) : add (add m n) k = add m (add n k) :=
+  Nat.rec _
+    rfl
+    (λ j : Nat ⇒ λ ih : add (add j n) k = add j (add n k) ⇒
+      cong (λ z : Nat ⇒ Nat.succ z) ih)
+    m
+
+-- `succ` is injective: it reflects equality (by `cong pred`).
+theorem succ_inj {m n : Nat} (p : Nat.succ m = Nat.succ n) : m = n := cong pred p
+
+-- zero is not a successor. The witness is a predicate that is `True` at zero and
+-- `False` at every successor; transporting `True.intro` along `p` lands in
+-- `False`.
+theorem zero_ne_succ (n : Nat) : Ne Nat.zero (Nat.succ n) :=
+  λ p : Nat.zero = Nat.succ n ⇒
+    subst
+      (λ k : Nat ⇒ Nat.rec (λ _ : Nat ⇒ Prop) True (λ _ : Nat ⇒ λ _ : Prop ⇒ False) k)
+      p True.intro

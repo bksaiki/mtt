@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP SORT MAX IMAX TIMES PLUS EQOP COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE AT MATCH WITH END LET IN EOF
+%token FUN PI SIGMA TYPE PROP SORT MAX IMAX TIMES PLUS EQOP COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE AT MATCH WITH END LET IN AND OR IFF EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -134,7 +134,7 @@ match_arm:
    dependent pi binder. (Consequently extra parens cannot force the
    ascription reading there.) *)
 pi_term:
-  | a = eq_term; ARROW; b = pi_term
+  | a = iff_term; ARROW; b = pi_term
     { match a.Ast.desc with
       | Ast.Ascribe (e, ty) -> (
           (* an ascribed variable spine [(x y : A)] is a pi binder group *)
@@ -147,6 +147,21 @@ pi_term:
      form, so they need their own production.) *)
   | LBRACE; xs = nonempty_list(ID); COLON; a = term; RBRACE; ARROW; b = pi_term
     { Ast.pis $loc [ (Type.Implicit, xs, a) ] b }
+  | t = iff_term { t }
+
+(* logical connectives sit between arrows and equality (all tighter than [->],
+   looser than [=]): [↔] (non-associative) loosest, then [∨], then [∧], both
+   right-associative — so [a ∧ b ∨ c ↔ d] is [((a ∧ b) ∨ c) ↔ d] *)
+iff_term:
+  | x = or_term; IFF; y = or_term { Ast.mk $loc (Ast.Iff (x, y)) }
+  | t = or_term { t }
+
+or_term:
+  | a = and_term; OR; b = or_term { Ast.mk $loc (Ast.Or (a, b)) }
+  | t = and_term { t }
+
+and_term:
+  | a = eq_term; AND; b = and_term { Ast.mk $loc (Ast.And (a, b)) }
   | t = eq_term { t }
 
 (* equality infix sits between arrows and sums; non-associative, and the type

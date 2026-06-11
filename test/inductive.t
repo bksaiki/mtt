@@ -79,7 +79,7 @@ A constructor must construct the inductive it belongs to:
   > | mk : Bool
   > EOF
   $ mtt bad_result.mtt
-  bad_result.mtt:2:8: unbound variable: Bool
+  bad_result.mtt:1:1: type error: constructor mk must construct Foo applied to its parameters and indices
   [1]
 
 The Prop large-elimination restriction: a non-subsingleton proposition may

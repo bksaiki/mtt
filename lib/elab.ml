@@ -560,6 +560,11 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
         | None ->
             Error.type_error
               [ Error.txt "+ requires the sum notation to be registered" ])
+    (* the logical connectives ∧/∨/↔ are applied formers of the registered
+       (monomorphic, Prop-valued) inductives — no level arguments to infer *)
+    | Ast.And (a, b) -> prop_connective ctx notation.Notation.and_ "∧" a b
+    | Ast.Or (a, b) -> prop_connective ctx notation.Notation.or_ "∨" a b
+    | Ast.Iff (a, b) -> prop_connective ctx notation.Notation.iff_ "↔" a b
     | Ast.Sigma (x, a, b) -> sigma_core ctx x a b
     | Ast.Prod (a, b) -> sigma_core ctx "" a b
     (* [()] is the constructor registered for the [unit] notation (the prelude's
@@ -1095,6 +1100,15 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
      the family [λ x ⇒ B]. When that inductive is universe-polymorphic its level
      arguments are the sorts of the two components ([Sort u] of [A], [Sort v] of
      [B]); monomorphic, they are empty. *)
+  (* an applied logical connective [a ∧/∨/↔ b]: the registered Prop-valued
+     former (monomorphic) applied to its two operands *)
+  and prop_connective ctx role op a b : Type.t =
+    match role with
+    | Some name ->
+        Type.App (Type.App (Type.Ind (name, []), go ctx Infer a), go ctx Infer b)
+    | None ->
+        Error.type_error
+          [ Error.txtf "%s requires its notation to be registered" op ]
   and sigma_core ctx x a b : Type.t =
     let name = sigma_form () in
     let a' = go ctx Infer a in

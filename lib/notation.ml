@@ -4,10 +4,21 @@ type t =
   ; sigma : Type.ctor_head option
   ; sum : string option
   ; eq : string option (* the inductive registered for [x = y] / [rfl] *)
+  ; and_ : string option (* [a ∧ b] *)
+  ; or_ : string option (* [a ∨ b] *)
+  ; iff_ : string option (* [a ↔ b] *)
   }
 
 let empty =
-  { unit_ctor = None; nat = None; sigma = None; sum = None; eq = None }
+  { unit_ctor = None
+  ; nat = None
+  ; sigma = None
+  ; sum = None
+  ; eq = None
+  ; and_ = None
+  ; or_ = None
+  ; iff_ = None
+  }
 
 (* renders a subterm as surface notation, or None to let the kernel print it
    plainly: the unit constructor as [()], a succ-chain as a decimal, an applied
@@ -56,14 +67,25 @@ let sugar n ~recurse names term =
   | _ -> (
       match peel term with
       (* the registered equality former [Eq A x y] prints infix, dropping its
-         type argument: [x = y] (non-associative, looser than + and ×, tighter
-         than ->) *)
+         type argument: [x = y] (non-associative; precedence band below, loosest
+         to tightest: ↔ 2, ∨ 3, ∧ 4, = 5, + 6, × 7, all between -> and
+         application) *)
       | Type.Ind (name, _), [ _A; x; y ] when n.eq = Some name ->
           Some
-            (2, Printf.sprintf "%s = %s" (recurse 3 names x) (recurse 3 names y))
+            (5, Printf.sprintf "%s = %s" (recurse 6 names x) (recurse 6 names y))
       (* the equality's constructor [Eq.refl A x] prints as the bare [rfl],
          dropping its recovered parameters *)
       | Type.Ctor h, [ _A; _x ] when n.eq = Some h.Type.ind -> Some (11, "rfl")
+      (* the logical connectives, infix and right-associative (↔ non-assoc) *)
+      | Type.Ind (name, _), [ a; b ] when n.iff_ = Some name ->
+          Some
+            (2, Printf.sprintf "%s ↔ %s" (recurse 3 names a) (recurse 3 names b))
+      | Type.Ind (name, _), [ a; b ] when n.or_ = Some name ->
+          Some
+            (3, Printf.sprintf "%s ∨ %s" (recurse 4 names a) (recurse 3 names b))
+      | Type.Ind (name, _), [ a; b ] when n.and_ = Some name ->
+          Some
+            (4, Printf.sprintf "%s ∧ %s" (recurse 5 names a) (recurse 4 names b))
       (* an applied [Sigma] former: dependent → [Σ (x : A) ⇒ B], else → [A ×
          B] *)
       | Type.Ind (name, _), [ a; Type.Lam (_, x, _, b) ]
@@ -78,13 +100,13 @@ let sugar n ~recurse names term =
                   (recurse 0 (x :: names) b) )
           else
             Some
-              ( 4
-              , Printf.sprintf "%s × %s" (recurse 5 names a)
-                  (recurse 4 ("" :: names) b) )
+              ( 7
+              , Printf.sprintf "%s × %s" (recurse 8 names a)
+                  (recurse 7 ("" :: names) b) )
       (* an applied [Sum] former → [A + B] (right-associative) *)
       | Type.Ind (name, _), [ a; b ] when n.sum = Some name ->
           Some
-            (3, Printf.sprintf "%s + %s" (recurse 4 names a) (recurse 3 names b))
+            (6, Printf.sprintf "%s + %s" (recurse 7 names a) (recurse 6 names b))
       | _ -> (
           match pair_components term with
           (* tuples right-nest: flatten the right spine to [(a, b, c)] *)
@@ -184,9 +206,52 @@ let register role spec n =
                  with a single nullary constructor (refl)"
             ]);
       { n with eq = Some spec.Inductive.name }
+  | "and" ->
+      if n.and_ <> None then
+        Error.type_error [ Error.txt "the and notation is already registered" ];
+      (match spec.Inductive.ctors with
+      | [ { Inductive.fields = [ _; _ ]; _ } ] when Inductive.nparams spec = 2
+        ->
+          ()
+      | _ ->
+          Error.type_error
+            [ Error.txt
+                "@[notation and] needs a two-parameter inductive with a single \
+                 two-field constructor"
+            ]);
+      { n with and_ = Some spec.Inductive.name }
+  | "or" ->
+      if n.or_ <> None then
+        Error.type_error [ Error.txt "the or notation is already registered" ];
+      (match spec.Inductive.ctors with
+      | [ { Inductive.fields = [ _ ]; _ }; { Inductive.fields = [ _ ]; _ } ]
+        when Inductive.nparams spec = 2 ->
+          ()
+      | _ ->
+          Error.type_error
+            [ Error.txt
+                "@[notation or] needs a two-parameter inductive with two \
+                 single-field constructors"
+            ]);
+      { n with or_ = Some spec.Inductive.name }
+  | "iff" ->
+      if n.iff_ <> None then
+        Error.type_error [ Error.txt "the iff notation is already registered" ];
+      (match spec.Inductive.ctors with
+      | [ { Inductive.fields = [ _; _ ]; _ } ] when Inductive.nparams spec = 2
+        ->
+          ()
+      | _ ->
+          Error.type_error
+            [ Error.txt
+                "@[notation iff] needs a two-parameter inductive with a single \
+                 two-field constructor"
+            ]);
+      { n with iff_ = Some spec.Inductive.name }
   | _ ->
       Error.type_error
         [ Error.txtf
-            "unknown notation role %s (expected: unit, nat, sigma, sum, eq)"
+            "unknown notation role %s (expected: unit, nat, sigma, sum, eq, \
+             and, or, iff)"
             role
         ]

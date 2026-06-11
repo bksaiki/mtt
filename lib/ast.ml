@@ -32,6 +32,9 @@ and desc =
   | Fst of t (* p.1 *)
   | Snd of t (* p.2 *)
   | Sum of t * t (* A + B *)
+  | And of t * t (* a ∧ b: the conjunction former *)
+  | Or of t * t (* a ∨ b: the disjunction former *)
+  | Iff of t * t (* a ↔ b: the equivalence former *)
   | EqInfix of t * t (* x = y: the equality former, with the type inferred *)
   | Numeral of int (* a decimal literal, e.g. 0, 5; sugar for succ … zero *)
   | Hole (* _, an elaboration hole (a fresh metavariable) *)
@@ -75,6 +78,9 @@ let level_vars t =
     | Prod (a, b)
     | Pair (a, b)
     | Sum (a, b)
+    | And (a, b)
+    | Or (a, b)
+    | Iff (a, b)
     | EqInfix (a, b) ->
         go a;
         go b

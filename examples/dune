@@ -32,9 +32,9 @@
 
 (rule
  (alias runtest)
- (deps empty.mtt %{bin:mtt})
+ (deps false.mtt %{bin:mtt})
  (action
-  (run mtt empty.mtt)))
+  (run mtt false.mtt)))
 
 (rule
  (alias runtest)
