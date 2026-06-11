@@ -31,6 +31,7 @@ and desc =
           name, pattern variables, and body — case-analysis sugar for the
           recursor *)
   | Ascribe of t * t  (** (t : A) *)
+  | Let of string * t option * t * t  (** [let x [: A] := v in b] *)
   | MkUnit  (** [()], sugar for the prelude's [Unit.unit] *)
   | Sigma of string * t * t  (** Σ (x : A) ⇒ B *)
   | Prod of t * t  (** A × B *)

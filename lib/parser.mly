@@ -2,7 +2,7 @@
 %token <string> DOTID (* a named projection ".f", e.g. ".rec" *)
 %token <int> INT
 %token <int> TYPELEVEL (* a universe literal "Type n", lexed whole *)
-%token FUN PI SIGMA TYPE PROP SORT MAX IMAX TIMES PLUS EQOP COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE AT MATCH WITH END EOF
+%token FUN PI SIGMA TYPE PROP SORT MAX IMAX TIMES PLUS EQOP COMMA FST SND CHECK EVAL CHECK_EQUAL AXIOM DEF THEOREM INDUCTIVE BAR PRELUDE LPAREN RPAREN LBRACE RBRACE COLON ARROW DARROW EQUALS ATTR_OPEN ATTR_CLOSE AT MATCH WITH END LET IN EOF
 
 %start <Ast.t> main
 %start <Stmt.t> stmt
@@ -116,6 +116,11 @@ term:
      nested matches unambiguous (no dangling-arm conflict) *)
   | MATCH; e = term; WITH; arms = nonempty_list(match_arm); END
     { Ast.mk $loc (Ast.Match (e, arms)) }
+  (* a transparent local binding [let x [: A] := v in b]; the annotation is
+     optional (inferred from [v]), and [in] terminates the value unambiguously *)
+  | LET; x = ID; a = ioption(preceded(COLON, term)); EQUALS; v = term; IN;
+    b = term
+    { Ast.mk $loc (Ast.Let (x, a, v, b)) }
   | t = pi_term { t }
 
 (* one match arm: an unqualified constructor name, its pattern variables, and a

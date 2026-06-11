@@ -469,6 +469,8 @@ let elaborate ?(levels = []) notation (ctx0 : Check.ctx) mode0 s0 =
         let va = Value.eval ctx.Check.env a' in
         let t' = go ctx (Check va) t in
         Type.App (Type.Lam (Type.Explicit, "x", a', Type.Var 0), t')
+    (* TODO(let): elaboration in Stage 3 *)
+    | Ast.Let _ -> Error.type_error [ Error.txt "let is not yet supported" ]
     (* a pair is sugar for the dependent-pair record's constructor [mk]: checked
        against the Σ it recovers the parameters and elaborates only the
        components; inferred (no expected Σ) it falls back to a constant second
