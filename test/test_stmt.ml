@@ -195,8 +195,8 @@ let%expect_test "eta for Unit: every element is definitionally ()" =
   [%expect
     {| type error: #check_equal failed: Unit is not convertible with Prop |}]
 
-let%expect_test "Empty: irrelevance and stuck absurd" =
-  (* Empty and absurd come from the prelude *)
+let%expect_test "Empty: irrelevance and stuck elimination" =
+  (* Empty comes from the prelude; Empty.rec is ex falso *)
   session
     [ "axiom N : Type"
     ; "axiom h1 : Empty"
@@ -204,7 +204,7 @@ let%expect_test "Empty: irrelevance and stuck absurd" =
     ; (* all proofs of Empty are equal (it is a Prop) *)
       "#check_equal h1 h2"
     ; (* and so stuck eliminations of them are equal too *)
-      "#check_equal (absurd N h1) (absurd N h2)"
+      "#check_equal (Empty.rec _ h1 : N) (Empty.rec _ h2 : N)"
     ; (* native negation, and double-negation introduction *)
       "def negate (A : Prop) := A → Empty"
     ; "#check negate"

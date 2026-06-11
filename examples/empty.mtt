@@ -1,7 +1,8 @@
 -- The empty type: no elements, living in Prop — it is falsity. It is the
 -- prelude inductive `inductive Empty : Prop` (no constructors), so its recursor
--- `Empty.rec` is ex falso; the prelude wraps it as `absurd A h`. Unlike Unit
--- there is no η law: Empty's content is logical rather than equational.
+-- `Empty.rec` is ex falso: from a proof of Empty it produces a proof of any
+-- goal. Unlike Unit there is no η law: Empty's content is logical rather than
+-- equational.
 
 def negate (A : Prop) := A → Empty
 
@@ -11,10 +12,9 @@ def neg_data_is_prop : Prop := Type → Empty
 axiom p : Prop
 axiom q : Prop
 
--- ex falso quodlibet: not p => (p => q). The prelude's `absurd` is universe-
--- polymorphic, so it eliminates into the Prop goal `q` directly (its level is
--- inferred from the explicit `q`) — no cumulativity needed.
-theorem exfalso (np : negate p) (x : p) : q := absurd q (np x)
+-- ex falso quodlibet: not p => (p => q). `Empty.rec` eliminates a proof of
+-- Empty into any goal — here the Prop `q`, with the motive recovered from it.
+theorem exfalso (np : negate p) (x : p) : q := Empty.rec _ (np x)
 
 -- double negation introduction
 theorem dni (x : p) : negate (negate p) := λ k : negate p ⇒ k x
@@ -35,4 +35,4 @@ theorem tne (nnnp : negate (negate (negate p))) : negate p :=
 axiom h1 : Empty
 axiom h2 : Empty
 axiom A : Type
-#check_equal (absurd A h1) (absurd A h2)
+#check_equal (Empty.rec _ h1 : A) (Empty.rec _ h2 : A)

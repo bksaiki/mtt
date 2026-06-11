@@ -4,51 +4,24 @@ prelude
 -- equality, arithmetic) loaded automatically into every file and REPL session.
 -- Being ordinary mtt, it also doubles as a reference for how the basics look.
 
--- === Data ===
+-- `True` is a proposition with a single introduction rule.
+-- In other words, `True` is just true.
+inductive True : Prop :=
+| intro : True
 
--- the unit type: a single element `()`. Any two elements are equal.
-@[notation unit]
-inductive Unit : Type :=
-| unit : Unit
+-- `False` is the empty proposition, with no introduction rules.
+-- It represents a contradiction.
+inductive False : Prop
 
--- === Functions ===
+-- `Not p` is the negation of `p`, defined as `p → False`.
+-- It holds exactly when `p` is unprovable.
+def Not (p : Prop) : Prop := p → False
 
--- the identity function.
-def id (A : Type) (x : A) : A := x
+-- Anything follows from a contradiction.
+def absurd {a : Prop} {b : Sort v} (h1 : a) (h2 : Not a) : b := False.rec _ (h2 h1)
 
--- composition: `comp g f` applies `f`, then `g`.
-def comp (A B C : Type) (g : B → C) (f : A → B) (x : A) : C := g (f x)
 
--- === Pairs ===
-
--- the dependent pair: `(a, b)` is a pair and `p.1`/`p.2` its projections. The
--- type is `Σ (x : A) ⇒ B` with `B` a family over `A`, or `A × B` when `B` does
--- not depend on `A`. It works at any universe, so it can also pair proofs.
-@[notation sigma]
-inductive Sigma (A : Sort u) (B : A → Sort v) : Sort (max u v) :=
-| mk : (fst : A) → (snd : B fst) → Sigma A B
-
--- the binary sum `A + B`: inject with `Sum.inl`/`Sum.inr`, eliminate with
--- `Sum.rec`. It works for propositions too (a disjunction), not just data.
-@[notation sum]
-inductive Sum (A : Sort u) (B : Sort v) : Sort (max u v) :=
-| inl : A → Sum A B
-| inr : B → Sum A B
-
--- === Logic ===
-
--- falsity: the empty type, with no elements.
-inductive Empty : Prop
-
--- ex falso quodlibet: from a proof of `Empty`, any `A` follows.
-def absurd (A : Sort u) (h : Empty) : A := Empty.rec _ h
-
--- negation: `not A` holds exactly when `A` is uninhabited.
-def not (A : Type) := A → Empty
-
--- === Equality ===
-
--- propositional equality. The infix `x = y` is notation for `Eq`; `rfl` (below)
+-- Propositional equality. The infix `x = y` is notation for `Eq`; `rfl` (below)
 -- proves reflexivity and `Eq.rec` is the eliminator.
 @[notation eq]
 inductive Eq (A : Sort u) (x : A) : A -> Prop :=
@@ -74,9 +47,40 @@ def subst {A : Sort u} (P : A → Sort v) {x y : A} (p : x = y) (h : P x) : P y 
 def cong {A : Sort u} {B : Sort v} (f : A → B) {x y : A} (p : x = y) : f x = f y :=
   Eq.rec _ _ (λ z : A ⇒ λ q : x = z ⇒ f x = f z) rfl _ p
 
--- === Naturals ===
+-- === Functions ===
 
--- the natural numbers. Decimal literals (`0`, `1`, `2`, …) are notation for
+-- The identity function.
+def id {A : Sort u} (x : A) : A := x
+
+-- Function composition: `comp g f` applies `f`, then `g`.
+def comp {A : Sort u} {B : Sort v} {C : Sort w} (g : B → C) (f : A → B) (x : A) : C := g (f x)
+
+
+-- The dependent pair: `(a, b)` is a pair and `p.1`/`p.2` its projections. The
+-- type is `Σ (x : A) ⇒ B` with `B` a family over `A`, or `A × B` when `B` does
+-- not depend on `A`. It works at any universe, so it can also pair proofs.
+@[notation sigma]
+inductive Sigma (A : Sort u) (B : A → Sort v) : Sort (max u v) :=
+| mk : (fst : A) → (snd : B fst) → Sigma A B
+
+-- The binary sum `A + B`: inject with `Sum.inl`/`Sum.inr`, eliminate with
+-- `Sum.rec`. It works for propositions too (a disjunction), not just data.
+@[notation sum]
+inductive Sum (A : Sort u) (B : Sort v) : Sort (max u v) :=
+| inl : A → Sum A B
+| inr : B → Sum A B
+
+
+-- The empty type. It has no constructors.
+inductive Empty : Prop
+
+-- The canonical type with just one element: a single element `()`.
+-- Any two elements are equal.
+@[notation unit]
+inductive Unit : Type :=
+| unit : Unit
+
+-- The natural numbers. Decimal literals (`0`, `1`, `2`, …) are notation for
 -- `Nat.zero`/`Nat.succ`; eliminate with `Nat.rec`.
 @[notation nat]
 inductive Nat : Type :=
