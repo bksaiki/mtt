@@ -20,19 +20,22 @@ def Not (p : Prop) : Prop := p → False
 -- Anything follows from a contradiction.
 def absurd {a : Prop} {b : Sort v} (h1 : a) (h2 : Not a) : b := False.rec _ (h2 h1)
 
--- Conjunction: `And a b` holds when both `a` and `b` do. Build it with
+-- Conjunction `a ∧ b`: holds when both `a` and `b` do. Build it with
 -- `And.intro`; project the two halves with `.1` and `.2`.
+@[notation and]
 inductive And (a b : Prop) : Prop :=
 | intro : a → b → And a b
 
--- Disjunction: `Or a b` holds when at least one of `a`, `b` does. Build it with
+-- Disjunction `a ∨ b`: holds when at least one of `a`, `b` does. Build it with
 -- `Or.inl`/`Or.inr` and eliminate with `Or.rec`.
+@[notation or]
 inductive Or (a b : Prop) : Prop :=
 | inl : a → Or a b
 | inr : b → Or a b
 
--- Logical equivalence: `Iff a b` packages both implications. Build it with
+-- Logical equivalence `a ↔ b`: packages both implications. Build it with
 -- `Iff.intro`; `.1` and `.2` are the forward and backward directions.
+@[notation iff]
 inductive Iff (a b : Prop) : Prop :=
 | intro : (a → b) → (b → a) → Iff a b
 

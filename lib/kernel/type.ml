@@ -175,9 +175,10 @@ let pp_in ?(sugar = fun ~recurse:_ _ _ -> None) names fmt t =
     else
       body fmt
   in
-  (* precedence: 0 = binders, 1 = arrow, 2 = equality, 3 = sum, 4 = product,
-     10 = application, 11 = atom. (The kernel printer itself uses only 0/1/10/11;
-     the sugar hook uses 2–4 for the =/+/× infix notations.) *)
+  (* precedence: 0 = binders, 1 = arrow, 2 = iff, 3 = or, 4 = and, 5 = equality,
+     6 = sum, 7 = product, 10 = application, 11 = atom. (The kernel printer itself
+     uses only 0/1/10/11; the sugar hook uses 2–7 for the ↔/∨/∧/=/+/× infix
+     notations.) *)
   (* renders a subterm to its own isolated buffer — [Format.asprintf] is not safe
      to nest here (the hook may call [recurse] while the printer is mid-format),
      so an explicit formatter avoids any shared-buffer corruption *)

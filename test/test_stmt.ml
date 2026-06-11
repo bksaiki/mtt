@@ -808,3 +808,33 @@ let%expect_test "local let bindings" =
     0 : Nat
     type error: this term has type A but Nat was expected
     |}]
+
+(* the logical connectives `∧`/`∨`/`↔` are infix notation for the prelude's
+   `And`/`Or`/`Iff` formers: ∧ binds tighter than ∨ tighter than ↔, all tighter
+   than `->`; ASCII aliases parse identically, and a bare former folds back to
+   infix on printing. *)
+let%expect_test "logical connective notation" =
+  session
+    [ "axiom p : Prop"
+    ; "axiom q : Prop"
+    ; "axiom r : Prop"
+    ; "#check p ∧ q"
+    ; "#check p ∨ q"
+    ; "#check p ↔ q"
+    ; "#check p ∧ q ∨ r ↔ p"
+    ; "#check p → q ∧ r"
+    ; "#check (p ↔ q) → r"
+    ; "#check p /\\ q"
+    ; "#check And p q"
+    ];
+  [%expect
+    {|
+    p ∧ q : Prop
+    p ∨ q : Prop
+    p ↔ q : Prop
+    p ∧ q ∨ r ↔ p : Prop
+    p -> q ∧ r : Prop
+    p ↔ q -> r : Prop
+    p ∧ q : Prop
+    p ∧ q : Prop
+    |}]

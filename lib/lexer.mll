@@ -60,6 +60,14 @@ rule token = parse
   | "+" { PLUS }
   | "×" { TIMES }
   | "*" { TIMES }
+  (* logical connectives: conjunction, disjunction, equivalence (with ASCII
+     aliases) *)
+  | "∧" { AND }
+  | "/\\" { AND }
+  | "∨" { OR }
+  | "\\/" { OR }
+  | "↔" { IFF }
+  | "<->" { IFF }
   | "," { COMMA }
   | "|" { BAR }
   | "@[" { ATTR_OPEN }

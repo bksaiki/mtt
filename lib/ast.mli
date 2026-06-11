@@ -39,6 +39,9 @@ and desc =
   | Fst of t  (** p.1 *)
   | Snd of t  (** p.2 *)
   | Sum of t * t  (** A + B *)
+  | And of t * t  (** [a ∧ b]: the registered conjunction former *)
+  | Or of t * t  (** [a ∨ b]: the registered disjunction former *)
+  | Iff of t * t  (** [a ↔ b]: the registered equivalence former *)
   | EqInfix of t * t
       (** [x = y]: the registered equality former, type argument inferred *)
   | Numeral of int

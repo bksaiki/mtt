@@ -139,17 +139,17 @@ they work on `Prop` equalities and eliminate into any sort, the levels solved pe
 use even when fixed only through an implicit argument (`cong f p`). There is
 **no cumulativity** (Lean's model, not Rocq's): `conv`
 compares sorts by `Level.equal`, and code spans universes by polymorphism, not
-subtyping. `Empty` (now a prelude inductive with no constructors,
-not a kernel primitive — see Inductive types) eliminates into any sort via its
-recursor `Empty.rec`, which the prelude wraps as `absurd` — subsingleton
-elimination, the degenerate (zero-constructor) case of the generic
-large-elimination rule. That rule is general: a `Prop` inductive may eliminate
+subtyping. `False` (a prelude inductive with no constructors, not a kernel
+primitive — see Inductive types) eliminates into any sort via its recursor
+`False.rec` — subsingleton elimination, the degenerate (zero-constructor) case
+of the generic large-elimination rule (`absurd`/ex falso is the prelude wrapper;
+`Empty : Type` is the data sibling). That rule is general: a `Prop` inductive may eliminate
 into a larger sort only when it is a subsingleton (≤ 1 constructor, all fields
 proofs), so a `Type`-valued motive can never distinguish definitionally equal
 proofs (`examples/` has an `Or : Prop` that is rejected at large elimination).
 Equality (`Eq A x y : Prop`, a prelude indexed inductive — see Inductive types)
 is the other side of that coin: a single-constructor subsingleton, so — like
-`Empty`/`absurd` — its recursor `Eq.rec` (which is `J`) carries *no* restriction
+`False`/`False.rec` — its recursor `Eq.rec` (which is `J`) carries *no* restriction
 and may land in any sort (this is what lets `subst` transport between types). UIP
 holds definitionally for free: `Eq` is a `Prop`, so proof irrelevance already
 equates all of its proofs.
@@ -205,8 +205,9 @@ name, beside the de Bruijn context.
   (`x.field`, resolved to the same `Proj` by the elaborator) projection. This is
   what let `Unit` and the dependent pair `Σ` become ordinary inductives (`Σ`'s
   `.1`/`.2` are now just `Proj`, and the old primitive `Fst`/`Snd` are gone).
-- **Replacing the builtins.** Retired so far: `Empty` (`inductive Empty : Prop`,
-  with `absurd` a prelude `def` over `Empty.rec`), `Unit` (a prelude record,
+- **Replacing the builtins.** Retired so far: `Empty` (`inductive Empty : Type`,
+  the empty data type; logical falsity is the separate prelude `False : Prop`,
+  with `absurd`/ex falso over `False.rec`), `Unit` (a prelude record,
   `()` sugar for `Unit.unit`, η from the record rule), `Nat` (a prelude
   inductive; decimal literals and succ-chain printing go through the notation
   registry below, and `Nat.rec` replaces the bespoke `natrec` — deleting the
@@ -240,7 +241,7 @@ name, beside the de Bruijn context.
   fits the inductive's, except for an impredicative `Prop`; and the
   large-elimination restriction — a `Prop` inductive eliminates into a larger
   sort only when it is a subsingleton (≤ 1 constructor, all fields proofs), which
-  is exactly what lets `Eq.rec`/`J` and `Empty.rec`/`absurd` land in any sort.
+  is exactly what lets `Eq.rec`/`J` and `False.rec` land in any sort.
 
 See `examples/inductive.mtt` and `examples/vec.mtt`; deferred work
 (mutual/nested, full strict positivity, `open`) is tracked in `todo.md`.
@@ -367,9 +368,12 @@ opts an inductive into a notation **role** with an attribute,
 and the printer folds them back), `sigma` (a two-parameter record, so
 `Σ (x : A) ⇒ B` / `A × B` abbreviate the applied former and `(a, b)` its
 constructor), `sum` (a two-parameter inductive, so `A + B` abbreviates the
-applied former), and `eq` (a two-parameter, one-index inductive, so `x = y`
+applied former), `eq` (a two-parameter, one-index inductive, so `x = y`
 abbreviates the applied former; its constructor `Eq.refl` is folded back to `rfl`
-on printing, and its recursor is `Eq.rec`).
+on printing, and its recursor is `Eq.rec`), and the logical connectives `and` /
+`or` / `iff` (two-parameter `Prop` inductives, so `a ∧ b` / `a ∨ b` / `a ↔ b`
+abbreviate the applied former — `∧` tighter than `∨` tighter than `↔`, all
+tighter than `→`).
 Only *symbolic* sugar lives here: a constructor that wants a short name keeps its
 qualified spelling instead (`Sum.inl`, `Sum.rec`, like `Nat.succ`), so `sum`
 registers only the `+` former. Registration is **one-shot** and
